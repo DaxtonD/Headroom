@@ -1,0 +1,81 @@
+/**
+ * Design tokens, taken from HANDOFF section 15 (which took them from the
+ * mockups). Every colour, radius and size in the app comes from here, so a
+ * change to Carol's palette is a change in one file.
+ *
+ * Contrast: every --hr-text-* on its stated background meets WCAG AA 4.5:1,
+ * which is a stated acceptance criterion for M5.
+ */
+
+:root {
+  /* ---- Surfaces ---- */
+  --hr-ground: #f5f4ef;
+  --hr-card: #ffffff;
+  --hr-card-border: #e4e2da;
+  --hr-row-divider: #eceae3;
+
+  /* ---- Text ---- */
+  --hr-ink: #17201d;
+  --hr-text-secondary: #4f5853;
+  --hr-text-muted: #5b635f;
+
+  /* ---- The dark green hero, where the big balance lives ---- */
+  --hr-hero-bg: #123b33;
+  --hr-hero-text: #f4f7f5;
+  --hr-hero-muted: #b9d3ca;
+
+  /* ---- Greens ---- */
+  --hr-primary: #0f6b55;
+  --hr-primary-hover: #0c5745;
+  --hr-positive: #0f5f4c;
+  --hr-green-tint: #d7ebe3;
+  --hr-green-tint-soft: #e3f1eb;
+  --hr-payday-row: #eef6f2;
+
+  /* ---- Chips and badges ---- */
+  --hr-oneoff-fg: #2348b0;
+  --hr-oneoff-bg: #e6ecfa;
+  --hr-flexible-fg: #7a4a00;
+  --hr-flexible-bg: #fbebd0;
+  --hr-warning-fg: #8a3b00;
+  --hr-warning-bg: #fbe6cc;
+  --hr-neutral-fg: #3f4844;
+  --hr-neutral-bg: #eceae3;
+  --hr-estimate-ring: #8a928d;
+
+  /* ---- Focus ---- */
+  --hr-focus: #0f6b55;
+
+  /* ---- Shape ---- */
+  --hr-radius-card: 20px;
+  --hr-radius-hero: 24px;
+  --hr-radius-pill: 999px;
+  --hr-radius-input: 14px;
+
+  /* ---- Touch targets: 44px minimum, an M5 acceptance criterion ---- */
+  --hr-touch-min: 44px;
+
+  /* ---- Spacing ---- */
+  --hr-space-1: 4px;
+  --hr-space-2: 8px;
+  --hr-space-3: 12px;
+  --hr-space-4: 16px;
+  --hr-space-5: 24px;
+  --hr-space-6: 32px;
+  --hr-space-7: 48px;
+
+  /* ---- Type ---- */
+  --hr-font-display: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --hr-font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  --hr-shadow-card: 0 1px 2px rgba(23, 32, 29, 0.04), 0 1px 3px rgba(23, 32, 29, 0.06);
+  --hr-shadow-hero: 0 2px 8px rgba(18, 59, 51, 0.18);
+}
+
+/* Each person's initial bubble. */
+:root {
+  --hr-user-carol-fg: #2a3c8f;
+  --hr-user-carol-bg: #e3e7f7;
+  --hr-user-dax-fg: #7a4a00;
+  --hr-user-dax-bg: #f3e6cf;
+}

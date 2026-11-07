@@ -1,0 +1,82 @@
+# Headroom on Docker (HANDOFF section 11).
+#
+# Two ways to run it, because Dax already runs a Postgres server:
+#
+#   1. Against that existing Postgres (the default here).
+#      Point DATABASE_URL at it in .env, then:
+#          docker compose up -d
+#      No database container is started.
+#
+#   2. Fully self-contained, Headroom brings its own Postgres:
+#          docker compose --profile with-db up -d --build
+#      DATABASE_URL must then use `db` as the host, which is what
+#      .env.example ships with.
+#
+# The app port is published only on APP_BIND_ADDRESS (127.0.0.1 by default, or
+# the Tailscale IP), so this is not exposed to the internet unless Dax chooses
+# to put a reverse proxy in front of it. Postgres is never published.
+
+name: headroom
+
+services:
+  app:
+    # Build locally, or pull a published image. Keeping both working means the
+    # stack never depends on a registry login (HANDOFF section 11).
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/daxtond/headroom:${IMAGE_TAG:-latest}
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Inside the container the app must listen on all interfaces; the host
+      # binding below is what actually limits reachability.
+      HOST: 0.0.0.0
+      WEB_DIST_DIR: /app/apps/web/dist
+    ports:
+      - "${APP_BIND_ADDRESS:-127.0.0.1}:${APP_HOST_PORT:-8484}:${PORT:-3000}"
+    # No depends_on: the entrypoint waits for the database itself, which is
+    # also what is needed when the database lives on another machine.
+    healthcheck:
+      test:
+        ["CMD-SHELL", "wget --quiet --tries=1 --spider http://127.0.0.1:${PORT:-3000}/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  db:
+    # Only started with: docker compose --profile with-db up
+    profiles: ["with-db"]
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-headroom}
+      POSTGRES_USER: ${POSTGRES_USER:-headroom}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env}
+      # Keeps initdb from depending on the host's locale.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+      TZ: ${TZ:-America/Regina}
+    volumes:
+      - ${APPDATA_DIR:-./.data}/postgres:/var/lib/postgresql/data
+    # Deliberately no `ports`: nothing outside this network reaches Postgres.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-headroom} -d ${POSTGRES_DB:-headroom}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

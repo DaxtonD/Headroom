@@ -1,0 +1,21 @@
+.app-splash {
+  display: grid;
+  place-items: center;
+  min-height: 100dvh;
+  padding: var(--hr-space-4);
+}
+
+.app-splash__card {
+  max-width: 420px;
+  padding: var(--hr-space-5);
+}
+
+.app-splash__card h1 {
+  font-size: 20px;
+  margin-bottom: var(--hr-space-3);
+}
+
+.app-splash__card p {
+  color: var(--hr-text-secondary);
+  font-size: 15px;
+}

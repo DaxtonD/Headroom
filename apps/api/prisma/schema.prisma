@@ -1,0 +1,523 @@
+// Headroom data model (HANDOFF section 8).
+//
+// Rules this schema enforces:
+//  - All money is `BigInt` cents. No Float or Decimal for money, anywhere.
+//  - Only facts are stored. Running balances, safe-to-spend, left-over and
+//    coverage are never columns; @headroom/core derives them.
+//  - Every mutable row carries `version` for optimistic concurrency, plus
+//    updatedBy/updatedAt and soft delete. Nothing vanishes without a trace.
+//  - balance_snapshot and activity are insert-only, enforced by triggers in a
+//    migration rather than by convention alone.
+//  - Dates where only the day matters are `@db.Date`; instants are timestamptz.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// Prisma 7 moved connection URLs out of the schema: migrate reads them from
+// prisma.config.ts, and PrismaClient takes a driver adapter (see src/db.ts).
+datasource db {
+  provider = "postgresql"
+}
+
+/* -------------------------------------------------------------------------- */
+/* Enums                                                                      */
+/* -------------------------------------------------------------------------- */
+
+enum TemplateKind {
+  paycheque
+  bill
+  deposit
+  transfer
+}
+
+enum ScheduleType {
+  monthly
+  monthly_last
+  relative_to_pay
+  biweekly
+  flexible
+}
+
+/// How an occurrence is placed on the timeline (HANDOFF section 6.2).
+///
+/// auto     = placed by DATE. Automatic withdrawals, auto deposits and
+///            paycheques are all `auto`: the bank acts on a known day and the
+///            money has to be there. A paycheque is not a withdrawal, but it
+///            is dated, and that is what this field decides.
+/// flexible = placed by ANCHOR, with no date. Attached to a paycheque and
+///            movable to an earlier or later one when money is tight; a null
+///            anchor means "now", before the first upcoming paycheque.
+///
+/// A database CHECK enforces auto <=> dated and flexible <=> undated, so the
+/// timeline ordering can never be ambiguous.
+enum WithdrawalKind {
+  auto
+  flexible
+}
+
+enum BudgetSection {
+  income
+  fixed
+  variable
+}
+
+enum AssetKind {
+  asset
+  liability
+}
+
+enum PayCadence {
+  biweekly
+}
+
+/// HANDOFF section 14 question 8. The default reproduces the spreadsheet.
+enum WeekendWithdrawalRule {
+  as_scheduled
+  friday_before
+  next_business_day
+}
+
+enum ActivityAction {
+  create
+  update
+  verify
+  unverify
+  clear
+  unclear
+  move
+  soft_delete
+  restore
+  snapshot
+}
+
+/* -------------------------------------------------------------------------- */
+/* Household and people                                                      */
+/* -------------------------------------------------------------------------- */
+
+model Household {
+  id       String @id @default(uuid()) @db.Uuid
+  name     String
+  timezone String @default("America/Regina")
+  currency String @default("CAD")
+
+  /// How much must remain after an automatic withdrawal for it to count as
+  /// covered. Section 14 question 5; default 0.
+  cushionCents BigInt @default(0)
+
+  /// Section 14 question 7. The default reproduces the spreadsheet horizon.
+  horizonRule           String @default("through_day_before_nth_paycheque")
+  horizonPaychequeCount Int    @default(4)
+
+  weekendWithdrawalRule WeekendWithdrawalRule @default(as_scheduled)
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  users              User[]
+  accounts           Account[]
+  templates          Template[]
+  occurrences        Occurrence[]
+  budgetLines        BudgetLine[]
+  goals              Goal[]
+  reimbursements     Reimbursement[]
+  assets             Asset[]
+  activities         Activity[]
+  bankedHours        BankedHoursEntry[]
+  retirementSettings RetirementSettings?
+
+  @@map("household")
+}
+
+model User {
+  id           String @id @default(uuid()) @db.Uuid
+  householdId  String @db.Uuid
+  name         String
+  /// Single letter shown in the avatar bubble.
+  initial      String @db.VarChar(2)
+  email        String @unique
+  passwordHash String
+  /// Design tokens for this person's initial bubble.
+  colorFg      String @default("#3F4844")
+  colorBg      String @default("#ECEAE3")
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household        Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  sessions         Session[]
+  paySchedules     PaySchedule[]
+  ownedTemplates   Template[]         @relation("templateOwner")
+  ownedOccurrences Occurrence[]       @relation("occurrenceOwner")
+  snapshots        BalanceSnapshot[]
+  bankedHours      BankedHoursEntry[]
+  activities       Activity[]
+  idempotencyKeys  IdempotencyKey[]
+
+  @@index([householdId])
+  @@map("user")
+}
+
+/// Opaque server-side sessions. The cookie carries only this row's id, signed.
+model Session {
+  id         String   @id @db.Uuid
+  userId     String   @db.Uuid
+  createdAt  DateTime @default(now()) @db.Timestamptz(6)
+  expiresAt  DateTime @db.Timestamptz(6)
+  lastSeenAt DateTime @default(now()) @db.Timestamptz(6)
+  userAgent  String?
+  ip         String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("session")
+}
+
+/* -------------------------------------------------------------------------- */
+/* Accounts and balances                                                      */
+/* -------------------------------------------------------------------------- */
+
+model Account {
+  id          String @id @default(uuid()) @db.Uuid
+  householdId String @db.Uuid
+  name        String
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household Household         @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  snapshots BalanceSnapshot[]
+
+  @@index([householdId])
+  @@map("account")
+}
+
+/// INSERT-ONLY. A correction is a new row; the latest `asOf` wins.
+model BalanceSnapshot {
+  id          String   @id @default(uuid()) @db.Uuid
+  accountId   String   @db.Uuid
+  cents       BigInt
+  asOf        DateTime @db.Timestamptz(6)
+  enteredById String   @db.Uuid
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  note        String?
+
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  enteredBy User    @relation(fields: [enteredById], references: [id])
+
+  @@index([accountId, asOf])
+  @@map("balance_snapshot")
+}
+
+/* -------------------------------------------------------------------------- */
+/* Schedules, templates and occurrences                                       */
+/* -------------------------------------------------------------------------- */
+
+model PaySchedule {
+  id           String     @id @default(uuid()) @db.Uuid
+  userId       String     @db.Uuid
+  cadence      PayCadence @default(biweekly)
+  /// Any real payday; every other payday is 14 days from here.
+  anchorDate   DateTime   @db.Date
+  defaultCents BigInt
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("pay_schedule")
+}
+
+model Template {
+  id           String         @id @default(uuid()) @db.Uuid
+  householdId  String         @db.Uuid
+  kind         TemplateKind
+  name         String
+  defaultCents BigInt
+  /// Who receives this bill. Null means the UI shows "Set who gets this bill"
+  /// (section 14 question 4 default).
+  ownerUserId  String?        @db.Uuid
+  withdrawal   WithdrawalKind
+  scheduleType ScheduleType
+  /// Shape depends on scheduleType: {day}, {user, offsetDays}, {anchorDate},
+  /// {frequency}. Validated with Zod at the edge, never trusted raw.
+  scheduleJson Json
+  section      BudgetSection?
+  budgetLineId String?        @db.Uuid
+  active       Boolean        @default(true)
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household   Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  owner       User?        @relation("templateOwner", fields: [ownerUserId], references: [id])
+  budgetLine  BudgetLine?  @relation(fields: [budgetLineId], references: [id])
+  occurrences Occurrence[]
+
+  @@index([householdId, active])
+  @@map("template")
+}
+
+model Occurrence {
+  id          String  @id @default(uuid()) @db.Uuid
+  householdId String  @db.Uuid
+  templateId  String? @db.Uuid
+  /// Identifies which recurrence this is, for example "2026-11". Unique per
+  /// template, so generating the same period twice can never duplicate a row.
+  periodKey   String?
+
+  name  String
+  cents BigInt
+  kind  TemplateKind
+
+  /// Dated items (automatic withdrawals, auto deposits, paycheques) have a
+  /// date. Flexible items have an anchor paycheque instead; a null anchor
+  /// means "now", before the first upcoming paycheque.
+  date               DateTime?      @db.Date
+  anchorOccurrenceId String?        @db.Uuid
+  sortIndex          Int            @default(0)
+  withdrawal         WithdrawalKind
+  isOneOff           Boolean        @default(false)
+  ownerUserId        String?        @db.Uuid
+
+  verifiedById String?   @db.Uuid
+  verifiedAt   DateTime? @db.Timestamptz(6)
+  clearedById  String?   @db.Uuid
+  clearedAt    DateTime? @db.Timestamptz(6)
+
+  version     Int       @default(1)
+  createdById String?   @db.Uuid
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  template  Template?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  owner     User?        @relation("occurrenceOwner", fields: [ownerUserId], references: [id])
+  anchor    Occurrence?  @relation("anchorChildren", fields: [anchorOccurrenceId], references: [id], onDelete: SetNull)
+  anchored  Occurrence[] @relation("anchorChildren")
+
+  @@unique([templateId, periodKey], name: "template_period_unique")
+  @@index([householdId, date])
+  @@index([householdId, clearedAt])
+  @@index([anchorOccurrenceId, sortIndex])
+  @@map("occurrence")
+}
+
+/* -------------------------------------------------------------------------- */
+/* Budget, goals, net worth, retirement                                       */
+/* -------------------------------------------------------------------------- */
+
+model BudgetLine {
+  id           String        @id @default(uuid()) @db.Uuid
+  householdId  String        @db.Uuid
+  section      BudgetSection
+  name         String
+  monthlyCents BigInt
+  /// Set only where the yearly figure is not monthly x 12.
+  yearlyCentsOverride BigInt?
+  sortIndex    Int           @default(0)
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  templates Template[]
+
+  @@index([householdId, section])
+  @@map("budget_line")
+}
+
+model Goal {
+  id          String @id @default(uuid()) @db.Uuid
+  householdId String @db.Uuid
+  name        String
+  targetCents BigInt
+  savedCents  BigInt @default(0)
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("goal")
+}
+
+/// Work purchases put on the Visa and tracked until reimbursed.
+model Reimbursement {
+  id          String    @id @default(uuid()) @db.Uuid
+  householdId String    @db.Uuid
+  purchase    String
+  cents       BigInt
+  boughtOn    DateTime  @db.Date
+  submittedAt DateTime? @db.Timestamptz(6)
+  paidAt      DateTime? @db.Timestamptz(6)
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@map("reimbursement")
+}
+
+/// Hours only, no dollar conversion (section 14 question 11).
+model BankedHoursEntry {
+  id          String  @id @default(uuid()) @db.Uuid
+  householdId String  @db.Uuid
+  userId      String  @db.Uuid
+  /// Hours to two decimals. Not money, so Decimal is the right type here.
+  hours       Decimal @db.Decimal(6, 2)
+  note        String?
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@index([userId])
+  @@map("banked_hours_entry")
+}
+
+model Asset {
+  id          String    @id @default(uuid()) @db.Uuid
+  householdId String    @db.Uuid
+  kind        AssetKind
+  name        String
+  cents       BigInt
+  asOf        DateTime? @db.Date
+  note        String?
+  sortIndex   Int       @default(0)
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@index([householdId, kind])
+  @@map("asset")
+}
+
+/// All retirement inputs are editable settings, never constants in code.
+model RetirementSettings {
+  householdId String @id @db.Uuid
+
+  rrspCurrentPlusContribCents   BigInt
+  mortgageMonthlyCents          BigInt
+  redirectYears                 Int
+  flatGrowthPct                 Int
+  /// Off by default: the sheet applies the growth once (section 14 q3).
+  compoundYearly                Boolean @default(false)
+  drawdownYears                 Int
+  govPensionAnnualCents         BigInt
+  retirementExpensesAnnualCents BigInt
+
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime @default(now()) @db.Timestamptz(6)
+  updatedById String?  @db.Uuid
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@map("retirement_settings")
+}
+
+/* -------------------------------------------------------------------------- */
+/* History and idempotency (HANDOFF section 16)                               */
+/* -------------------------------------------------------------------------- */
+
+/// APPEND-ONLY. Drives per-item history, the "who changed what" notices,
+/// undo, and the conflict detection in section 16.3.
+model Activity {
+  id          String         @id @default(uuid()) @db.Uuid
+  householdId String         @db.Uuid
+  userId      String         @db.Uuid
+  at          DateTime       @default(now()) @db.Timestamptz(6)
+  action      ActivityAction
+  entity      String
+  entityId    String         @db.Uuid
+  /// The row version this change produced, so a conflict check can ask what
+  /// happened since the version the client saw.
+  versionAfter Int
+  /// Exactly which fields this change touched. Same-field overlap is a 409;
+  /// no overlap auto-merges.
+  fields      String[]
+  beforeJson  Json?
+  afterJson   Json?
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id])
+
+  @@index([entity, entityId, versionAfter])
+  @@index([householdId, at])
+  @@map("activity")
+}
+
+/// One row per mutating request. A replay returns the stored response; the
+/// same key with a different body is a 422. Purged after the configured TTL.
+model IdempotencyKey {
+  key          String   @id @db.Uuid
+  userId       String   @db.Uuid
+  method       String
+  path         String
+  requestHash  String
+  statusCode   Int
+  responseJson Json
+  createdAt    DateTime @default(now()) @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([createdAt])
+  @@map("idempotency_key")
+}

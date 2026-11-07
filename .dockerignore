@@ -1,0 +1,28 @@
+# Keep the build context small and secrets out of the image.
+.git
+.github
+node_modules
+**/node_modules
+**/dist
+**/build
+**/coverage
+**/.vite
+**/*.tsbuildinfo
+
+# Secrets and real household data must never enter an image layer.
+.env
+.env.*
+!.env.example
+seed/household-nov-2026.json
+seed/*.local.json
+reference/
+design/
+docs/HANDOFF.md
+headroom-handoff.zip
+
+# Local tooling
+.vscode
+.idea
+*.log
+backups/
+pgdata/

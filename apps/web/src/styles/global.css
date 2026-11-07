@@ -1,0 +1,188 @@
+@import "./tokens.css";
+
+/* ---------------------------------------------------------------- reset ---- */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  /* Respect the phone's text-size setting rather than locking a px size. */
+  -webkit-text-size-adjust: 100%;
+}
+
+body,
+h1,
+h2,
+h3,
+h4,
+p,
+figure,
+blockquote,
+dl,
+dd {
+  margin: 0;
+}
+
+body {
+  min-height: 100dvh;
+  background: var(--hr-ground);
+  color: var(--hr-ink);
+  font-family: var(--hr-font-body);
+  font-size: 16px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+img,
+picture,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* --------------------------------------------------------------- shared ---- */
+
+h1,
+h2,
+h3 {
+  font-family: var(--hr-font-display);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+
+/**
+ * Every amount uses tabular figures so columns of money line up and a digit
+ * changing does not shift the layout (HANDOFF section 15).
+ */
+.hr-amount {
+  font-family: var(--hr-font-display);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* A visible focus ring on every interactive element, for keyboard users. */
+:focus-visible {
+  outline: 3px solid var(--hr-focus);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Available to screen readers, invisible on screen. */
+.hr-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ------------------------------------------------------------ controls ---- */
+
+.hr-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--hr-space-2);
+  min-height: var(--hr-touch-min);
+  padding: 0 var(--hr-space-5);
+  border: 1px solid transparent;
+  border-radius: var(--hr-radius-pill);
+  background: var(--hr-primary);
+  color: #ffffff;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.hr-button:hover:not(:disabled) {
+  background: var(--hr-primary-hover);
+}
+
+.hr-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hr-button--secondary {
+  background: transparent;
+  border-color: var(--hr-card-border);
+  color: var(--hr-ink);
+}
+
+.hr-button--secondary:hover:not(:disabled) {
+  background: var(--hr-neutral-bg);
+}
+
+.hr-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-2);
+}
+
+.hr-label {
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--hr-text-secondary);
+}
+
+.hr-input {
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-input);
+  background: var(--hr-card);
+  /* 16px minimum stops iOS Safari zooming in on focus. */
+  font-size: 16px;
+}
+
+.hr-input:focus {
+  border-color: var(--hr-primary);
+}
+
+.hr-input[aria-invalid="true"] {
+  border-color: var(--hr-warning-fg);
+}
+
+.hr-card {
+  background: var(--hr-card);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-card);
+  box-shadow: var(--hr-shadow-card);
+}
+
+.hr-alert {
+  display: flex;
+  gap: var(--hr-space-3);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-input);
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+  font-size: 15px;
+}

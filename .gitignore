@@ -35,3 +35,6 @@ pgdata/
 *.log
 .DS_Store
 Thumbs.db
+
+# Prisma 7 generates the client into the source tree
+apps/api/src/generated/

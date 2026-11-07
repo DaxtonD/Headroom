@@ -1,0 +1,42 @@
+{
+  "name": "headroom",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Household budget web app / PWA for Dax and Carol",
+  "license": "UNLICENSED",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=20.19.0",
+    "pnpm": ">=9"
+  },
+  "scripts": {
+    "dev": "concurrently -k -n api,web -c cyan,magenta \"pnpm -F @headroom/api dev\" \"pnpm -F @headroom/web dev\"",
+    "build": "pnpm -F @headroom/core build && pnpm -F @headroom/api build && pnpm -F @headroom/web build",
+    "test": "pnpm -r --no-bail test",
+    "test:core": "pnpm -F @headroom/core test",
+    "test:api": "pnpm -F @headroom/api test",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "db:generate": "pnpm -F @headroom/api db:generate",
+    "db:migrate": "pnpm -F @headroom/api db:migrate",
+    "db:deploy": "pnpm -F @headroom/api db:deploy",
+    "db:studio": "pnpm -F @headroom/api db:studio",
+    "check:seed": "python3 seed/check_seed.py",
+    "check:fixture": "python3 seed/check_seed.py packages/core/test/fixtures/household-synthetic.json",
+    "testdb:up": "node scripts/testdb.mjs up",
+    "testdb:down": "node scripts/testdb.mjs down"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "concurrently": "^10.0.7",
+    "eslint": "^10.14.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "eslint-plugin-react-refresh": "^0.5.7",
+    "globals": "^17.14.0",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1",
+    "vitest": "^4.1.12"
+  }
+}

@@ -1,0 +1,128 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: lint, typecheck, test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # 20.19.0 is what Dax develops on; 22 is what the Docker image runs.
+        # Running both keeps a version-specific bug from hiding until deploy.
+        node: ["20.19.0", "22.23.4"]
+
+    services:
+      postgres:
+        # Matches the PostgreSQL 17 the deployment targets.
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: headroom-test
+          POSTGRES_DB: headroom_test
+        ports:
+          - 55432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d headroom_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      # The test harness refuses any database whose name does not look
+      # disposable, so real data can never be the target in CI either.
+      TEST_DATABASE_URL: postgresql://postgres:headroom-test@127.0.0.1:55432/headroom_test?schema=public
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate the Prisma client
+        run: pnpm -F @headroom/api db:generate
+
+      - name: Build the calculation engine
+        # The API and the web app both import @headroom/core from its dist.
+        run: pnpm -F @headroom/core build
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Verify the synthetic fixture reproduces its own expected values
+        # The real seed is never in git (Dax's decision, 2026-11-07), so CI
+        # checks the committed synthetic fixture instead.
+        run: python3 seed/check_seed.py packages/core/test/fixtures/household-synthetic.json
+
+      - name: Test
+        run: pnpm test
+
+      - name: Build
+        run: pnpm build
+
+  docker:
+    name: docker image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build the image
+        # Must keep working from a plain clone with no registry login
+        # (HANDOFF section 11).
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: headroom:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Check the image starts and refuses a bad configuration
+        run: |
+          # With no DATABASE_URL the app must exit 78 (EX_CONFIG) rather than
+          # start half-configured.
+          set +e
+          output=$(docker run --rm \
+            -e APP_ORIGIN=https://headroom.example.ts.net \
+            -e SESSION_SECRET=$(head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n') \
+            headroom:ci node apps/api/dist/server.js 2>&1)
+          code=$?
+          set -e
+          echo "$output"
+          if [ "$code" -ne 78 ]; then
+            echo "Expected exit code 78 for a missing DATABASE_URL, got $code" >&2
+            exit 1
+          fi
+          echo "$output" | grep -q "DATABASE_URL" || {
+            echo "The error message should name the missing variable" >&2
+            exit 1
+          }

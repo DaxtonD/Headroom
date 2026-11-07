@@ -1,0 +1,63 @@
+.login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100dvh;
+  /* 16px side gutter on a phone, per the mockups. */
+  padding: var(--hr-space-4);
+}
+
+.login__card {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--hr-space-6) var(--hr-space-5) var(--hr-space-5);
+}
+
+.login__header {
+  margin-bottom: var(--hr-space-5);
+}
+
+.login__eyebrow {
+  font-family: var(--hr-font-display);
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--hr-primary);
+  margin-bottom: var(--hr-space-2);
+}
+
+.login__title {
+  font-size: 28px;
+  margin-bottom: var(--hr-space-2);
+}
+
+.login__subtitle {
+  color: var(--hr-text-secondary);
+  font-size: 15px;
+}
+
+.login__form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-4);
+}
+
+.login__submit {
+  margin-top: var(--hr-space-2);
+  width: 100%;
+}
+
+.login__footnote {
+  margin-top: var(--hr-space-5);
+  padding-top: var(--hr-space-4);
+  border-top: 1px solid var(--hr-row-divider);
+  font-size: 14px;
+  color: var(--hr-text-muted);
+}
+
+@media (min-width: 1024px) {
+  .login__card {
+    padding: var(--hr-space-7) var(--hr-space-6) var(--hr-space-6);
+  }
+}
