@@ -1,0 +1,37 @@
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------
+# Real household financial data: NEVER committed (Dax's decision,
+# 2026-11-07). These files stay local only; they arrive in
+# headroom-handoff.zip. Committed tests use the synthetic fixture
+# at packages/core/test/fixtures/household-synthetic.json, and the
+# golden tests additionally run against the real seed below
+# whenever it exists on the local machine.
+# ---------------------------------------------------------------
+seed/household-nov-2026.json
+seed/*.local.json
+docs/HANDOFF.md
+design/
+reference/
+headroom-handoff.zip
+
+# Dependencies and build output
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+*.tsbuildinfo
+
+# Database dumps and local volumes (Prisma migration .sql files are NOT ignored)
+backups/
+*.dump
+pgdata/
+
+# Logs and OS clutter
+*.log
+.DS_Store
+Thumbs.db
