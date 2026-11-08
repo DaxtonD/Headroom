@@ -13,7 +13,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | M1 Calculation engine + golden tests | done | m1 | Reproduces every expected value in BOTH the real seed and the synthetic fixture |
 | M2 Home + Upcoming + integrity layer | done | m2 | All section 16.8 integrity tests pass against a real Postgres |
 | M3 Recurrence + Pay plan | done | m3 | Generation never undoes an edit; flexible bills move between periods |
-| M4 Budget, Goals, Net worth | not started | | Engine side is already done and golden-tested |
+| M4 Budget, Goals, Net worth | done | m4 | Every retirement assumption editable; shares are of the section |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -40,12 +40,17 @@ Claude Code updates this file at the end of every milestone and every work sessi
 
 1. Read this file, then `CLAUDE.md`, then `docs/HANDOFF.md` (local only, git-ignored).
 2. `pnpm install` and `node scripts/testdb.mjs up`, then `pnpm test`.
-3. **M4 next**: Budget, Goals, Net worth and the editable retirement assumptions.
-   The calculation side is already finished and golden-tested against both seeds, so this is
-   screens plus CRUD routes - `computeBudget`, `computeGoals`, `computeReimbursements`,
-   `sumBankedHours`, `computeNetWorth` and `computeRetirement` all exist and are exported.
-4. Then M5 (PWA, desktop polish, accessibility pass) and M6 (backups, `import-seed`, GHCR,
-   finish `docs/DEPLOY.md`).
+3. **M5 next**: PWA and polish. `vite-plugin-pwa` is already a dependency but is not wired up
+   yet, so there is no manifest, no icons and no service worker. Needs: the installable
+   manifest and icons, the read-only offline cache behind the "Offline, as of ..." banner that
+   `useLiveUpdates` already drives, the App Badging API for the count of unverified bills, an
+   "Update balance" manifest shortcut, the desktop layouts, and the accessibility pass
+   (44px targets, 4.5:1 contrast). Dax can test this at `https://dev.headroom.daxtond.com`.
+4. Then M6: backup sidecar with a tested restore, `import-seed` for the real figures, the
+   GHCR image, and finishing `docs/DEPLOY.md`.
+
+Note for M5: the PWA needs a secure context, so it can only be tested over the HTTPS domain,
+never over a LAN IP.
 
 ### A running demo exists
 
