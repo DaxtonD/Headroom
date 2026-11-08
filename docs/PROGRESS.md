@@ -192,7 +192,30 @@ shape.
 - `roomToSaveCents` on every pay period - the same computation as "safe to spend now", asked at a
   later point on the timeline. This is what turns a third cheque from "absorbed" into a decision.
 
-557 tests green (290 core, 70 web, 197 API), lint and typecheck clean.
+### Done: the schema, the API and two screens
+
+- **`Account.kind`** (`chequing | savings`). Until the savings screen existed, "the chequing
+  account" meant "the first account row" - correct with one account and silently wrong with two.
+  The timeline and `POST /api/balance` now ask for chequing by name. A savings balance goes
+  through that same append-only endpoint with an `accountId`, rather than a second copy of the
+  snapshot rules.
+- **`Mortgage` and `Prepayment`** store terms and lump sums only. The payoff date, what is owing
+  today, the interest and what another lump sum buys are all derived per request.
+- **`GET /api/savings`** builds the whole screen in one read. Terms are validated by running them:
+  an `asOf` that is not a payment date, or a payment too small to clear the balance, is refused
+  with the reason while the form is still open.
+- **The Year screen** (`/year`) - which months hold a third cheque or a third mortgage payment,
+  and what each is worth.
+- **The Savings screen** (`/savings`, replacing Goals, with the old path redirecting) - the real
+  balance, the earmarks against it, what is unallocated, and the mortgage panel: owing today,
+  payoff date, what the planned lump sums bring it forward by, what the earmarked amount would buy
+  if paid now, and this year's allowance.
+
+An intention and a payment are kept as separate facts. Only **paid** lump sums count against the
+year's allowance: counting an intention would understate the room and talk them out of paying it.
+
+652 tests green (292 core, 103 web, 257 API), lint, typecheck and build clean.
+
 
 ### Bugs caught while building it
 
@@ -205,7 +228,38 @@ shape.
   Three cases are now explicit, with the reasoning in the code.
 - **Four real figures went into committed source in one sitting** - a basis-point example, a
   "reject a fractional rate" case, the real annual prepayment cap and the real prepayment history.
-  Each was chosen simply because it was the number already in mind. See the next section.
+  Each was chosen simply because it was the number already in mind. See the next section. A fifth
+  attempt was blocked while writing the sign-rule test, which reached for the real power bill.
+
+### Bugs the guards found, not a person (2026-11-08, later)
+
+Each of these was found by making an existing check cover more, and each had been passing every
+typecheck, lint and test run:
+
+- **Every versioned entity needs an entry in a hand-written table map** or its first PATCH is a
+  500, and nothing in the type system says so. The mortgage routes compiled, created rows fine,
+  and failed on every edit with "no lockable table registered". `apps/api/test/guards.test.ts`
+  now reads `schema.prisma` and fails if a model carrying a `version` column is unregistered -
+  which immediately found `banked_hours_entry` missing too. It has no edit route yet, so nothing
+  was broken; the first one added would have been.
+- **Nothing in the app could add a one-off.** `POST /api/occurrences` and `useCreateOneOff` both
+  existed and no button called either, so Carol's "add a few extra rows" meant SQL. The
+  reachability check in `wiring.test.ts` only scanned two query modules **by file name**; it now
+  matches any `*queries.ts`, and failed on `useCreateOneOff` at once. There is now an
+  `OneOffForm` on Upcoming, which the ledger merge will absorb.
+- **A one-off's amount was stored with whatever sign was sent**, while a generated bill is signed
+  by the engine. The same bill would have been an outflow from a template and income when typed
+  in - the running balance would go **up** when someone added a bill. There is now one exported
+  rule, `signedForKind`, used by both paths.
+- **`--hr-negative` was never defined.** It was referenced by the destructive "Remove this"
+  button and by the Year screen's squeeze months. An undefined custom property makes
+  `border: 1px solid var(--hr-negative)` invalid outright, so the button had no red border and no
+  red text; it looked like an ordinary link. `apps/web/test/css-tokens.test.ts` now fails on any
+  token used without a definition, and was verified by removing the token and watching it fail.
+- **The live-update stream refreshed three screens out of ten.** It acted on three entity names
+  and ignored every other one, so an earmark, a bill, a budget line or a mortgage edited on one
+  phone did not reach the other until a reload. A ping now invalidates every key; TanStack only
+  refetches what is mounted, so this is cheaper than the staleness was.
 
 ## Guard: `pnpm check:figures` (2026-11-08)
 
@@ -321,6 +375,23 @@ CLAUDE.md describes an autonomous weekend build. That changed: Dax is available 
   year) rather than the Canadian semi-annual convention, so the app and the document he reads
   agree. The difference is a couple of hundred dollars of interest across the remaining term and
   does not move the payoff date by one payment. The lender's convention is available as a setting.
+- 2026-11-08: **Goals became Savings** rather than a new tab beside it. The screen is now about one
+  real account and what the money in it is for. Work expenses and banked hours stay on it, below
+  the savings and mortgage sections: they were there before, they are all money outside the
+  day-to-day ledger, and another tab would be one more place to look. The tab count is unchanged,
+  and `/goals` redirects.
+- 2026-11-08: **A savings balance goes through `POST /api/balance` with an `accountId`**, not a new
+  endpoint. Typing in a balance read off the bank is one act with one set of rules - append-only,
+  server clock, latest `asOf` wins - and a second endpoint would be that logic written twice.
+  Ticking off cleared bills is refused for a non-chequing account rather than ignored.
+- 2026-11-08: **A one-off's sign is decided by the server**, from its kind. This is a behaviour
+  change: a `bill` sent with a positive amount is now stored negative. Nothing could create a
+  one-off before, so no stored row is affected.
+- 2026-11-08: **The mortgage can be removed** (soft, like everything else). A typo is fixable with
+  a PATCH, but a mortgage that is paid off or refinanced needs a way out that is not SQL, since it
+  drives a panel on Savings and a highlight on Year.
+- 2026-11-08: **The one-off form lives on Upcoming for now.** It belongs in the merged ledger; it
+  is on Upcoming because the gap it fills is real today and the merge is the next piece of work.
 
 ## Decisions made WITH Dax (2026-11-07)
 
