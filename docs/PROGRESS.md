@@ -20,7 +20,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 ## Last session
 
 - Date: 2026-11-07
-- **Nothing is pushed.** 5 commits and 3 tags (`m0`, `m1`, `m2`) are local, waiting on Dax's OK.
+- **Nothing is pushed.** Every commit, and the tags `m0`, `m1` and `m2`, are local only.
 - Done: the handoff, then M0, M1, M2, and the engine and API halves of M3.
 - 331 tests green (218 engine, 113 API against a real Postgres). Lint, typecheck and `pnpm build` clean.
 
@@ -141,8 +141,9 @@ From HANDOFF section 14. Each default is built and editable in the app where it 
 
 ## Blocked / needs Dax
 
-- **Every `git push` and tag push** waits on Dax's explicit OK, by his instruction. As of the end
-  of this session that is 7 commits and 3 tags (`m0`, `m1`, `m2`), all local.
+- **Every `git push` and tag push** waits on Dax's explicit OK, by his instruction. EVERY commit
+  on `main` is still local, along with the tags `m0`, `m1` and `m2`. `main` has no upstream set,
+  so `git push -u origin main` and `git push origin m0 m1 m2` are the first steps once he says so.
 - **`APP_ORIGIN` in `.env`** is still the placeholder. It only matters at deploy time, and M6's
   `docs/DEPLOY.md` will say what to set it to. `DATABASE_URL` is filled in.
 - **Nothing has run against Dax's own database.** Migrations and tests have only ever touched the
