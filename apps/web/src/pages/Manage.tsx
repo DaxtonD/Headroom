@@ -607,9 +607,16 @@ function Row({
 }): React.JSX.Element {
   return (
     <li className="manage__row">
-      {badge}
+      {/*
+        The badge sits beside the name rather than before the whole block: the
+        name takes a full line of its own so it is never truncated, and a
+        badge outside it would have been pushed onto a line above.
+      */}
       <span className="manage__row-main">
-        <span className="manage__row-name">{name}</span>
+        <span className="manage__row-head">
+          {badge}
+          <span className="manage__row-name">{name}</span>
+        </span>
         {note ? <span className="manage__row-note">{note}</span> : null}
       </span>
       <Amount cents={amount} />

@@ -59,6 +59,13 @@ Claude Code updates this file at the end of every milestone and every work sessi
 4. Then M6: backup sidecar with a tested restore, `import-seed` for the real figures, the
    GHCR image, and finishing `docs/DEPLOY.md`.
 
+**Constraint on `import-seed`, found 2026-11-08 while answering a question from Dax.** It must
+create **templates** and then run generation - never insert occurrences directly. Most of the demo
+data was seeded as bare occurrences with no `templateId`, and the symptom is exactly what Dax
+spotted: a row sits on the ledger, is absent from Manage, and never regenerates for the next
+period. A real household imported that way would look right for a fortnight and then quietly stop
+producing bills.
+
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
 
@@ -499,6 +506,17 @@ CLAUDE.md describes an autonomous weekend build. That changed: Dax is available 
 - Local Node is **v20.19.0**, not the Node 22 in the spec. Vite 7 accepts `^20.19.0`, so local dev and tests run fine. The Docker image and GitHub Actions both pin **Node 22**, which is what production runs.
 - `gh` CLI is **not installed** on this machine, so CLAUDE.md's `gh repo view` visibility check could not run. CLAUDE.md's fallback is "treat the repo as public"; Dax confirmed directly that `DaxtonD/Headroom` is private. Moot either way now, since decision 1 keeps all real data out of git regardless of visibility.
 - `psql` is not installed; database work goes through Prisma and containers.
+
+## Answered for Dax (2026-11-08)
+
+- **"Child tax credit is on the ledger but not in Manage."** Demo-data artefact, not a bug. Manage
+  lists templates, and most demo rows were inserted as bare occurrences with no template. The API
+  returns every template whatever its kind, and Manage has a "Money coming in" section for
+  paycheques and deposits, so a recurring income entered through the app does appear. See the
+  `import-seed` constraint above, which is the production version of this risk.
+- **One deliberate exception to "everything on the ledger shows in Manage":** a one-off. It has no
+  schedule and happens once, so it lives on the ledger only, where it can be edited or removed.
+  Flagged to Dax in case he wants it listed somewhere too.
 
 ## Questions for Carol
 

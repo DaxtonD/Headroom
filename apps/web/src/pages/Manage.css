@@ -118,6 +118,9 @@
   align-items: center;
   gap: var(--hr-space-3);
   flex-wrap: wrap;
+  /* The amount and the buttons sit at the right end of whichever line they
+     end up on, so the rhythm is the same whether a row is one line or two. */
+  justify-content: flex-end;
   padding: var(--hr-space-3) 0;
   border-top: 1px solid var(--hr-row-divider);
 }
@@ -130,24 +133,58 @@
   opacity: 0.7;
 }
 
+/*
+ * The name gets the full width of the card before anything is cut.
+ *
+ * `flex: 1` with `min-width: 0` let this shrink to whatever the amount and the
+ * buttons left over, which on a phone was little enough to render "Home
+ * insurance" as "Home In...". A 100% basis makes it take a line of its own and
+ * pushes those siblings underneath instead.
+ */
 .manage__row-main {
-  flex: 1;
+  flex: 1 1 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
+.manage__row-head {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-2);
+  min-width: 0;
+}
+
 .manage__row-name {
   font-weight: 600;
+  /*
+   * Wrap rather than truncate: a name that does not fit on one line is still
+   * entirely readable on two. The clamp is only a backstop for a pathological
+   * name - the field allows 120 characters - so a row can never grow without
+   * limit.
+   */
+  overflow-wrap: anywhere;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .manage__row-note {
   font-size: 12px;
   color: var(--hr-text-muted);
+}
+
+/*
+ * Wide enough for the name, the amount and the buttons on one line again, so
+ * a desktop list stays compact.
+ */
+@media (min-width: 560px) {
+  .manage__row-main {
+    flex: 1 1 auto;
+  }
 }
 
 .manage__row-buttons {
