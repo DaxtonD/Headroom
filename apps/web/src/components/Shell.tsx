@@ -25,6 +25,8 @@ const TABS = [
   { to: "/pay-plan", label: "Pay plan" },
   { to: "/budget", label: "Budget" },
   { to: "/goals", label: "Goals" },
+  // Where the household is set up and kept current.
+  { to: "/manage", label: "Manage" },
 ] as const;
 
 export function Shell({

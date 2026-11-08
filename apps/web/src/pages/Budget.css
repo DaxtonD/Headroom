@@ -183,9 +183,7 @@
 
 .budget__line-name {
   font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
 }
 
 .budget__line-amount {
@@ -249,4 +247,14 @@
   .budget__line-share {
     grid-column: auto;
   }
+}
+
+/* Why a figure is what it is: from a bill, or set by hand. */
+.budget__line-note {
+  display: block;
+  margin-top: 1px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--hr-text-muted);
+  white-space: normal;
 }

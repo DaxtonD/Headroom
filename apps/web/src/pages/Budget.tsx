@@ -180,7 +180,19 @@ function ExpenseSection({
         <ul className="budget__lines">
           {section.lines.map((line) => (
             <li className="budget__line" key={line.id ?? line.name}>
-              <span className="budget__line-name">{line.name}</span>
+              <span className="budget__line-name">
+                {line.name}
+                {/* Where a stated monthly figure is being used instead of the
+                    one worked out from the bill's cadence, say so, rather than
+                    leaving a number nobody can reconcile. */}
+                {line.overridden && line.derivedMonthlyCents !== null ? (
+                  <span className="budget__line-note">
+                    set by hand · worked out as {formatCents(line.derivedMonthlyCents)}
+                  </span>
+                ) : line.source === "bill" ? (
+                  <span className="budget__line-note">from a recurring bill</span>
+                ) : null}
+              </span>
               <span className="budget__line-amount hr-amount">{formatCents(amountOf(line))}</span>
 
               {/* Share of this section, which is what her "% of Total" means. */}

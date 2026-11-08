@@ -1,0 +1,76 @@
+.billform__field {
+  margin-top: var(--hr-space-4);
+}
+
+.billform__hint {
+  display: block;
+  margin-top: var(--hr-space-1);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--hr-text-muted);
+  line-height: 1.4;
+}
+
+/* Native select, styled to match the inputs. A custom dropdown would lose the
+   phone's own picker, which is better than anything built here. */
+select.hr-input {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--hr-text-secondary) 50%),
+    linear-gradient(135deg, var(--hr-text-secondary) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% + 2px),
+    calc(100% - 13px) calc(50% + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: var(--hr-space-6);
+}
+
+/* ---- What it does to the monthly budget ---- */
+
+.billform__preview {
+  margin-top: var(--hr-space-5);
+  padding: var(--hr-space-4);
+  border-radius: var(--hr-radius-input);
+  background: var(--hr-green-tint-soft);
+  color: var(--hr-positive);
+}
+
+.billform__preview-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.billform__preview-amount {
+  margin: var(--hr-space-1) 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.billform__preview-note {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.billform__preview-note + .billform__preview-note {
+  margin-top: var(--hr-space-2);
+}
+
+.billform__checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hr-space-3);
+  margin-top: var(--hr-space-5);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.billform__checkbox input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  accent-color: var(--hr-primary);
+}

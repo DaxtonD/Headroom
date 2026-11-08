@@ -26,6 +26,16 @@ export interface BudgetLine {
   /** Share of this line's own section, never of income. */
   readonly sharePct: number;
   readonly version: number;
+  /**
+   * Where the line came from. A `bill` is a recurring expense whose monthly
+   * cost was worked out from its cadence; a `category` is budget-only spending
+   * with no due date. They are edited in different places, so the UI needs to
+   * tell them apart.
+   */
+  readonly source: "bill" | "category";
+  /** What the derivation gave, when a stated figure was used instead. */
+  readonly derivedMonthlyCents: Cents | null;
+  readonly overridden: boolean;
 }
 
 export interface BudgetSection {
@@ -48,9 +58,11 @@ export interface Budget {
   readonly balanceYearlyCents: Cents;
 }
 
-interface BudgetLineWire extends Omit<BudgetLine, "monthlyCents" | "yearlyCents"> {
+interface BudgetLineWire
+  extends Omit<BudgetLine, "monthlyCents" | "yearlyCents" | "derivedMonthlyCents"> {
   readonly monthlyCents: string;
   readonly yearlyCents: string;
+  readonly derivedMonthlyCents: string | null;
 }
 
 interface BudgetWire {
@@ -71,6 +83,8 @@ function parseSection(wire: BudgetWire["fixed"]): BudgetSection {
       ...line,
       monthlyCents: toCents(line.monthlyCents),
       yearlyCents: toCents(line.yearlyCents),
+      derivedMonthlyCents:
+        line.derivedMonthlyCents === null ? null : toCents(line.derivedMonthlyCents),
     })),
     monthlyCents: toCents(wire.monthlyCents),
     yearlyCents: toCents(wire.yearlyCents),

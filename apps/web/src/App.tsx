@@ -11,6 +11,7 @@ import { UpdateBalanceSheet } from "./components/UpdateBalanceSheet.js";
 import { Budget } from "./pages/Budget.js";
 import { Goals } from "./pages/Goals.js";
 import { Home } from "./pages/Home.js";
+import { Manage } from "./pages/Manage.js";
 import { NetWorth } from "./pages/NetWorth.js";
 import { PayPlan } from "./pages/PayPlan.js";
 import { Upcoming } from "./pages/Upcoming.js";
@@ -74,6 +75,7 @@ export function App(): React.JSX.Element {
         <Route path="/goals" element={<Goals canEdit={canEdit} />} />
         {/* Reached from Goals rather than the tab bar, as the brief asks. */}
         <Route path="/net-worth" element={<NetWorth canEdit={canEdit} />} />
+        <Route path="/manage" element={<Manage canEdit={canEdit} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
