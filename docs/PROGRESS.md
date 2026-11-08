@@ -141,8 +141,13 @@ From HANDOFF section 14. Each default is built and editable in the app where it 
 
 ## Blocked / needs Dax
 
-- **`DATABASE_URL` and `APP_ORIGIN` in `.env`** — Dax is filling the connection string for the database he already created. Both are marked `>>> FILL IN <<<` in the file. Not blocking the scaffold, engine or unit tests; needed before migrations run against his database.
-- **Every `git push` and tag push** waits on Dax's explicit OK, by his instruction.
+- **Every `git push` and tag push** waits on Dax's explicit OK, by his instruction. As of the end
+  of this session that is 7 commits and 3 tags (`m0`, `m1`, `m2`), all local.
+- **`APP_ORIGIN` in `.env`** is still the placeholder. It only matters at deploy time, and M6's
+  `docs/DEPLOY.md` will say what to set it to. `DATABASE_URL` is filled in.
+- **Nothing has run against Dax's own database.** Migrations and tests have only ever touched the
+  throwaway Postgres, by design. Applying the schema to his server is a deploy step
+  (`prisma migrate deploy`, which the container entrypoint runs) and needs his go-ahead.
 
 ## How to run
 
