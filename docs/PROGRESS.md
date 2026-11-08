@@ -14,28 +14,29 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | M2 Home + Upcoming + integrity layer | done | m2 | All section 16.8 integrity tests pass against a real Postgres |
 | M3 Recurrence + Pay plan | done | m3 | Generation never undoes an edit; flexible bills move between periods |
 | M4 Budget, Goals, Net worth | done | m4 | Every retirement assumption editable; shares are of the section |
-| Manage screen + expense model | done | | Added at Dax's request, before M5. One entry feeds timeline and budget |
+| Manage screen + expense model | done | | Added at Dax's request, before M5. One entry feeds timeline and budget. Second pass: every section editable |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
 ## Last session
 
-- Date: 2026-11-07
-- **Nothing is pushed.** Every commit, and the tags `m0`, `m1` and `m2`, are local only.
-- Done: the handoff, then M0, M1, M2, and the engine and API halves of M3.
-- 331 tests green (218 engine, 113 API against a real Postgres). Lint, typecheck and `pnpm build` clean.
+- Date: 2026-11-08
+- **Nothing is pushed.** Every commit, and the tags `m0` through `m4`, are local only, awaiting Dax's OK.
+- Done: the handoff, then M0 through M4, then the Manage screen and the expense model, then a
+  second pass making every section of Manage editable.
+- **499 tests green**: 232 engine, 197 API against a real Postgres, 70 web wiring checks. Lint,
+  typecheck and `pnpm build` clean.
 
 ### Where each milestone stands
 
 - **M0 scaffold** - done, tagged `m0`. Verified end to end in the built image.
 - **M1 engine** - done, tagged `m1`. Reproduces every expected value in the seed.
 - **M2 Home + Upcoming + integrity** - done, tagged `m2`. Every HANDOFF section 16.8 test passes.
-- **M3 recurrence + Pay plan** - the engine (`packages/core/src/recurrence.ts`) and the API
-  (`POST /api/templates/generate`, template CRUD, `GET /api/pay-periods`) are done and tested.
-  **The Pay plan screen is not built.** Its tab currently shows a "being built in M3" placeholder.
-- **M4, M5, M6** - not started. Note that M4's engine work is already finished and golden-tested
-  (budget totals and section shares, goals, net worth, the whole retirement chain); M4 is
-  therefore mostly screens and CRUD routes, not calculation.
+- **M3 recurrence + Pay plan** - done, tagged `m3`. Generation never undoes an edit.
+- **M4 Budget, Goals, Net worth** - done, tagged `m4`.
+- **Manage screen + expense model** - done, untagged. Built at Dax's request before M5, then
+  revised after he found that three of its sections were read-only.
+- **M5, M6** - not started.
 
 ## Next session: start here
 
@@ -75,6 +76,48 @@ Decisions taken with him on 2026-11-08:
    each gap breaks.
 3. **Archive, never delete.** A paid-off bill stops generating and leaves the budget; its
    history stays whole and one button brings it back.
+
+### Second pass: everything on Manage is editable (2026-11-08)
+
+Dax tried the first version and said: *"Nothing is editable on the manage screen. I can only
+add new expenses. If this is the management screen, everything should be editable here,
+correct?"* Correct, and he had found a real hole rather than a preference.
+
+What had happened: the mutation hooks for categories, goals and assets were **written,
+typechecked, exported and wired to nothing**. `useCreateCategory`, `useDeleteCategory`,
+`useCreateGoal`, `usePatchGoal`, `useCreateAsset` and `usePatchAsset` were all dead code, so
+those three sections rendered as read-only text and the only way to correct one was SQL. 422
+tests passed throughout, because nothing asserted that a mutation is reachable by a person.
+
+The rule for the screen now: **anything it lists, it can change.** Every list has an Edit on
+each row and an Add underneath, and removal is offered inside the form that edits the thing,
+where what is being removed is named and on screen.
+
+- Added UI for: budget categories (add, rename, re-amount, move fixed/variable, remove),
+  savings goals (add, edit, remove), assets and debts (add, edit, remove), money coming in
+  (add, not just edit), work expenses, banked hours, and renaming the account.
+- Pay schedules: the **anchor date** is now editable, not only the amount. It decides which
+  fortnight every pay period falls in, so an anchor out by a week yields a plausible schedule
+  that is wrong - the form lists the next three paydays as a check.
+- Removal is **soft everywhere** (`deletedAt`), consistent with archiving a bill: a goal that
+  was reached or a car that was sold stops counting without erasing the figures it explained.
+- `kind` cannot be changed on an existing asset. Turning something owed into something owned is
+  two different facts, not a correction, and it would silently flip a sign that feeds net worth.
+- Editing also lives on Goals and Net worth, where the numbers are, not only on Manage.
+
+New API routes this needed: `DELETE /api/goals/:id`, `DELETE /api/assets/:id` and
+`PATCH /api/accounts/:id`. All three are versioned like every other write - verified live that
+a stale `If-Match` returns 409 and a missing one returns 428.
+
+Two pieces of tidying that the above exposed:
+
+- **`templates.ts` had its own cents parser.** Two places decided what an amount on the wire
+  looks like, which is exactly the seam bug 9 came through. It now uses the shared `wireCents`,
+  so a decimal is refused with the same explanation everywhere.
+- **The sheet styles lived in `UpdateBalanceSheet.css`.** The bill form and the net-worth form
+  used those classes while importing a different stylesheet, so they only looked right because
+  that one component happened to be mounted in the app shell. Extracted to `Sheet.css` with a
+  shared `Sheet` component, which the four new forms also use.
 
 ### A running demo exists
 
@@ -142,6 +185,16 @@ Dax in the running app rather than being caught here, which is the one that matt
    by using the running app, not by a test.
 11. **The override checkbox defaulted to ON for a new expense**, because with optional chaining
    `existing?.field !== null` is true when there is no existing record at all.
+12. **Six mutation hooks wired to nothing** - found by Dax in the running app. The query layer
+   could create and edit categories, goals and assets; no button called any of it, so three
+   sections of the Manage screen were read-only text and only SQL could correct them. The
+   whole suite was green, because "a person can reach this" was not something any test
+   asserted. Fixed by building the forms, and guarded by `apps/web/test/wiring.test.ts`, which
+   fails if an exported `use*` hook appears in no component, or if a path the client calls has
+   no matching route on the server. Both halves of that guard were confirmed to fail when
+   deliberately broken, rather than assumed to work.
+   - Same shape as bug 9 and bug 10: correct on each side, wrong at the seam, and found by
+     using the app rather than by running the tests.
 9. **A bill saved as 100x its amount** - found by Dax, not by the tests. Typing 186 stored
    $18,600. The amount was converted twice: the web app turned "186" into 18600 cents and
    sent `"-18600"`, and the API ran `parseCents` over that again and read it as dollars.

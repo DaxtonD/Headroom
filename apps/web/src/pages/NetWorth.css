@@ -124,6 +124,35 @@
   white-space: nowrap;
 }
 
+.networth__entry-edit {
+  min-height: 36px;
+  padding: 0 var(--hr-space-3);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-pill);
+  background: var(--hr-card);
+  color: var(--hr-primary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.networth__entry-edit:hover:not(:disabled) {
+  background: var(--hr-green-tint-soft);
+}
+
+.networth__entry-edit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.networth__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hr-space-2);
+  margin-top: var(--hr-space-4);
+}
+
 /* ---- Retirement breakdown ---- */
 
 .networth__breakdown {

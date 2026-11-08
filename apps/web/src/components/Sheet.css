@@ -1,0 +1,150 @@
+/**
+ * The bottom sheet, shared by every form in the app.
+ *
+ * These rules used to live in UpdateBalanceSheet.css, which meant the bill
+ * form, the net-worth form and everything else only looked right because that
+ * one component happened to be mounted in the app shell. Any screen rendered
+ * without it would have shown an unstyled dialog.
+ */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(23, 32, 29, 0.45);
+}
+
+.sheet {
+  width: 100%;
+  max-width: 560px;
+  max-height: 92dvh;
+  overflow-y: auto;
+  padding: var(--hr-space-5) var(--hr-space-4);
+  /* Rises from the bottom on a phone, which is where the thumb is. */
+  border-radius: var(--hr-radius-hero) var(--hr-radius-hero) 0 0;
+  background: var(--hr-card);
+  /* Clear of the home-screen gesture bar. */
+  padding-bottom: calc(var(--hr-space-5) + env(safe-area-inset-bottom, 0px));
+}
+
+.sheet__title {
+  font-size: 22px;
+  margin-bottom: var(--hr-space-1);
+}
+
+.sheet__intro {
+  color: var(--hr-text-secondary);
+  font-size: 15px;
+  margin-bottom: var(--hr-space-4);
+}
+
+.sheet__error {
+  margin-bottom: var(--hr-space-4);
+}
+
+.sheet__amount {
+  font-family: var(--hr-font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 24px;
+}
+
+.sheet__actions {
+  display: flex;
+  gap: var(--hr-space-2);
+  margin-top: var(--hr-space-5);
+}
+
+.sheet__actions .hr-button {
+  flex: 1;
+}
+
+/* A destructive action sits apart from Cancel/Save, never between them. */
+.sheet__danger {
+  margin-top: var(--hr-space-4);
+  padding-top: var(--hr-space-4);
+  border-top: 1px solid var(--hr-row-divider);
+}
+
+.sheet__danger-button {
+  min-height: var(--hr-touch-min);
+  padding: 0 var(--hr-space-4);
+  border: 1px solid var(--hr-negative);
+  border-radius: var(--hr-radius-pill);
+  background: none;
+  color: var(--hr-negative);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sheet__danger-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.sheet__danger-note {
+  margin-top: var(--hr-space-2);
+  font-size: 13px;
+  color: var(--hr-text-muted);
+  line-height: 1.45;
+}
+
+/* ---- Fields inside a sheet ---- */
+
+.sheet__field {
+  margin-top: var(--hr-space-4);
+}
+
+.sheet__hint {
+  display: block;
+  margin-top: var(--hr-space-1);
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--hr-text-muted);
+  line-height: 1.4;
+}
+
+/* What the entry will do, shown while it is typed. */
+.sheet__preview {
+  margin-top: var(--hr-space-5);
+  padding: var(--hr-space-4);
+  border-radius: var(--hr-radius-input);
+  background: var(--hr-green-tint-soft);
+  color: var(--hr-positive);
+}
+
+.sheet__preview-title {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sheet__preview-amount {
+  margin: var(--hr-space-1) 0;
+  font-size: 22px;
+  font-weight: 600;
+}
+
+.sheet__preview-note {
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.sheet__preview-note + .sheet__preview-note {
+  margin-top: var(--hr-space-2);
+}
+
+@media (min-width: 640px) {
+  .sheet-backdrop {
+    align-items: center;
+  }
+
+  .sheet {
+    border-radius: var(--hr-radius-hero);
+    padding: var(--hr-space-6);
+  }
+}

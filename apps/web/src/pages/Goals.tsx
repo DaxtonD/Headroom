@@ -13,18 +13,35 @@ import { formatCents } from "@headroom/core";
 import { useState } from "react";
 import { Link } from "react-router";
 import { Amount, InitialBubble } from "../components/Badges.js";
+import { BankedHoursForm } from "../components/BankedHoursForm.js";
+import { GoalForm } from "../components/GoalForm.js";
+import { ReimbursementForm } from "../components/ReimbursementForm.js";
 import { ApiError, OfflineError } from "../lib/api.js";
 import {
   useAdvanceReimbursement,
   useGoalsOverview,
+  type GoalProgress,
   type Reimbursement,
 } from "../lib/plannerQueries.js";
 import "./Goals.css";
+
+/**
+ * Which sheet is open.
+ *
+ * Editing lives here as well as on Manage on purpose: the natural moment to
+ * correct a goal is while looking at how far along it is.
+ */
+type Open =
+  | { readonly kind: "goal"; readonly goal: GoalProgress | null }
+  | { readonly kind: "reimbursement" }
+  | { readonly kind: "hours" }
+  | null;
 
 export function Goals({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const overview = useGoalsOverview();
   const advance = useAdvanceReimbursement();
   const [error, setError] = useState<string | null>(null);
+  const [open, setOpen] = useState<Open>(null);
 
   if (overview.isPending) {
     return (
@@ -78,6 +95,15 @@ export function Goals({ canEdit }: { canEdit: boolean }): React.JSX.Element {
                 <div className="goals__goal-head">
                   <span className="goals__goal-name">{goal.name}</span>
                   <span className="goals__goal-pct">{goal.pct}%</span>
+                  <button
+                    className="goals__edit"
+                    type="button"
+                    disabled={!canEdit}
+                    onClick={() => setOpen({ kind: "goal", goal })}
+                    aria-label={`Edit ${goal.name}`}
+                  >
+                    Edit
+                  </button>
                 </div>
 
                 <div
@@ -105,6 +131,17 @@ export function Goals({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             ))}
           </ul>
         )}
+
+        <div className="goals__actions">
+          <button
+            className="hr-button"
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setOpen({ kind: "goal", goal: null })}
+          >
+            Add a goal
+          </button>
+        </div>
       </section>
 
       {/* ---- Work expenses ---- */}
@@ -160,6 +197,17 @@ export function Goals({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             <dd className="hr-amount">{formatCents(data.reimbursements.paidCents)}</dd>
           </div>
         </dl>
+
+        <div className="goals__actions">
+          <button
+            className="hr-button"
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setOpen({ kind: "reimbursement" })}
+          >
+            Add a work expense
+          </button>
+        </div>
       </section>
 
       {/* ---- Banked hours ---- */}
@@ -180,6 +228,17 @@ export function Goals({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             </li>
           ))}
         </ul>
+
+        <div className="goals__actions">
+          <button
+            className="hr-button"
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setOpen({ kind: "hours" })}
+          >
+            Add banked hours
+          </button>
+        </div>
       </section>
 
       <Link className="hr-card goals__link" to="/net-worth">
@@ -189,6 +248,21 @@ export function Goals({ canEdit }: { canEdit: boolean }): React.JSX.Element {
         </span>
         <span aria-hidden="true">→</span>
       </Link>
+
+      {open?.kind === "goal" ? (
+        <GoalForm existing={open.goal} onClose={() => setOpen(null)} />
+      ) : null}
+
+      {open?.kind === "reimbursement" ? (
+        <ReimbursementForm onClose={() => setOpen(null)} />
+      ) : null}
+
+      {open?.kind === "hours" ? (
+        <BankedHoursForm
+          people={data.bankedHours.perPerson}
+          onClose={() => setOpen(null)}
+        />
+      ) : null}
     </div>
   );
 }

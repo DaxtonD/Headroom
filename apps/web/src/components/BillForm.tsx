@@ -27,7 +27,7 @@ import {
   type PayScheduleEntry,
   type ScheduleSpec,
 } from "../lib/manageQueries.js";
-import "./BillForm.css";
+import { Field, RemoveButton, Sheet } from "./Sheet.js";
 
 /** How a bill recurs, in the words someone would actually use. */
 const RECURRENCE_OPTIONS = [
@@ -61,11 +61,18 @@ export function BillForm({
   existing,
   members,
   paySchedules,
+  defaultKind = "bill",
   onClose,
 }: {
   existing: Bill | null;
   members: readonly Member[];
   paySchedules: readonly PayScheduleEntry[];
+  /**
+   * What is being added. A deposit is money arriving that is not a paycheque —
+   * a tax refund, a transfer in — so it has no fixed/variable section and does
+   * not belong in the expense half of the budget.
+   */
+  defaultKind?: "bill" | "deposit";
   onClose: () => void;
 }): React.JSX.Element {
   const create = useCreateBill();
@@ -73,8 +80,12 @@ export function BillForm({
   const ids = {
     name: useId(),
     amount: useId(),
+    recurrence: useId(),
     day: useId(),
+    payday: useId(),
     offset: useId(),
+    section: useId(),
+    owner: useId(),
     override: useId(),
   };
 
@@ -120,8 +131,13 @@ export function BillForm({
       : formatCents(existingOverride, { currencySymbol: false, grouping: false }),
   );
   const [error, setError] = useState<string | null>(null);
+  const [armed, setArmed] = useState(false);
 
   const saving = create.isPending || patch.isPending;
+
+  /** Money arriving rather than leaving, which changes most of the wording. */
+  const kind = existing ? existing.kind : defaultKind;
+  const incoming = kind === "paycheque" || kind === "deposit";
 
   /** The schedule as the API wants it, or null when it cannot be built yet. */
   const buildSchedule = (): ScheduleSpec | null => {
@@ -177,8 +193,7 @@ export function BillForm({
     };
   })();
 
-  const submit = async (event: React.FormEvent): Promise<void> => {
-    event.preventDefault();
+  const submit = async (): Promise<void> => {
     setError(null);
 
     if (name.trim() === "") {
@@ -203,7 +218,7 @@ export function BillForm({
     }
 
     let overrideValue: string | null = null;
-    if (useOverride) {
+    if (useOverride && !incoming) {
       try {
         overrideValue = parseCents(override === "" ? "0" : override).toString();
       } catch {
@@ -211,6 +226,9 @@ export function BillForm({
         return;
       }
     }
+
+    // Income has no fixed/variable half of the budget to sit in.
+    const budgetSection = incoming ? "income" : section;
 
     // A dated schedule produces dated items; a flexible one produces movable
     // undated items. The API enforces this too.
@@ -225,7 +243,7 @@ export function BillForm({
             name: name.trim(),
             defaultCents: cents.toString(),
             schedule,
-            section,
+            section: budgetSection,
             ownerUserId: ownerUserId === "" ? null : ownerUserId,
             monthlyBudgetOverrideCents: overrideValue,
           },
@@ -233,11 +251,11 @@ export function BillForm({
       } else {
         await create.mutateAsync({
           name: name.trim(),
-          kind: "bill",
+          kind: defaultKind,
           defaultCents: cents.toString(),
           withdrawal,
           schedule,
-          section,
+          section: budgetSection,
           ownerUserId: ownerUserId === "" ? null : ownerUserId,
           monthlyBudgetOverrideCents: overrideValue,
         });
@@ -249,262 +267,256 @@ export function BillForm({
     }
   };
 
+  /** Archiving from inside the form, for a bill that has been paid off. */
+  const archive = async (): Promise<void> => {
+    if (!existing) return;
+    setError(null);
+    try {
+      await patch.mutateAsync({
+        id: existing.id,
+        version: existing.version,
+        changes: { active: false },
+      });
+      onClose();
+    } catch (caught) {
+      if (caught instanceof OfflineError || caught instanceof ApiError) setError(caught.message);
+      else setError("Could not archive it.");
+    }
+  };
+
   const needsPayday = recurrence === "after_payday";
 
   return (
-    <div className="sheet-backdrop" onClick={onClose} role="presentation">
-      <div
-        className="sheet"
-        role="dialog"
-        aria-modal="true"
-        aria-label={existing ? `Edit ${existing.name}` : "Add an expense"}
-        onClick={(event) => event.stopPropagation()}
+    <Sheet
+      title={
+        existing
+          ? `Edit ${existing.name}`
+          : incoming
+            ? "Add money coming in"
+            : "Add an expense"
+      }
+      intro={
+        incoming
+          ? "Money arriving that is not a paycheque — a refund, or a transfer in. It appears on Upcoming on the day it lands."
+          : "Entered once. It appears on Upcoming with its due date, and on Budget with its monthly cost."
+      }
+      error={error}
+      saving={saving}
+      saveLabel={existing ? "Save changes" : incoming ? "Add it" : "Add expense"}
+      onClose={onClose}
+      onSubmit={submit}
+      footer={
+        existing ? (
+          <RemoveButton
+            label="Archive this"
+            confirmLabel="Yes, archive it"
+            note="Its history is kept and you can bring it back from Manage."
+            armed={armed}
+            disabled={saving}
+            onArm={() => setArmed(true)}
+            onConfirm={() => void archive()}
+          />
+        ) : null
+      }
+    >
+      <Field label="What is it?" htmlFor={ids.name}>
+        <input
+          className="hr-input"
+          id={ids.name}
+          type="text"
+          value={name}
+          onChange={(event) => setName(event.target.value)}
+          placeholder="Power"
+          disabled={saving}
+          required
+        />
+      </Field>
+
+      <Field
+        label={incoming ? "How much arrives, each time?" : "What does it cost, each time?"}
+        htmlFor={ids.amount}
       >
-        <form onSubmit={(event) => void submit(event)}>
-          <h2 className="sheet__title">{existing ? "Edit expense" : "Add an expense"}</h2>
-          <p className="sheet__intro">
-            Entered once. It appears on Upcoming with its due date, and on Budget with its
-            monthly cost.
+        <input
+          className="hr-input"
+          id={ids.amount}
+          type="text"
+          inputMode="decimal"
+          value={amount}
+          onChange={(event) => setAmount(event.target.value)}
+          placeholder="0.00"
+          disabled={saving}
+          required
+        />
+      </Field>
+
+      <Field label="How often?" htmlFor={ids.recurrence}>
+        <select
+          className="hr-input"
+          id={ids.recurrence}
+          value={recurrence}
+          onChange={(event) => setRecurrence(event.target.value as RecurrenceKey)}
+          disabled={saving}
+        >
+          {RECURRENCE_OPTIONS.map((option) => (
+            <option key={option.key} value={option.key}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {recurrence === "monthly_day" ? (
+        <Field
+          label="On which day of the month?"
+          htmlFor={ids.day}
+          hint="A day a short month does not have moves to its last day, so the 31st is the 30th in November."
+        >
+          <input
+            className="hr-input"
+            id={ids.day}
+            type="number"
+            min={1}
+            max={31}
+            step={1}
+            value={day}
+            onChange={(event) => setDay(event.target.value)}
+            disabled={saving}
+          />
+        </Field>
+      ) : null}
+
+      {needsPayday ? (
+        paySchedules.length === 0 ? (
+          <p className="hr-alert sheet__field">
+            Nobody has a payday set yet, so this option cannot be used. Add paydays first.
           </p>
+        ) : (
+          <>
+            <Field label="After whose payday?" htmlFor={ids.payday}>
+              <select
+                className="hr-input"
+                id={ids.payday}
+                value={payScheduleId}
+                onChange={(event) => setPayScheduleId(event.target.value)}
+                disabled={saving}
+              >
+                {paySchedules.map((entry) => (
+                  <option key={entry.id} value={entry.id}>
+                    {entry.user?.name ?? "Someone"}
+                  </option>
+                ))}
+              </select>
+            </Field>
 
-          {error ? (
-            <p className="hr-alert sheet__error" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <div className="hr-field billform__field">
-            <label className="hr-label" htmlFor={ids.name}>
-              What is it?
-            </label>
-            <input
-              className="hr-input"
-              id={ids.name}
-              type="text"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Power"
-              disabled={saving}
-              required
-            />
-          </div>
-
-          <div className="hr-field billform__field">
-            <label className="hr-label" htmlFor={ids.amount}>
-              What does it cost, each time?
-            </label>
-            <input
-              className="hr-input"
-              id={ids.amount}
-              type="text"
-              inputMode="decimal"
-              value={amount}
-              onChange={(event) => setAmount(event.target.value)}
-              placeholder="0.00"
-              disabled={saving}
-              required
-            />
-          </div>
-
-          <div className="hr-field billform__field">
-            <label className="hr-label" htmlFor="billform-recurrence">
-              How often?
-            </label>
-            <select
-              className="hr-input"
-              id="billform-recurrence"
-              value={recurrence}
-              onChange={(event) => setRecurrence(event.target.value as RecurrenceKey)}
-              disabled={saving}
-            >
-              {RECURRENCE_OPTIONS.map((option) => (
-                <option key={option.key} value={option.key}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {recurrence === "monthly_day" ? (
-            <div className="hr-field billform__field">
-              <label className="hr-label" htmlFor={ids.day}>
-                On which day of the month?
-              </label>
+            <Field label="How many days after?" htmlFor={ids.offset}>
               <input
                 className="hr-input"
-                id={ids.day}
+                id={ids.offset}
                 type="number"
-                min={1}
+                min={-31}
                 max={31}
                 step={1}
-                value={day}
-                onChange={(event) => setDay(event.target.value)}
+                value={offsetDays}
+                onChange={(event) => setOffsetDays(event.target.value)}
                 disabled={saving}
               />
-              <p className="billform__hint">
-                A day a short month does not have moves to its last day, so the 31st is the 30th
-                in November.
-              </p>
-            </div>
-          ) : null}
+            </Field>
+          </>
+        )
+      ) : null}
 
-          {needsPayday ? (
-            paySchedules.length === 0 ? (
-              <p className="hr-alert billform__field">
-                Nobody has a payday set yet, so this option cannot be used. Add paydays first.
-              </p>
-            ) : (
+      {incoming ? null : (
+        <Field label="On the budget, is it fixed or variable?" htmlFor={ids.section}>
+          <select
+            className="hr-input"
+            id={ids.section}
+            value={section}
+            onChange={(event) => setSection(event.target.value as "fixed" | "variable")}
+            disabled={saving}
+          >
+            <option value="fixed">Fixed — the same every month</option>
+            <option value="variable">Variable — it changes</option>
+          </select>
+        </Field>
+      )}
+
+      <Field label={incoming ? "Whose is it?" : "Who gets this bill?"} htmlFor={ids.owner}>
+        <select
+          className="hr-input"
+          id={ids.owner}
+          value={ownerUserId}
+          onChange={(event) => setOwnerUserId(event.target.value)}
+          disabled={saving}
+        >
+          <option value="">Not set</option>
+          {members.map((member) => (
+            <option key={member.id} value={member.id}>
+              {member.name}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      {/* ---- What this does to the monthly budget ---- */}
+      {preview ? (
+        <div className="sheet__preview">
+          <p className="sheet__preview-title">
+            {incoming ? "Works out to" : "On the Budget page"}
+          </p>
+          <p className="sheet__preview-amount hr-amount">
+            {formatCents(preview.monthlyCents)} a month
+          </p>
+          <p className="sheet__preview-note">
+            {timesPerYear(preview.cadence)} times a year, so {formatCents(preview.yearlyCents)} a
+            year.
+            {preview.cadence === "biweekly" ? (
               <>
-                <div className="hr-field billform__field">
-                  <label className="hr-label" htmlFor="billform-payday">
-                    After whose payday?
-                  </label>
-                  <select
-                    className="hr-input"
-                    id="billform-payday"
-                    value={payScheduleId}
-                    onChange={(event) => setPayScheduleId(event.target.value)}
-                    disabled={saving}
-                  >
-                    {paySchedules.map((schedule) => (
-                      <option key={schedule.id} value={schedule.id}>
-                        {schedule.user?.name ?? "Someone"}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="hr-field billform__field">
-                  <label className="hr-label" htmlFor={ids.offset}>
-                    How many days after?
-                  </label>
-                  <input
-                    className="hr-input"
-                    id={ids.offset}
-                    type="number"
-                    min={-31}
-                    max={31}
-                    step={1}
-                    value={offsetDays}
-                    onChange={(event) => setOffsetDays(event.target.value)}
-                    disabled={saving}
-                  />
-                </div>
+                {" "}
+                Every two weeks is 26 payments a year, not 24, so this is more than twice the
+                amount.
               </>
-            )
+            ) : null}
+          </p>
+          {preview.overridden ? (
+            <p className="sheet__preview-note">
+              Worked out from the amount it would be{" "}
+              {formatCents(preview.derivedMonthlyCents)}; your figure is being used instead.
+            </p>
           ) : null}
+        </div>
+      ) : null}
 
-          <div className="hr-field billform__field">
-            <label className="hr-label" htmlFor="billform-section">
-              On the budget, is it fixed or variable?
-            </label>
-            <select
-              className="hr-input"
-              id="billform-section"
-              value={section}
-              onChange={(event) => setSection(event.target.value as "fixed" | "variable")}
-              disabled={saving}
-            >
-              <option value="fixed">Fixed — the same every month</option>
-              <option value="variable">Variable — it changes</option>
-            </select>
-          </div>
-
-          <div className="hr-field billform__field">
-            <label className="hr-label" htmlFor="billform-owner">
-              Who gets this bill?
-            </label>
-            <select
-              className="hr-input"
-              id="billform-owner"
-              value={ownerUserId}
-              onChange={(event) => setOwnerUserId(event.target.value)}
-              disabled={saving}
-            >
-              <option value="">Not set</option>
-              {members.map((member) => (
-                <option key={member.id} value={member.id}>
-                  {member.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* ---- What this does to the monthly budget ---- */}
-          {preview ? (
-            <div className="billform__preview">
-              <p className="billform__preview-title">On the Budget page</p>
-              <p className="billform__preview-amount hr-amount">
-                {formatCents(preview.monthlyCents)} a month
-              </p>
-              <p className="billform__preview-note">
-                {timesPerYear(preview.cadence)} times a year, so{" "}
-                {formatCents(preview.yearlyCents)} a year.
-                {preview.cadence === "biweekly" ? (
-                  <>
-                    {" "}
-                    Every two weeks is 26 payments a year, not 24, so this is more than twice the
-                    amount.
-                  </>
-                ) : null}
-              </p>
-              {preview.overridden ? (
-                <p className="billform__preview-note">
-                  Worked out from the amount it would be{" "}
-                  {formatCents(preview.derivedMonthlyCents)}; your figure is being used instead.
-                </p>
-              ) : null}
-            </div>
-          ) : null}
-
-          <label className="billform__checkbox">
-            <input
-              type="checkbox"
-              checked={useOverride}
-              onChange={(event) => setUseOverride(event.target.checked)}
-              disabled={saving}
-            />
-            <span>
-              Use a different monthly figure on the budget
-              <span className="billform__hint">
-                For when the sheet says a different number than the one worked out above.
-              </span>
+      {incoming ? null : (
+        <label className="hr-checkbox">
+          <input
+            type="checkbox"
+            checked={useOverride}
+            onChange={(event) => setUseOverride(event.target.checked)}
+            disabled={saving}
+          />
+          <span>
+            Use a different monthly figure on the budget
+            <span className="sheet__hint">
+              For when the sheet says a different number than the one worked out above.
             </span>
-          </label>
+          </span>
+        </label>
+      )}
 
-          {useOverride ? (
-            <div className="hr-field billform__field">
-              <label className="hr-label" htmlFor={ids.override}>
-                Monthly budget figure
-              </label>
-              <input
-                className="hr-input"
-                id={ids.override}
-                type="text"
-                inputMode="decimal"
-                value={override}
-                onChange={(event) => setOverride(event.target.value)}
-                placeholder="0.00"
-                disabled={saving}
-              />
-            </div>
-          ) : null}
-
-          <div className="sheet__actions">
-            <button
-              className="hr-button hr-button--secondary"
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-            >
-              Cancel
-            </button>
-            <button className="hr-button" type="submit" disabled={saving}>
-              {saving ? "Saving…" : existing ? "Save changes" : "Add expense"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      {useOverride && !incoming ? (
+        <Field label="Monthly budget figure" htmlFor={ids.override}>
+          <input
+            className="hr-input"
+            id={ids.override}
+            type="text"
+            inputMode="decimal"
+            value={override}
+            onChange={(event) => setOverride(event.target.value)}
+            placeholder="0.00"
+            disabled={saving}
+          />
+        </Field>
+      ) : null}
+    </Sheet>
   );
 }

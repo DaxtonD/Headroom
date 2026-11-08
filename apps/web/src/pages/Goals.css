@@ -66,6 +66,9 @@
 }
 
 .goals__goal-name {
+  /* Takes the slack so the percentage and Edit sit together on the right. */
+  flex: 1;
+  min-width: 0;
   font-weight: 600;
 }
 
@@ -74,6 +77,35 @@
   font-variant-numeric: tabular-nums;
   font-weight: 600;
   color: var(--hr-positive);
+}
+
+.goals__edit {
+  min-height: 36px;
+  padding: 0 var(--hr-space-3);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-pill);
+  background: var(--hr-card);
+  color: var(--hr-primary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.goals__edit:hover:not(:disabled) {
+  background: var(--hr-green-tint-soft);
+}
+
+.goals__edit:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.goals__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hr-space-2);
+  margin-top: var(--hr-space-4);
 }
 
 .goals__progress {

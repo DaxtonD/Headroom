@@ -170,6 +170,41 @@ h3 {
   border-color: var(--hr-warning-fg);
 }
 
+/* Native select, styled to match the inputs. A custom dropdown would lose the
+   phone's own picker, which is better than anything built here. Global,
+   because a select appears on several screens and this rule used to load only
+   when the bill form happened to be mounted. */
+select.hr-input {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--hr-text-secondary) 50%),
+    linear-gradient(135deg, var(--hr-text-secondary) 50%, transparent 50%);
+  background-position:
+    calc(100% - 18px) calc(50% + 2px),
+    calc(100% - 13px) calc(50% + 2px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: var(--hr-space-6);
+}
+
+/* A checkbox with its explanation beside it, big enough for a thumb. */
+.hr-checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hr-space-3);
+  margin-top: var(--hr-space-5);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.hr-checkbox input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  accent-color: var(--hr-primary);
+}
+
 .hr-card {
   background: var(--hr-card);
   border: 1px solid var(--hr-card-border);

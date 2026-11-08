@@ -8,6 +8,13 @@
   font-size: 24px;
 }
 
+.manage__intro {
+  margin-top: calc(-1 * var(--hr-space-2));
+  font-size: 14px;
+  color: var(--hr-text-muted);
+  line-height: 1.45;
+}
+
 /* ---- The setup checklist ---- */
 
 .manage__checklist {

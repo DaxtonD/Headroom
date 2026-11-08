@@ -14,6 +14,7 @@
 import { formatCents, parseCents } from "@headroom/core";
 import { useState } from "react";
 import { Link } from "react-router";
+import { AssetForm } from "../components/AssetForm.js";
 import { Amount } from "../components/Badges.js";
 import { ApiError, OfflineError } from "../lib/api.js";
 import {
@@ -27,6 +28,11 @@ import "./NetWorth.css";
 export function NetWorth({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const netWorth = useNetWorth();
   const [editing, setEditing] = useState(false);
+  /** The asset sheet: an entry to change, or null to add a new one. */
+  const [asset, setAsset] = useState<{
+    asset: AssetEntry | null;
+    defaultKind: "asset" | "liability";
+  } | null>(null);
 
   if (netWorth.isPending) {
     return (
@@ -66,8 +72,24 @@ export function NetWorth({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       </section>
 
       <div className="networth__columns">
-        <AssetList title="What you own" entries={data.assets} total={data.assetsCents} />
-        <AssetList title="What you owe" entries={data.liabilities} total={data.liabilitiesCents} />
+        <AssetList
+          title="What you own"
+          entries={data.assets}
+          total={data.assetsCents}
+          kind="asset"
+          canEdit={canEdit}
+          onEdit={(asset) => setAsset({ asset, defaultKind: "asset" })}
+          onAdd={() => setAsset({ asset: null, defaultKind: "asset" })}
+        />
+        <AssetList
+          title="What you owe"
+          entries={data.liabilities}
+          total={data.liabilitiesCents}
+          kind="liability"
+          canEdit={canEdit}
+          onEdit={(asset) => setAsset({ asset, defaultKind: "liability" })}
+          onAdd={() => setAsset({ asset: null, defaultKind: "liability" })}
+        />
       </div>
 
       {/* ---- Retirement ---- */}
@@ -170,6 +192,14 @@ export function NetWorth({ canEdit }: { canEdit: boolean }): React.JSX.Element {
           onClose={() => setEditing(false)}
         />
       ) : null}
+
+      {asset ? (
+        <AssetForm
+          existing={asset.asset}
+          defaultKind={asset.defaultKind}
+          onClose={() => setAsset(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -178,10 +208,18 @@ function AssetList({
   title,
   entries,
   total,
+  kind,
+  canEdit,
+  onEdit,
+  onAdd,
 }: {
   title: string;
   entries: readonly AssetEntry[];
   total: bigint;
+  kind: "asset" | "liability";
+  canEdit: boolean;
+  onEdit: (entry: AssetEntry) => void;
+  onAdd: () => void;
 }): React.JSX.Element {
   return (
     <section className="hr-card networth__section">
@@ -207,10 +245,30 @@ function AssetList({
                 ) : null}
               </span>
               <span className="hr-amount networth__entry-amount">{formatCents(entry.cents)}</span>
+              <button
+                className="networth__entry-edit"
+                type="button"
+                disabled={!canEdit}
+                onClick={() => onEdit(entry)}
+                aria-label={`Edit ${entry.name}`}
+              >
+                Edit
+              </button>
             </li>
           ))}
         </ul>
       )}
+
+      <div className="networth__actions">
+        <button
+          className="hr-button hr-button--secondary"
+          type="button"
+          disabled={!canEdit}
+          onClick={onAdd}
+        >
+          {kind === "liability" ? "Add something owed" : "Add something owned"}
+        </button>
+      </div>
     </section>
   );
 }

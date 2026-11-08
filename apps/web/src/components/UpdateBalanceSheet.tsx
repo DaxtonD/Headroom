@@ -11,6 +11,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Amount } from "./Badges.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
 import { useClearableCandidates, useUpdateBalance } from "../lib/queries.js";
+import "./Sheet.css";
 import "./UpdateBalanceSheet.css";
 
 /**

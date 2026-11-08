@@ -66,17 +66,41 @@ export interface HouseholdSettings {
   readonly version: number;
 }
 
+export interface AccountEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly version: number;
+}
+
 export interface Setup {
   readonly household: HouseholdSettings;
   readonly members: readonly Member[];
   readonly paySchedules: readonly PayScheduleEntry[];
-  readonly accounts: readonly { readonly id: string; readonly name: string }[];
+  readonly accounts: readonly AccountEntry[];
   /** What still has to be filled in before everything works properly. */
   readonly missing: readonly string[];
 }
 
+/**
+ * A budget-only category: spending with no due date and no bill behind it.
+ *
+ * Read from `/api/budget-lines` rather than off the Budget page, because the
+ * Budget page's lines are a computed mixture of categories and bills. Managing
+ * a category needs the stored row — its own version, and the yearly override
+ * exactly as entered.
+ */
+export interface Category {
+  readonly id: string;
+  readonly name: string;
+  readonly section: "fixed" | "variable";
+  readonly monthlyCents: Cents;
+  readonly yearlyCentsOverride: Cents | null;
+  readonly version: number;
+}
+
 export const setupKey = ["setup"] as const;
 export const billsKey = ["templates"] as const;
+export const categoriesKey = ["budget-lines"] as const;
 
 /* -------------------------------------------------------------------------- */
 /* Reads                                                                      */
@@ -90,7 +114,7 @@ export function useSetup() {
         household: Record<string, string | number>;
         members: Member[];
         paySchedules: (Omit<PayScheduleEntry, "defaultCents"> & { defaultCents: string })[];
-        accounts: { id: string; name: string }[];
+        accounts: AccountEntry[];
         missing: string[];
       }>("/api/setup");
 
@@ -144,6 +168,34 @@ export function useBills() {
   });
 }
 
+export function useCategories() {
+  return useQuery({
+    queryKey: categoriesKey,
+    queryFn: async (): Promise<readonly Category[]> => {
+      const wire = await api.get<{
+        lines: {
+          id: string;
+          name: string;
+          section: "fixed" | "variable";
+          monthlyCents: string;
+          yearlyCentsOverride: string | null;
+          version: number;
+        }[];
+      }>("/api/budget-lines");
+
+      return wire.lines.map((line) => ({
+        id: line.id,
+        name: line.name,
+        section: line.section,
+        monthlyCents: toCents(line.monthlyCents),
+        yearlyCentsOverride:
+          line.yearlyCentsOverride === null ? null : toCents(line.yearlyCentsOverride),
+        version: line.version,
+      }));
+    },
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Writes                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -154,9 +206,17 @@ export function useBills() {
  */
 function invalidateEverything(queryClient: ReturnType<typeof useQueryClient>): Promise<void> {
   return Promise.all(
-    [setupKey, billsKey, budgetKey, goalsKey, netWorthKey, dashboardKey, timelineKey, payPeriodsKey].map(
-      (key) => queryClient.invalidateQueries({ queryKey: key }),
-    ),
+    [
+      setupKey,
+      billsKey,
+      categoriesKey,
+      budgetKey,
+      goalsKey,
+      netWorthKey,
+      dashboardKey,
+      timelineKey,
+      payPeriodsKey,
+    ].map((key) => queryClient.invalidateQueries({ queryKey: key })),
   ).then(() => undefined);
 }
 
@@ -288,12 +348,33 @@ export function useSaveIncome() {
   });
 }
 
+export interface CategoryInput {
+  readonly name: string;
+  readonly section: "fixed" | "variable";
+  /** Integer cents, as a string. */
+  readonly monthlyCents: string;
+  readonly yearlyCentsOverride?: string | null;
+}
+
 export function useCreateCategory() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { name: string; section: "fixed" | "variable"; monthlyCents: string }) =>
+    mutationFn: (input: CategoryInput) =>
       api.post("/api/budget-lines", input, { idempotencyKey: newIdempotencyKey() }),
+    onSuccess: () => invalidateEverything(queryClient),
+  });
+}
+
+export function usePatchCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; version: number; changes: Partial<CategoryInput> }) =>
+      api.patch(`/api/budget-lines/${input.id}`, input.changes, {
+        baseVersion: input.version,
+        idempotencyKey: newIdempotencyKey(),
+      }),
     onSuccess: () => invalidateEverything(queryClient),
   });
 }
@@ -338,16 +419,34 @@ export function usePatchGoal() {
   });
 }
 
+export function useDeleteGoal() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; version: number }) =>
+      api.delete(`/api/goals/${input.id}`, {
+        baseVersion: input.version,
+        idempotencyKey: newIdempotencyKey(),
+      }),
+    onSuccess: () => invalidateEverything(queryClient),
+  });
+}
+
+export interface AssetInput {
+  readonly kind: "asset" | "liability";
+  readonly name: string;
+  /** Integer cents, as a string. Always a positive magnitude. */
+  readonly cents: string;
+  readonly asOf?: string | null;
+  readonly note?: string | null;
+}
+
 export function useCreateAsset() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: {
-      kind: "asset" | "liability";
-      name: string;
-      cents: string;
-      note?: string;
-    }) => api.post("/api/assets", input, { idempotencyKey: newIdempotencyKey() }),
+    mutationFn: (input: AssetInput) =>
+      api.post("/api/assets", input, { idempotencyKey: newIdempotencyKey() }),
     onSuccess: () => invalidateEverything(queryClient),
   });
 }
@@ -356,11 +455,51 @@ export function usePatchAsset() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { id: string; version: number; changes: { name?: string; cents?: string } }) =>
+    // `kind` is left out on purpose: something owned does not become something
+    // owed by editing it. Remove it and enter the other one.
+    mutationFn: (input: {
+      id: string;
+      version: number;
+      changes: Partial<Omit<AssetInput, "kind">>;
+    }) =>
       api.patch(`/api/assets/${input.id}`, input.changes, {
         baseVersion: input.version,
         idempotencyKey: newIdempotencyKey(),
       }),
+    onSuccess: () => invalidateEverything(queryClient),
+  });
+}
+
+export function useDeleteAsset() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; version: number }) =>
+      api.delete(`/api/assets/${input.id}`, {
+        baseVersion: input.version,
+        idempotencyKey: newIdempotencyKey(),
+      }),
+    onSuccess: () => invalidateEverything(queryClient),
+  });
+}
+
+export function useCreateReimbursement() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { purchase: string; cents: string; boughtOn: string }) =>
+      api.post("/api/reimbursements", input, { idempotencyKey: newIdempotencyKey() }),
+    onSuccess: () => invalidateEverything(queryClient),
+  });
+}
+
+export function useCreateBankedHours() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    // Hours, not money: a decimal string that never goes near `Cents`.
+    mutationFn: (input: { userId: string; hours: string; note?: string }) =>
+      api.post("/api/banked-hours", input, { idempotencyKey: newIdempotencyKey() }),
     onSuccess: () => invalidateEverything(queryClient),
   });
 }
@@ -371,6 +510,19 @@ export function useCreateAccount() {
   return useMutation({
     mutationFn: (input: { name: string }) =>
       api.post("/api/accounts", input, { idempotencyKey: newIdempotencyKey() }),
+    onSuccess: () => invalidateEverything(queryClient),
+  });
+}
+
+export function usePatchAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; version: number; changes: { name?: string } }) =>
+      api.patch(`/api/accounts/${input.id}`, input.changes, {
+        baseVersion: input.version,
+        idempotencyKey: newIdempotencyKey(),
+      }),
     onSuccess: () => invalidateEverything(queryClient),
   });
 }
