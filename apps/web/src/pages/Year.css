@@ -1,0 +1,213 @@
+.year {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-4);
+}
+
+/* ---- Why this screen exists ---- */
+
+.year__intro {
+  padding: var(--hr-space-4) var(--hr-space-5);
+}
+
+.year__intro-title {
+  font-family: var(--hr-font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--hr-text-secondary);
+  margin-bottom: var(--hr-space-2);
+}
+
+.year__intro-note {
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--hr-text-secondary);
+}
+
+.year__section {
+  padding: var(--hr-space-4) var(--hr-space-5);
+}
+
+.year__section-title {
+  font-family: var(--hr-font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--hr-text-secondary);
+  margin-bottom: var(--hr-space-3);
+}
+
+/* ---- The months worth planning for ---- */
+
+.year__highlights,
+.year__months,
+.year__counts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.year__highlights {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-2);
+}
+
+/*
+ * A left bar rather than a tinted fill: the tint would fight the amount's own
+ * colour, and the bar still reads with the text at 4.5:1 on both themes.
+ */
+.year__highlight {
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-card);
+  border-left: 4px solid var(--hr-card-border);
+  background: var(--hr-neutral-bg);
+}
+
+.year__highlight--windfall {
+  border-left-color: var(--hr-positive);
+  background: var(--hr-green-tint);
+}
+
+.year__highlight--squeeze {
+  border-left-color: var(--hr-negative);
+}
+
+.year__highlight--mixed {
+  border-left-color: var(--hr-flexible-fg);
+  background: var(--hr-flexible-bg);
+}
+
+.year__highlight-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+}
+
+.year__highlight-month {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.year__highlight-amount {
+  font-size: 16px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.year__highlight--windfall .year__highlight-amount {
+  color: var(--hr-positive);
+}
+
+.year__highlight--squeeze .year__highlight-amount {
+  color: var(--hr-negative);
+}
+
+.year__highlight-why {
+  margin-top: 2px;
+  font-size: 13px;
+  color: var(--hr-text-secondary);
+  line-height: 1.45;
+}
+
+/* ---- Month by month ---- */
+
+.year__month {
+  padding: var(--hr-space-3) 0;
+  border-top: 1px solid var(--hr-row-divider);
+}
+
+.year__month:first-child {
+  border-top: none;
+}
+
+.year__month-main {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  min-height: 28px;
+}
+
+.year__month-label {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.year__month-flavour {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hr-text-muted);
+  white-space: nowrap;
+}
+
+.year__month--windfall .year__month-flavour {
+  color: var(--hr-positive);
+}
+
+.year__month--squeeze .year__month-flavour {
+  color: var(--hr-negative);
+}
+
+.year__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hr-space-1) var(--hr-space-4);
+  margin-top: 2px;
+}
+
+.year__count {
+  display: flex;
+  align-items: baseline;
+  gap: var(--hr-space-2);
+  font-size: 13px;
+  color: var(--hr-text-muted);
+}
+
+/* The whole reason for the row: this one is not the usual two. */
+.year__count--odd {
+  color: var(--hr-ink);
+  font-weight: 600;
+}
+
+.year__count-dates {
+  font-weight: 400;
+  color: var(--hr-text-muted);
+}
+
+.year__month-effect {
+  margin-top: var(--hr-space-1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.year__month--windfall .year__month-effect {
+  color: var(--hr-positive);
+}
+
+.year__month--squeeze .year__month-effect {
+  color: var(--hr-negative);
+}
+
+.year__error {
+  padding: var(--hr-space-5);
+}
+
+.year__error h2 {
+  font-size: 18px;
+  margin-bottom: var(--hr-space-2);
+}
+
+.year__error p {
+  color: var(--hr-text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* On a wider screen the highlights sit side by side rather than stacking. */
+@media (min-width: 768px) {
+  .year__highlights {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  }
+}

@@ -80,20 +80,50 @@ describe("every path the client calls exists on the server", () => {
   const normalise = (path: string): string =>
     path
       .replace(/^\/api/, "")
+      // A query string is not part of the route, and Fastify does not register
+      // one. Left in, `/api/year?months=14` could never match `/year`.
+      .replace(/\?.*$/, "")
       .replace(/\$\{[^}]*\}/g, ":param")
       .replace(/:[A-Za-z0-9_]+/g, ":param")
       .replace(/\/$/, "");
 
-  const clientPaths = webFiles.flatMap((file) => {
+  /**
+   * Every call site, found without trying to parse its type argument.
+   *
+   * The previous version matched `api.get<...>(` with `<[^>]*>`, which cannot
+   * span a multi-line generic that itself contains a `>` - and five of the
+   * app's calls look exactly like that, including every whole-screen read.
+   * They were silently absent from the comparison, so `/api/year`,
+   * `/api/budget`, `/api/goals-overview`, `/api/net-worth` and
+   * `/api/setup` were never checked against the server at all.
+   *
+   * So: find the method, then take the first endpoint-shaped string literal
+   * before the next call site. No generic parsing involved.
+   */
+  const CALL_SITE = /api\.(get|post|patch|put|delete)[(<]/g;
+
+  const callSites = webFiles.flatMap((file) => {
     const source = readFileSync(file, "utf8");
-    return [
-      ...source.matchAll(/api\.(get|post|patch|put|delete)<[^>]*>?\(\s*[`"']([^`"']+)[`"']/g),
-      ...source.matchAll(/api\.(get|post|patch|put|delete)\(\s*[`"']([^`"']+)[`"']/g),
-    ].map((match) => ({
-      method: match[1] as string,
-      path: match[2] as string,
+    return [...source.matchAll(CALL_SITE)].map((match) => ({
       file,
+      method: match[1] as string,
+      index: match.index,
+      source,
     }));
+  });
+
+  const clientPaths = callSites.flatMap((site, position) => {
+    const next = callSites[position + 1];
+    // Bounded at the next call in the same file, so a URL built in a variable
+    // cannot silently borrow the following call's path.
+    const until =
+      next && next.file === site.file ? next.index : site.source.length;
+    const window = site.source.slice(site.index, until);
+
+    const found = /[`"'](\/api\/[^`"']*)[`"']/.exec(window);
+    return found
+      ? [{ method: site.method, path: found[1] as string, file: site.file }]
+      : [];
   });
 
   const serverRoutes = new Set(
@@ -105,6 +135,27 @@ describe("every path the client calls exists on the server", () => {
   it("finds the calls to check", () => {
     expect(clientPaths.length).toBeGreaterThan(15);
     expect(serverRoutes.size).toBeGreaterThan(15);
+  });
+
+  it("can read every call that exists", () => {
+    // A guard on the guard, and it has already earned its place twice: a
+    // ternary URL in `useYear` produced no path at all, and five multi-line
+    // generics defeated the old regex. Both times the suite stayed green with
+    // endpoints entirely unchecked.
+    //
+    // Any call whose URL this file cannot read now fails here instead of
+    // quietly dropping out of the comparison.
+    const unreadable = callSites.filter((site, position) => {
+      const next = callSites[position + 1];
+      const until =
+        next && next.file === site.file ? next.index : site.source.length;
+      return !/[`"'](\/api\/[^`"']*)[`"']/.test(site.source.slice(site.index, until));
+    });
+
+    expect(
+      unreadable.map((site) => `${site.file}:${String(site.method)}`),
+    ).toEqual([]);
+    expect(clientPaths.length).toBe(callSites.length);
   });
 
   for (const call of clientPaths) {

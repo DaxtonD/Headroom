@@ -14,6 +14,7 @@ import { Home } from "./pages/Home.js";
 import { Manage } from "./pages/Manage.js";
 import { NetWorth } from "./pages/NetWorth.js";
 import { PayPlan } from "./pages/PayPlan.js";
+import { Year } from "./pages/Year.js";
 import { Upcoming } from "./pages/Upcoming.js";
 import { useLogout, useSession } from "./lib/session.js";
 import { useLiveUpdates } from "./lib/useLiveUpdates.js";
@@ -71,6 +72,7 @@ export function App(): React.JSX.Element {
         <Route path="/" element={<Home onUpdateBalance={() => setBalanceSheetOpen(true)} />} />
         <Route path="/upcoming" element={<Upcoming canEdit={canEdit} />} />
         <Route path="/pay-plan" element={<PayPlan canEdit={canEdit} />} />
+        <Route path="/year" element={<Year />} />
         <Route path="/budget" element={<Budget />} />
         <Route path="/goals" element={<Goals canEdit={canEdit} />} />
         {/* Reached from Goals rather than the tab bar, as the brief asks. */}

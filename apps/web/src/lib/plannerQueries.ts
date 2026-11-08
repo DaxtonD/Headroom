@@ -369,3 +369,94 @@ export function useSaveRetirement() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: netWorthKey }),
   });
 }
+
+/* -------------------------------------------------------------------------- */
+/* The year                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One biweekly thing, counted inside one month.
+ *
+ * `extraCount` is how many MORE than the usual two, so zero is a normal month
+ * and the screen only has to look at the non-zero ones.
+ */
+export interface YearEntry {
+  readonly id: string;
+  readonly name: string;
+  /** Signed: positive arrives, negative leaves. */
+  readonly cents: Cents;
+  readonly count: number;
+  readonly extraCount: number;
+  /** `extraCount x cents`. What the oddity is worth, signed. */
+  readonly extraCents: Cents;
+  readonly dates: readonly string[];
+}
+
+export interface YearMonth {
+  readonly year: number;
+  readonly month: number;
+  /** `Apr 2027`. */
+  readonly label: string;
+  readonly start: string;
+  readonly end: string;
+  readonly isUnusual: boolean;
+  /**
+   * What this month is worth against a normal one. Positive is a windfall,
+   * negative is a squeeze - and the two can sit side by side, because the
+   * mortgage comes out the day after a payday and that one-day offset lets a
+   * third payment slip over a month boundary.
+   */
+  readonly netExtraCents: Cents;
+  readonly entries: readonly YearEntry[];
+}
+
+export interface YearOverview {
+  readonly today: string;
+  readonly monthCount: number;
+  readonly hasMortgage: boolean;
+  readonly months: readonly YearMonth[];
+}
+
+export const yearKey = ["year"] as const;
+
+/**
+ * The year ahead.
+ *
+ * Needs no amounts entered and no bills verified, only the pay schedules, so
+ * it stays accurate much further out than the timeline does. That is why it is
+ * its own screen rather than a longer ledger.
+ */
+export function useYear(months?: number) {
+  return useQuery({
+    queryKey: [...yearKey, months ?? null],
+    queryFn: async (): Promise<YearOverview> => {
+      const wire = await api.get<{
+        today: string;
+        monthCount: number;
+        hasMortgage: boolean;
+        months: (Omit<YearMonth, "netExtraCents" | "entries"> & {
+          netExtraCents: string;
+          entries: (Omit<YearEntry, "cents" | "extraCents"> & {
+            cents: string;
+            extraCents: string;
+          })[];
+        })[];
+      }>(months === undefined ? "/api/year" : `/api/year?months=${String(months)}`);
+
+      return {
+        today: wire.today,
+        monthCount: wire.monthCount,
+        hasMortgage: wire.hasMortgage,
+        months: wire.months.map((month) => ({
+          ...month,
+          netExtraCents: toCents(month.netExtraCents),
+          entries: month.entries.map((entry) => ({
+            ...entry,
+            cents: toCents(entry.cents),
+            extraCents: toCents(entry.extraCents),
+          })),
+        })),
+      };
+    },
+  });
+}

@@ -23,6 +23,9 @@ const TABS = [
   { to: "/", label: "Home" },
   { to: "/upcoming", label: "Upcoming" },
   { to: "/pay-plan", label: "Pay plan" },
+  // Months with a third paycheque or a third mortgage payment. Needs only the
+  // schedules, so it is accurate far further out than the timeline.
+  { to: "/year", label: "Year" },
   { to: "/budget", label: "Budget" },
   { to: "/goals", label: "Goals" },
   // Where the household is set up and kept current.
