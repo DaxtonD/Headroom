@@ -15,6 +15,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | M3 Recurrence + Pay plan | done | m3 | Generation never undoes an edit; flexible bills move between periods |
 | M4 Budget, Goals, Net worth | done | m4 | Every retirement assumption editable; shares are of the section |
 | Manage screen + expense model | done | | Added at Dax's request, before M5. One entry feeds timeline and budget. Second pass: every section editable |
+| Biweekly/monthly redesign | done | | Agreed with Dax 2026-11-08. Engine, schema, API, Year screen, Savings screen, and Home+Upcoming+Pay plan merged into one Ledger |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -23,9 +24,13 @@ Claude Code updates this file at the end of every milestone and every work sessi
 - Date: 2026-11-08
 - **Nothing is pushed.** Every commit, and the tags `m0` through `m4`, are local only, awaiting Dax's OK.
 - Done: the handoff, then M0 through M4, then the Manage screen and the expense model, then a
-  second pass making every section of Manage editable, then the biweekly/monthly engine work.
-- **557 tests green**: 290 engine, 197 API against a real Postgres, 70 web wiring checks. Lint,
+  second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
+  engine, schema and migration, the savings and mortgage API, the Year screen, the Savings screen,
+  and Home + Upcoming + Pay plan merged into one Ledger.
+- **665 tests green**: 300 engine, 262 API against a real Postgres, 103 web source checks. Lint,
   typecheck and `pnpm build` clean.
+- The screens are now: **Ledger, Year, Budget, Savings, Manage**, with Net worth reached from
+  Savings. Seven tabs became five.
 
 ### Where each milestone stands
 
@@ -36,13 +41,15 @@ Claude Code updates this file at the end of every milestone and every work sessi
 - **M4 Budget, Goals, Net worth** - done, tagged `m4`.
 - **Manage screen + expense model** - done, untagged. Built at Dax's request before M5, then
   revised after he found that three of its sections were read-only.
+- **Biweekly/monthly redesign** - done, untagged. The whole of the agreed plan: engine, schema,
+  API, the Year screen, the Savings screen, and the ledger merge.
 - **M5, M6** - not started.
 
 ## Next session: start here
 
 1. Read this file, then `CLAUDE.md`, then `docs/HANDOFF.md` (local only, git-ignored).
 2. `pnpm install` and `node scripts/testdb.mjs up`, then `pnpm test`.
-3. **M5 next**: PWA and polish. `vite-plugin-pwa` is a dependency but is not wired up, so
+3. The redesign is finished, so **M5 next**: PWA and polish. `vite-plugin-pwa` is a dependency but is not wired up, so
    there is no manifest, no icons and no service worker. Needs: the installable manifest and
    icons, the read-only offline cache behind the "Offline, as of ..." banner that
    `useLiveUpdates` already drives, the App Badging API for the count of unverified bills, an
@@ -214,7 +221,23 @@ shape.
 An intention and a payment are kept as separate facts. Only **paid** lump sums count against the
 year's allowance: counting an intention would understate the room and talk them out of paying it.
 
-652 tests green (292 core, 103 web, 257 API), lint, typecheck and build clean.
+### Done: the ledger
+
+Home, Upcoming and Pay plan are **one screen** at `/`, labelled Ledger. The balance and what is
+safe to spend at the top, then every event in bank order grouped under the cheque that pays for
+it, a running balance on every line, and a subtotal band under each group with "left over" and
+"room to save". Both old paths redirect; the tab bar is five tabs instead of seven.
+
+The rows are the existing `OccurrenceRow`, not a flatter one written for the new screen. The first
+version of this merge did write its own, and that silently dropped verifying an amount, editing it,
+marking it paid and the conflict handling - while still showing the badge that says "still an
+estimate".
+
+A one-off can now be added (it could not be at all) **and removed**. Only a one-off: a generated
+row belongs to its bill, and marking it paid would be a different claim.
+
+665 tests green (300 core, 103 web, 262 API), lint, typecheck and build clean.
+
 
 
 ### Bugs caught while building it
@@ -256,6 +279,18 @@ typecheck, lint and test run:
   `border: 1px solid var(--hr-negative)` invalid outright, so the button had no red border and no
   red text; it looked like an ordinary link. `apps/web/test/css-tokens.test.ts` now fails on any
   token used without a definition, and was verified by removing the token and watching it fail.
+- **A pay window dropped any row dated before it started.** The timeline deliberately keeps a
+  dated item that is past and uncleared, because the money has not moved yet - and no window's
+  date range covered it, so it was left out of the window's rows **and its totals** while still
+  lowering every running balance and safe-to-spend figure on the same screen. In the demo that was
+  four rows including a $2,315 paycheque, so "left over" on the pay plan was badly wrong. The
+  first window now absorbs anything undated or earlier than itself, which is also the truthful
+  answer: an overdue bill comes out of the money in hand. The existing API test already asserted
+  "every timeline row is in some window" and passed throughout, because the scenario never
+  contained one.
+- **Three pay windows covered the timeline by coincidence.** The horizon is an editable household
+  setting; raise it and rows past the last window fall out of the grouping in the same way. The
+  windows now follow the horizon (`coverThrough`).
 - **The live-update stream refreshed three screens out of ten.** It acted on three entity names
   and ignored every other one, so an earmark, a bill, a budget line or a mortgage edited on one
   phone did not reach the other until a reload. A ping now invalidates every key; TanStack only
@@ -392,6 +427,18 @@ CLAUDE.md describes an autonomous weekend build. That changed: Dax is available 
   drives a panel on Savings and a highlight on Year.
 - 2026-11-08: **The one-off form lives on Upcoming for now.** It belongs in the merged ledger; it
   is on Upcoming because the gap it fills is real today and the merge is the next piece of work.
+
+- 2026-11-08: **Home, Upcoming and Pay plan merged into one Ledger**, which is what was agreed in
+  the discussion. The balance stays at the top of the scroll, so the instant answer CLAUDE.md asks
+  for is still the first thing on screen.
+- 2026-11-08: **`/api/timeline` is still served but no screen calls it.** The ledger reads
+  `/api/pay-periods`, which now carries every row grouped into its window, so a second ungrouped
+  fetch of the same rows would be a second copy of the screen's data. The endpoint is kept because
+  the API tests use it as the engine's HTTP contract and it is the obvious place for a flat export.
+  `useTimeline` was removed from the web app.
+- 2026-11-08: **Only a one-off can be deleted.** Soft-deleting a generated occurrence would either
+  be undone by the next generation run or made permanent, depending on how the period key matched,
+  and neither is something anyone asked for. Those end by changing the bill on Manage.
 
 ## Decisions made WITH Dax (2026-11-07)
 
