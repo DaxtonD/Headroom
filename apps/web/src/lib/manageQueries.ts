@@ -21,7 +21,15 @@ export type ScheduleSpec =
   | { readonly type: "monthly"; readonly day: number }
   | { readonly type: "monthly_last" }
   | { readonly type: "relative_to_pay"; readonly payScheduleId: string; readonly offsetDays: number }
-  | { readonly type: "biweekly"; readonly payScheduleId: string }
+  /**
+   * Every fourteen days: either from a date of its own, or from someone's
+   * paydays. Exactly one of the two.
+   */
+  | {
+      readonly type: "biweekly";
+      readonly payScheduleId?: string;
+      readonly anchorDate?: string;
+    }
   | { readonly type: "flexible"; readonly frequency: "monthly" | "per_pay_period" };
 
 export interface Bill {

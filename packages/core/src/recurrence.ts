@@ -40,7 +40,22 @@ export type ScheduleSpec =
   /** A fixed number of days after each of one person's paydays. */
   | { readonly type: "relative_to_pay"; readonly payScheduleId: string; readonly offsetDays: number }
   /** A paycheque: every 14 days from the schedule's anchor. */
-  | { readonly type: "biweekly"; readonly payScheduleId: string }
+  /**
+   * Every fourteen days.
+   *
+   * Either anchored on a person's paydays (`payScheduleId`) or on a date of its
+   * own (`anchorDate`). Exactly one of the two.
+   *
+   * The second one is why this exists in this shape: a biweekly bill is not
+   * always aligned to anybody's pay. A mortgage has the dates the lender set,
+   * and expressing them as "a payday plus eleven days" both reads as nonsense
+   * and silently moves every payment if that pay anchor is ever corrected.
+   */
+  | {
+      readonly type: "biweekly";
+      readonly payScheduleId?: string;
+      readonly anchorDate?: PlainDate;
+    }
   /** Undated, attached to a paycheque, movable. */
   | { readonly type: "flexible"; readonly frequency: "monthly" | "per_pay_period" };
 
@@ -141,13 +156,29 @@ export function generateOccurrences(options: GenerateOptions): GeneratedOccurren
       }
 
       case "biweekly": {
-        const schedule = schedulesById.get(template.schedule.payScheduleId);
-        if (!schedule) {
+        const { payScheduleId, anchorDate } = template.schedule;
+
+        if ((payScheduleId === undefined) === (anchorDate === undefined)) {
           throw new Error(
-            `Paycheque template "${template.name}" names pay schedule "${template.schedule.payScheduleId}", which does not exist.`,
+            `Template "${template.name}" is biweekly, so it needs either a pay schedule to follow ` +
+              `or an anchor date of its own - exactly one, not both and not neither.`,
           );
         }
-        generated.push(...biweeklyOccurrences(template, schedule, options));
+
+        let anchor: PlainDate;
+        if (payScheduleId !== undefined) {
+          const schedule = schedulesById.get(payScheduleId);
+          if (!schedule) {
+            throw new Error(
+              `Template "${template.name}" names pay schedule "${payScheduleId}", which does not exist.`,
+            );
+          }
+          anchor = schedule.anchorDate;
+        } else {
+          anchor = anchorDate as PlainDate;
+        }
+
+        generated.push(...biweeklyOccurrences(template, anchor, options, weekendRule));
         break;
       }
 
@@ -274,20 +305,40 @@ function relativeToPayOccurrences(
   return result;
 }
 
+/**
+ * Every fourteen days from an anchor.
+ *
+ * Two things here used to be true only because this schedule was reserved for
+ * paycheques:
+ *
+ *  - The amount was forced POSITIVE with `absOf`. A biweekly bill on this
+ *    schedule would therefore have been money arriving. It is signed by kind
+ *    now, which is the same answer for a paycheque and the right one for a
+ *    bill.
+ *  - The weekend rule was not applied. It still is not applied to a paycheque,
+ *    because pay arrives when the employer sends it and that behaviour should
+ *    not change under a household setting; a withdrawal is exactly what the
+ *    rule is about, so a bill gets it like every other bill.
+ */
 function biweeklyOccurrences(
   template: TemplateSpec,
-  schedule: PaySchedule,
+  anchorDate: PlainDate,
   options: GenerateOptions,
+  weekendRule: WeekendRule,
 ): GeneratedOccurrence[] {
-  return paydaysBetween(schedule.anchorDate, options.from, options.to).map((payday) => ({
+  const isPaycheque = template.kind === "paycheque";
+
+  return paydaysBetween(anchorDate, options.from, options.to).map((cycleDate) => ({
     templateId: template.id,
-    periodKey: payday,
+    // Keyed by the cycle date, never by the date after the weekend rule has
+    // moved it: otherwise changing that setting generates a second copy.
+    periodKey: cycleDate,
     name: template.name,
-    cents: absOf(template.defaultCents),
+    cents: signedForKind(template.kind, template.defaultCents),
     kind: template.kind,
     placement: "auto" as const,
-    date: payday,
-    // Paychequess land first on their day (section 6.2), and the timeline
+    date: isPaycheque ? cycleDate : applyWeekendRule(cycleDate, weekendRule),
+    // A paycheque lands first on its day (section 6.2), and the timeline
     // ordering enforces that too.
     sortIndex: template.sortIndex ?? 0,
     ownerId: template.ownerId,
@@ -358,10 +409,6 @@ function everyPayday(options: GenerateOptions): PlainDate[] {
     }
   }
   return [...paydays].sort(compareDates);
-}
-
-function absOf(value: Cents): Cents {
-  return value < 0n ? -value : value;
 }
 
 /**

@@ -66,6 +66,115 @@ function generate() {
   });
 }
 
+describe("a biweekly expense", () => {
+  /**
+   * There was no way to say this at all. The only fortnightly option in the
+   * interface was "a few days after someone's payday", and the schedule type
+   * that sounds right - `biweekly` - was reserved for paycheques: it forced
+   * the amount positive, so a biweekly bill on it would have been money
+   * arriving.
+   */
+  async function createBiweekly(payload: Record<string, unknown> = {}) {
+    return harness.app.inject({
+      method: "POST",
+      url: "/api/templates",
+      headers: { cookie, "idempotency-key": randomUUID() },
+      payload: {
+        name: "Mortgage",
+        kind: "bill",
+        defaultCents: "110000",
+        withdrawal: "auto",
+        schedule: { type: "biweekly", anchorDate: "2026-11-06" },
+        ...payload,
+      },
+    });
+  }
+
+  it("generates every fourteen days from its own anchor, as money going out", async () => {
+    await seedSchedules();
+    expect((await createBiweekly()).statusCode).toBe(201);
+    expect((await generate()).statusCode).toBe(200);
+
+    const rows = await harness.db.prisma.occurrence.findMany({
+      where: { name: "Mortgage", deletedAt: null },
+      orderBy: { date: "asc" },
+      select: { date: true, cents: true },
+    });
+
+    // The generation window is the horizon plus a fortnight, so the exact
+    // count depends on the horizon; two is enough to check the spacing.
+    expect(rows.length).toBeGreaterThanOrEqual(2);
+    for (const row of rows) {
+      // Money leaving, whatever sign the amount was sent with.
+      expect(row.cents).toBe(-110_000n);
+    }
+
+    // Fourteen days apart, every one of them.
+    for (let index = 1; index < rows.length; index += 1) {
+      const gap =
+        (rows[index]!.date!.getTime() - rows[index - 1]!.date!.getTime()) / 86_400_000;
+      expect(gap).toBe(14);
+    }
+  });
+
+  it("generates nothing new on a second run", async () => {
+    await seedSchedules();
+    await createBiweekly();
+    await generate();
+    const first = await harness.db.prisma.occurrence.count({ where: { name: "Mortgage" } });
+
+    await generate();
+
+    expect(await harness.db.prisma.occurrence.count({ where: { name: "Mortgage" } })).toBe(first);
+  });
+
+  it("still works anchored on a payday instead", async () => {
+    const { dax } = await seedSchedules();
+
+    const response = await createBiweekly({
+      name: "Follows Dax",
+      schedule: { type: "biweekly", payScheduleId: dax.id },
+    });
+    expect(response.statusCode).toBe(201);
+    await generate();
+
+    const rows = await harness.db.prisma.occurrence.findMany({
+      where: { name: "Follows Dax", deletedAt: null },
+      select: { cents: true },
+    });
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.every((row) => row.cents === -110_000n)).toBe(true);
+  });
+
+  it("refuses both anchors at once, and neither", async () => {
+    const { dax } = await seedSchedules();
+
+    const both = await createBiweekly({
+      schedule: { type: "biweekly", payScheduleId: dax.id, anchorDate: "2026-11-06" },
+    });
+    const neither = await createBiweekly({ schedule: { type: "biweekly" } });
+
+    expect(both.statusCode).toBe(400);
+    expect(neither.statusCode).toBe(400);
+  });
+
+  it("costs 26 times a year in the budget, not 24", async () => {
+    await seedSchedules();
+    await createBiweekly({ section: "fixed" });
+
+    const budget = await harness.app
+      .inject({ method: "GET", url: "/api/budget", headers: { cookie } })
+      .then((response) => response.json());
+
+    const line = (budget.fixed.lines as { name: string; monthlyCents: string }[]).find(
+      (candidate) => candidate.name === "Mortgage",
+    );
+
+    // 110,000 x 26 / 12 = 238,333.33 -> 238,333, not 220,000.
+    expect(line?.monthlyCents).toBe("238333");
+  });
+});
+
 describe("POST /api/templates", () => {
   it("creates a template and records it in the history", async () => {
     const response = await harness.app.inject({

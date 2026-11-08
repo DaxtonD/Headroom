@@ -42,7 +42,25 @@ const scheduleSchema = z.discriminatedUnion("type", [
     payScheduleId: z.string().min(1),
     offsetDays: z.number().int().min(-31).max(31),
   }),
-  z.object({ type: z.literal("biweekly"), payScheduleId: z.string().min(1) }),
+  z
+    .object({
+      type: z.literal("biweekly"),
+      /** Follows someone's paydays... */
+      payScheduleId: z.string().min(1).optional(),
+      /** ...or has fourteen-day dates of its own. Exactly one of the two. */
+      anchorDate: z
+        .string()
+        .regex(/^\d{4}-\d{2}-\d{2}$/, "An anchor date must look like 2026-11-06.")
+        .optional(),
+    })
+    .refine(
+      (schedule) =>
+        (schedule.payScheduleId === undefined) !== (schedule.anchorDate === undefined),
+      {
+        message:
+          "A biweekly item either follows a payday or has its own anchor date - one of the two, not both.",
+      },
+    ),
   z.object({
     type: z.literal("flexible"),
     frequency: z.enum(["monthly", "per_pay_period"]),

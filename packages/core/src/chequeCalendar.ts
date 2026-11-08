@@ -169,6 +169,32 @@ export function unusualMonths(
  * ordinary biweekly series - and it is precisely this shift that lets a month
  * hold three paycheques but two mortgage payments.
  */
+/**
+ * The mortgage as a fortnightly series, from its own payment dates.
+ *
+ * Use this when the lender set the dates. {@link mortgageSeriesFromPaySchedule}
+ * is for the other case, where the payment chases a payday.
+ */
+export function mortgageSeries(options: {
+  readonly id: string;
+  readonly name: string;
+  /** Any real payment date; the rest fall every fourteen days from it. */
+  readonly anchorDate: PlainDate;
+  /** The payment, as a positive magnitude; it is negated here. */
+  readonly paymentCents: Cents;
+}): BiweeklySeries {
+  if (options.paymentCents < 0n) {
+    throw new RangeError("Pass the mortgage payment as a positive magnitude; it is negated here.");
+  }
+
+  return {
+    id: options.id,
+    name: options.name,
+    anchorDate: options.anchorDate,
+    cents: -options.paymentCents,
+  };
+}
+
 export function mortgageSeriesFromPaySchedule(options: {
   readonly id: string;
   readonly name: string;
@@ -182,14 +208,12 @@ export function mortgageSeriesFromPaySchedule(options: {
   if (!Number.isInteger(options.offsetDays)) {
     throw new RangeError(`offsetDays must be a whole number; received ${String(options.offsetDays)}.`);
   }
-  if (options.paymentCents < 0n) {
-    throw new RangeError("Pass the mortgage payment as a positive magnitude; it is negated here.");
-  }
 
-  return {
+  // Delegates, so the negation and the guard live in one place.
+  return mortgageSeries({
     id: options.id,
     name: options.name,
     anchorDate: addDays(options.payAnchorDate, options.offsetDays),
-    cents: -options.paymentCents,
-  };
+    paymentCents: options.paymentCents,
+  });
 }

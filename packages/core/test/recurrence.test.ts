@@ -444,3 +444,121 @@ describe("which way the money goes", () => {
     expect(signedForKind("deposit", 0n)).toBe(0n);
   });
 });
+
+describe("biweekly", () => {
+  it("places a bill every fourteen days from its own anchor, as money going out", () => {
+    // The case that had no way to be expressed at all: a biweekly expense that
+    // is not aligned to anybody's pay. A mortgage has the dates the lender set.
+    const mortgage = template({
+      id: "mortgage",
+      name: "Mortgage",
+      defaultCents: 110_000n,
+      schedule: { type: "biweekly", anchorDate: "2026-11-06" },
+    });
+
+    const generated = generateOccurrences({
+      templates: [mortgage],
+      paySchedules: SCHEDULES,
+      from: "2026-11-01",
+      to: "2026-12-31",
+    });
+
+    expect(generated.map((occurrence) => occurrence.date)).toEqual([
+      "2026-11-06",
+      "2026-11-20",
+      "2026-12-04",
+      "2026-12-18",
+    ]);
+    // Signed by what it is. On this schedule the amount used to be forced
+    // positive, so a biweekly bill would have been money arriving.
+    expect(generated.every((occurrence) => occurrence.cents === -110_000n)).toBe(true);
+  });
+
+  it("keys by the cycle date, so it cannot generate twice", () => {
+    const generated = generateOccurrences({
+      templates: [template({ id: "gym", schedule: { type: "biweekly", anchorDate: "2026-11-06" } })],
+      paySchedules: SCHEDULES,
+      from: "2026-11-01",
+      to: "2026-11-30",
+    });
+
+    expect(generated.map((occurrence) => occurrence.periodKey)).toEqual([
+      "2026-11-06",
+      "2026-11-20",
+    ]);
+  });
+
+  it("still follows a payday when told to, unchanged", () => {
+    const pay = template({
+      id: "dax_pay",
+      name: "Dax's pay",
+      kind: "paycheque",
+      defaultCents: 175_000n,
+      schedule: { type: "biweekly", payScheduleId: "dax" },
+    });
+
+    const generated = generateOccurrences({
+      templates: [pay],
+      paySchedules: SCHEDULES,
+      from: "2026-11-01",
+      to: "2026-12-31",
+    });
+
+    expect(generated.map((occurrence) => occurrence.date)).toEqual([
+      "2026-11-12",
+      "2026-11-26",
+      "2026-12-10",
+      "2026-12-24",
+    ]);
+    expect(generated.every((occurrence) => occurrence.cents === 175_000n)).toBe(true);
+  });
+
+  it("moves a bill off a weekend when the household says to, but never a paycheque", () => {
+    // Pay arrives when the employer sends it. A withdrawal is what the rule is
+    // actually about.
+    const options = {
+      paySchedules: SCHEDULES,
+      from: "2026-11-01",
+      to: "2026-11-30",
+      weekendRule: "friday_before" as const,
+    };
+
+    // 2026-11-07 is a Saturday.
+    const bill = generateOccurrences({
+      ...options,
+      templates: [template({ id: "bill", schedule: { type: "biweekly", anchorDate: "2026-11-07" } })],
+    });
+    const pay = generateOccurrences({
+      ...options,
+      templates: [
+        template({
+          id: "pay",
+          kind: "paycheque",
+          schedule: { type: "biweekly", anchorDate: "2026-11-07" },
+        }),
+      ],
+    });
+
+    expect(bill[0]?.date).toBe("2026-11-06");
+    expect(pay[0]?.date).toBe("2026-11-07");
+    // And the key is the cycle date either way, so turning the rule on does
+    // not produce a second copy of the same bill.
+    expect(bill[0]?.periodKey).toBe("2026-11-07");
+  });
+
+  it("refuses a schedule that names both an anchor and a payday, or neither", () => {
+    const run = (schedule: TemplateSpec["schedule"]) => () =>
+      generateOccurrences({
+        templates: [template({ id: "x", schedule })],
+        paySchedules: SCHEDULES,
+        from: "2026-11-01",
+        to: "2026-11-30",
+      });
+
+    expect(run({ type: "biweekly", payScheduleId: "dax", anchorDate: "2026-11-06" })).toThrow(
+      /exactly one/,
+    );
+    expect(run({ type: "biweekly" })).toThrow(/exactly one/);
+    expect(run({ type: "biweekly", payScheduleId: "nobody" })).toThrow(/does not exist/);
+  });
+});

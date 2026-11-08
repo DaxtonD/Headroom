@@ -16,6 +16,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | M4 Budget, Goals, Net worth | done | m4 | Every retirement assumption editable; shares are of the section |
 | Manage screen + expense model | done | | Added at Dax's request, before M5. One entry feeds timeline and budget. Second pass: every section editable |
 | Biweekly/monthly redesign | done | | Agreed with Dax 2026-11-08. Engine, schema, API, Year screen, Savings screen, and Home+Upcoming+Pay plan merged into one Ledger |
+| Biweekly expenses | done | | At Dax's request. Any expense can be every two weeks on its own dates; the mortgage can be anchored either way |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -27,7 +28,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
   second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
   engine, schema and migration, the savings and mortgage API, the Year screen, the Savings screen,
   and Home + Upcoming + Pay plan merged into one Ledger.
-- **665 tests green**: 300 engine, 262 API against a real Postgres, 103 web source checks. Lint,
+- **682 tests green**: 305 engine, 274 API against a real Postgres, 103 web source checks. Lint,
   typecheck and `pnpm build` clean.
 - The screens are now: **Ledger, Year, Budget, Savings, Manage**, with Net worth reached from
   Savings. Seven tabs became five.
@@ -236,7 +237,37 @@ estimate".
 A one-off can now be added (it could not be at all) **and removed**. Only a one-off: a generated
 row belongs to its bill, and marking it paid would be a different claim.
 
-665 tests green (300 core, 103 web, 262 API), lint, typecheck and build clean.
+### Done: biweekly expenses, at Dax's request (2026-11-08)
+
+Dax: "The mortgage, and other expenses, needs to be able to be configured for bi-weekly." He was
+right that it could not be, and the reason was worse than a missing menu entry:
+
+- The only fortnightly option in the interface was **"a few days after someone's payday"**. That
+  is biweekly only because the payday is, and it cannot express dates a lender set.
+- The schedule type that *sounds* right, `biweekly`, was **reserved for paycheques**: it forced the
+  amount positive with `absOf`, so a biweekly bill on it would have been money **arriving**.
+- Worse, opening an existing biweekly item in the bill form mapped it to "after payday", so
+  **saving it rewrote its schedule** - to a payday it had never followed, with the offset
+  defaulted to 1.
+
+Now: **"Every two weeks, on its own dates"** with an anchor date, for a bill, a deposit or a
+transfer, signed by kind. The paycheque path is untouched - `signedForKind("paycheque", x)` is the
+same answer `absOf` gave. A biweekly bill obeys the weekend rule like every other bill; a paycheque
+still does not, because pay arrives when the employer sends it.
+
+The **mortgage** can now be anchored either way, and its own dates are the default for a new one:
+
+- **Its own dates** is what a lender states, and a payday-anchored mortgage silently moves every
+  payment if that pay anchor is ever corrected.
+- **Following a payday** stays, because this household's really does behave that way (the day
+  after Dax's pay), and that one-day offset is the whole reason the Year screen exists.
+
+Naming one anchor clears the other, so which one wins is never a guess. The budget already costed
+biweekly at 26/year rather than 24; verified in the demo at $42.50 a fortnight showing as
+$92.08 a month.
+
+682 tests green (305 core, 103 web, 274 API), lint, typecheck and build clean.
+
 
 
 
@@ -439,6 +470,15 @@ CLAUDE.md describes an autonomous weekend build. That changed: Dax is available 
 - 2026-11-08: **Only a one-off can be deleted.** Soft-deleting a generated occurrence would either
   be undone by the next generation run or made permanent, depending on how the period key matched,
   and neither is something anyone asked for. Those end by changing the bill on Manage.
+
+- 2026-11-08: **A new mortgage defaults to its own payment dates**, not to following a payday,
+  even though this household's follows one. The dates a lender sets are the common case and the
+  safer default: anchoring to a payday means correcting that pay anchor later moves every mortgage
+  payment with it. Theirs is set up the other way on purpose, and the form says which it is.
+- 2026-11-08: **A biweekly paycheque still ignores the weekend rule**, while a biweekly bill obeys
+  it. The rule is about when the bank takes money; pay arrives when the employer sends it, and
+  turning on `friday_before` should not start moving paydays. Applying it to both would have been
+  a silent change to existing behaviour.
 
 ## Decisions made WITH Dax (2026-11-07)
 

@@ -33,6 +33,10 @@ import { Field, RemoveButton, Sheet } from "./Sheet.js";
 const RECURRENCE_OPTIONS = [
   { key: "monthly_day", label: "Every month, on a date" },
   { key: "monthly_last", label: "Every month, on the last day" },
+  // The one that was missing. "A few days after someone's payday" is also
+  // fortnightly, but only because the payday is - and it cannot express dates
+  // a lender set, which is what a mortgage has.
+  { key: "biweekly_own", label: "Every two weeks, on its own dates" },
   { key: "after_payday", label: "A few days after someone's payday" },
   { key: "flexible_monthly", label: "Monthly, but I choose when to pay it" },
   { key: "flexible_per_pay", label: "Every payday, but I choose when" },
@@ -49,7 +53,10 @@ function recurrenceOf(schedule: ScheduleSpec): RecurrenceKey {
     case "relative_to_pay":
       return "after_payday";
     case "biweekly":
-      return "after_payday";
+      // Mapping this to "after_payday" used to silently rewrite the schedule
+      // on the next save: a biweekly item on its own dates became one chasing
+      // a payday, with the offset defaulted to 1.
+      return schedule.anchorDate === undefined ? "after_payday" : "biweekly_own";
     case "flexible":
       return schedule.frequency === "per_pay_period" ? "flexible_per_pay" : "flexible_monthly";
     default:
@@ -82,6 +89,7 @@ export function BillForm({
     amount: useId(),
     recurrence: useId(),
     day: useId(),
+    anchor: useId(),
     payday: useId(),
     offset: useId(),
     section: useId(),
@@ -99,13 +107,18 @@ export function BillForm({
   const [day, setDay] = useState(
     existing?.schedule.type === "monthly" ? String(existing.schedule.day) : "1",
   );
-  const [payScheduleId, setPayScheduleId] = useState(
-    existing?.schedule.type === "relative_to_pay" || existing?.schedule.type === "biweekly"
-      ? existing.schedule.payScheduleId
-      : (paySchedules[0]?.id ?? ""),
-  );
+  const [payScheduleId, setPayScheduleId] = useState(() => {
+    if (existing?.schedule.type === "relative_to_pay") return existing.schedule.payScheduleId;
+    if (existing?.schedule.type === "biweekly" && existing.schedule.payScheduleId !== undefined) {
+      return existing.schedule.payScheduleId;
+    }
+    return paySchedules[0]?.id ?? "";
+  });
   const [offsetDays, setOffsetDays] = useState(
     existing?.schedule.type === "relative_to_pay" ? String(existing.schedule.offsetDays) : "1",
+  );
+  const [anchorDate, setAnchorDate] = useState(
+    existing?.schedule.type === "biweekly" ? (existing.schedule.anchorDate ?? "") : "",
   );
   const [section, setSection] = useState<"fixed" | "variable">(
     existing?.section === "variable" ? "variable" : "fixed",
@@ -149,6 +162,10 @@ export function BillForm({
       }
       case "monthly_last":
         return { type: "monthly_last" };
+      case "biweekly_own": {
+        if (anchorDate === "") return null;
+        return { type: "biweekly", anchorDate };
+      }
       case "after_payday": {
         if (!payScheduleId) return null;
         const parsed = Number(offsetDays);
@@ -381,6 +398,24 @@ export function BillForm({
             value={day}
             onChange={(event) => setDay(event.target.value)}
             disabled={saving}
+          />
+        </Field>
+      ) : null}
+
+      {recurrence === "biweekly_own" ? (
+        <Field
+          label="A date it comes out"
+          htmlFor={ids.anchor}
+          hint="Any real one. Every fourteen days from there — which is 26 times a year, not 24."
+        >
+          <input
+            className="hr-input"
+            id={ids.anchor}
+            type="date"
+            value={anchorDate}
+            onChange={(event) => setAnchorDate(event.target.value)}
+            disabled={saving}
+            required
           />
         </Field>
       ) : null}

@@ -12,7 +12,11 @@
  * fourteen-month ledger would be mostly estimates, and it would bury the tight
  * week coming up in three hundred rows.
  */
-import { computeChequeCalendar, mortgageSeriesFromPaySchedule } from "@headroom/core";
+import {
+  computeChequeCalendar,
+  mortgageSeries,
+  mortgageSeriesFromPaySchedule,
+} from "@headroom/core";
 import type { BiweeklySeries } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
@@ -66,6 +70,7 @@ export async function registerYearRoutes(app: FastifyInstance): Promise<void> {
           paymentCents: true,
           offsetDays: true,
           payScheduleId: true,
+          anchorDate: true,
           paySchedule: { select: { anchorDate: true } },
         },
         orderBy: { createdAt: "asc" },
@@ -82,15 +87,30 @@ export async function registerYearRoutes(app: FastifyInstance): Promise<void> {
     }));
 
     if (mortgage) {
-      series.push(
-        mortgageSeriesFromPaySchedule({
-          id: mortgage.id,
-          name: "Mortgage",
-          payAnchorDate: toPlainDate(mortgage.paySchedule.anchorDate),
-          offsetDays: mortgage.offsetDays,
-          paymentCents: mortgage.paymentCents,
-        }),
-      );
+      // Its own payment dates when it has them; otherwise the payday it
+      // follows plus the offset, which is what makes a third cheque and a
+      // third mortgage payment land in different months.
+      const mortgageRow =
+        mortgage.anchorDate !== null
+          ? mortgageSeries({
+              id: mortgage.id,
+              name: "Mortgage",
+              anchorDate: toPlainDate(mortgage.anchorDate),
+              paymentCents: mortgage.paymentCents,
+            })
+          : mortgage.paySchedule !== null
+            ? mortgageSeriesFromPaySchedule({
+                id: mortgage.id,
+                name: "Mortgage",
+                payAnchorDate: toPlainDate(mortgage.paySchedule.anchorDate),
+                offsetDays: mortgage.offsetDays,
+                paymentCents: mortgage.paymentCents,
+              })
+            : // Anchored neither way. The Savings screen says so plainly; this
+              // one simply leaves it out rather than refusing the whole year.
+              null;
+
+      if (mortgageRow) series.push(mortgageRow);
     }
 
     const months = computeChequeCalendar({ from: today, monthCount, series });

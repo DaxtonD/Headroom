@@ -6,11 +6,20 @@
  * to. None of that is stored, so correcting a figure here corrects every
  * number on the Savings screen at once.
  *
- * The balance date is the fiddly one, and it is fiddly for a real reason. The
- * payment comes out a fixed number of days AFTER a payday, so the dates that
- * are valid are the paydays plus that offset - not the paydays. Getting it
- * wrong would put every later date a fortnight out, so the server refuses a
- * date that is not a payment date and says which ones are.
+ * The payment is fortnightly, and there are two honest ways to say when:
+ *
+ *  - **Its own dates.** Any real payment date, every fourteen days from there.
+ *    This is what a lender gives you, and it is the default: a mortgage
+ *    anchored to somebody's payday silently moves every payment if that pay
+ *    anchor is ever corrected.
+ *  - **Following a payday.** A fixed number of days after one. This household's
+ *    really does behave this way - the day after Dax's pay - and that one-day
+ *    offset is why a month can hold three cheques but two mortgage payments.
+ *
+ * The balance date is the fiddly one either way: the valid dates are the
+ * payment dates, not the paydays. Getting it wrong would put every later date
+ * a fortnight out, so the server refuses one that is not a payment date and
+ * says which ones are.
  */
 import { formatCents, parseCents } from "@headroom/core";
 import { useId, useState } from "react";
@@ -58,6 +67,7 @@ export function MortgageForm({
     asOf: useId(),
     rate: useId(),
     payment: useId(),
+    anchor: useId(),
     schedule: useId(),
     offset: useId(),
     cap: useId(),
@@ -75,6 +85,14 @@ export function MortgageForm({
       ? formatCents(existing.paymentCents, { currencySymbol: false, grouping: false })
       : "",
   );
+  /**
+   * Which way this one is anchored. Its own dates unless it is already
+   * following a payday, and its own dates for anything new.
+   */
+  const [anchoring, setAnchoring] = useState<"own" | "payday">(
+    existing !== null && existing.payScheduleId !== null ? "payday" : "own",
+  );
+  const [anchorDate, setAnchorDate] = useState(existing?.anchorDate ?? "");
   const [scheduleId, setScheduleId] = useState(
     existing?.payScheduleId ?? paySchedules[0]?.id ?? "",
   );
@@ -95,8 +113,12 @@ export function MortgageForm({
   const submit = async (): Promise<void> => {
     setError(null);
 
-    if (paySchedules.length === 0) {
-      setError("Add a payday on the Manage screen first: the payment follows one.");
+    if (anchoring === "payday" && paySchedules.length === 0) {
+      setError("Nobody has a payday set yet. Add one on Manage, or give this its own dates.");
+      return;
+    }
+    if (anchoring === "own" && anchorDate === "") {
+      setError("Give a date one of the payments comes out.");
       return;
     }
 
@@ -133,15 +155,18 @@ export function MortgageForm({
       return;
     }
 
+    // One anchor or the other, never both: the server refuses both, and
+    // sending both would make which one wins a guess.
     const input = {
       balanceCents: balanceCents.toString(),
       asOf,
       rateBasisPoints: basisPoints,
       paymentCents: paymentCents.toString(),
-      payScheduleId: scheduleId,
-      offsetDays: offset,
       compounding,
       prepaymentCapCents: capCents.toString(),
+      ...(anchoring === "own"
+        ? { anchorDate }
+        : { payScheduleId: scheduleId, offsetDays: offset }),
     };
 
     try {
@@ -256,6 +281,52 @@ export function MortgageForm({
         />
       </Field>
 
+      <fieldset className="sheet__choices">
+        <legend className="hr-label">When do the payments come out?</legend>
+        <label className="sheet__choice">
+          <input
+            type="radio"
+            name="mortgage-anchoring"
+            value="own"
+            checked={anchoring === "own"}
+            onChange={() => setAnchoring("own")}
+            disabled={saving}
+          />
+          <span>Every two weeks, on its own dates — what the lender set</span>
+        </label>
+        <label className="sheet__choice">
+          <input
+            type="radio"
+            name="mortgage-anchoring"
+            value="payday"
+            checked={anchoring === "payday"}
+            onChange={() => setAnchoring("payday")}
+            disabled={saving}
+          />
+          <span>A fixed number of days after someone&rsquo;s payday</span>
+        </label>
+      </fieldset>
+
+      {anchoring === "own" ? (
+        <Field
+          label="A date a payment comes out"
+          htmlFor={ids.anchor}
+          hint="Any real one. The rest fall every fourteen days from there."
+        >
+          <input
+            className="hr-input"
+            id={ids.anchor}
+            type="date"
+            value={anchorDate}
+            onChange={(event) => setAnchorDate(event.target.value)}
+            disabled={saving}
+            required
+          />
+        </Field>
+      ) : null}
+
+      {anchoring === "payday" ? (
+      <>
       <Field label="Follows whose payday?" htmlFor={ids.schedule}>
         <select
           className="hr-input"
@@ -294,6 +365,8 @@ export function MortgageForm({
           disabled={saving}
         />
       </Field>
+      </>
+      ) : null}
 
       <Field
         label="Lump sum allowance each year"

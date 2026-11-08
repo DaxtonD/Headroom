@@ -50,6 +50,11 @@ beforeEach(async () => {
 });
 
 const headers = () => ({ cookie, "idempotency-key": randomUUID() });
+
+/** Only what the year-view assertions below read. */
+interface Month {
+  entries: { name: string; dates: string[] }[];
+}
 const match = (version: number) => ({ ...headers(), "if-match": `"${String(version)}"` });
 
 /** The payday the mortgage follows. Plus one day, that is 2026-01-02. */
@@ -383,6 +388,144 @@ describe("POST /api/mortgage", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+});
+
+describe("a mortgage on its own payment dates", () => {
+  /**
+   * The other way to anchor one, and the way a lender actually states it: any
+   * real payment date, with the rest every fourteen days from it.
+   *
+   * It matters beyond convenience. A payday-anchored mortgage moves every one
+   * of its payments if that pay anchor is ever corrected, which for dates the
+   * lender set is simply wrong.
+   */
+  async function createOwnAnchor(overrides: Record<string, unknown> = {}) {
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/api/mortgage",
+      headers: headers(),
+      payload: {
+        balanceCents: "2000000",
+        asOf: "2026-01-02",
+        rateBasisPoints: 500,
+        paymentCents: "50000",
+        anchorDate: "2026-01-02",
+        prepaymentCapCents: "1000000",
+        ...overrides,
+      },
+    });
+    return { response, body: response.json() };
+  }
+
+  it("needs no pay schedule at all", async () => {
+    // Not even one in the household: the dates are its own.
+    const { response, body } = await createOwnAnchor();
+
+    expect(response.statusCode).toBe(201);
+    expect(body.mortgage.anchorDate).toBe("2026-01-02");
+    expect(body.mortgage.payScheduleId).toBeNull();
+  });
+
+  it("reproduces the same schedule the payday-anchored one does", async () => {
+    await createOwnAnchor();
+    const body = await get().then((response) => response.json());
+
+    // The engine's verified figures for these terms.
+    expect(body.mortgage.plan.payoffDate).toBe("2027-08-13");
+    expect(body.mortgage.plan.paymentCount).toBe(42);
+    expect(body.mortgage.plan.totalInterestCents).toBe("83121");
+    // Nobody's payday is involved, so there is no name to say.
+    expect(body.mortgage.follows).toBeNull();
+  });
+
+  it("appears on the year view from its own dates", async () => {
+    await createOwnAnchor();
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/year", headers: { cookie } })
+      .then((response) => response.json());
+
+    expect(body.hasMortgage).toBe(true);
+
+    const dates = (body.months as Month[]).flatMap(
+      (month) => month.entries.find((entry) => entry.name === "Mortgage")?.dates ?? [],
+    );
+    expect(dates.length).toBeGreaterThan(0);
+
+    // Every one is a whole number of fortnights from the anchor.
+    for (const date of dates) {
+      const days =
+        (Date.parse(`${date}T00:00:00Z`) - Date.parse("2026-01-02T00:00:00Z")) / 86_400_000;
+      expect(days % 14).toBe(0);
+    }
+  });
+
+  it("refuses both ways of anchoring at once, and neither", async () => {
+    const schedule = await seedPaySchedule();
+
+    const both = await createOwnAnchor({ payScheduleId: schedule.id });
+    expect(both.response.statusCode).toBe(400);
+
+    const neither = await harness.app.inject({
+      method: "POST",
+      url: "/api/mortgage",
+      headers: headers(),
+      payload: {
+        balanceCents: "2000000",
+        asOf: "2026-01-02",
+        rateBasisPoints: 500,
+        paymentCents: "50000",
+      },
+    });
+    expect(neither.statusCode).toBe(400);
+
+    expect(await harness.db.prisma.mortgage.count({ where: { householdId } })).toBe(0);
+  });
+
+  it("still insists the balance date is a payment date", async () => {
+    // 2026-01-03 is not a fortnight from 2026-01-02.
+    const { response } = await createOwnAnchor({ asOf: "2026-01-03" });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().message).toContain("2026-01-02");
+    // And with no payday involved, it does not talk about one.
+    expect(response.json().message).not.toContain("after a payday");
+  });
+
+  it("switches from following a payday to its own dates, clearing the old one", async () => {
+    const { body: created } = await createMortgage();
+    expect(created.mortgage.payScheduleId).not.toBeNull();
+
+    const patched = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/mortgage/${created.mortgage.id as string}`,
+      headers: match(created.mortgage.version as number),
+      payload: { anchorDate: "2026-01-02" },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().mortgage.anchorDate).toBe("2026-01-02");
+    // Naming one clears the other, so which one wins is never a guess.
+    expect(patched.json().mortgage.payScheduleId).toBeNull();
+
+    const body = await get().then((response) => response.json());
+    expect(body.mortgage.plan.payoffDate).toBe("2027-08-13");
+  });
+
+  it("switches back to a payday, clearing its own dates", async () => {
+    const { body: created } = await createOwnAnchor();
+    const schedule = await seedPaySchedule();
+
+    const patched = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/mortgage/${created.mortgage.id as string}`,
+      headers: match(created.mortgage.version as number),
+      payload: { payScheduleId: schedule.id, offsetDays: 1 },
+    });
+
+    expect(patched.statusCode).toBe(200);
+    expect(patched.json().mortgage.anchorDate).toBeNull();
+    expect(patched.json().mortgage.payScheduleId).toBe(schedule.id);
   });
 });
 

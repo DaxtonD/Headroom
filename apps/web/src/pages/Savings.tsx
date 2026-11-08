@@ -546,9 +546,21 @@ function MortgageSection({
             {plan.nextPaymentDate
               ? `, the next on ${formatDateShort(plan.nextPaymentDate)}`
               : ""}
-            . Each one is {formatCents(mortgage.paymentCents)}, a day or two after{" "}
-            {mortgage.follows}
-            &rsquo;s pay.
+            . Each one is {formatCents(mortgage.paymentCents)}, every two weeks
+            {/*
+              Said the way it is actually set up, because the two are not the
+              same thing: one moves if a pay anchor is corrected and the other
+              does not.
+            */}
+            {mortgage.follows === null
+              ? "."
+              : ` — ${
+                  mortgage.offsetDays === 0
+                    ? "on"
+                    : mortgage.offsetDays === 1
+                      ? "the day after"
+                      : `${String(mortgage.offsetDays)} days after`
+                } ${mortgage.follows}'s pay.`}
           </p>
 
           {/*

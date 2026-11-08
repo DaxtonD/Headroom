@@ -68,8 +68,16 @@ const mortgageCreate = z
     paymentCents: wireCents.refine((value) => value > 0n, {
       message: "The payment has to be above zero.",
     }),
-    /** Which payday the payment follows, and by how many days. */
-    payScheduleId: z.string().uuid(),
+    /**
+     * How the fortnightly dates are decided: one of these two.
+     *
+     * `anchorDate` is any real payment date, which is what a lender gives you.
+     * `payScheduleId` + `offsetDays` is for a payment that chases a payday,
+     * which is how this household's actually behaves - and that offset is why
+     * a month can hold three cheques but two mortgage payments.
+     */
+    anchorDate: plainDate.optional(),
+    payScheduleId: z.string().uuid().optional(),
     offsetDays: z.number().int().min(0).max(13).optional(),
     compounding: z.enum(["simple_division", "semi_annual"]).optional(),
     /** The yearly prepayment allowance. Zero means "not tracked". */
@@ -77,7 +85,11 @@ const mortgageCreate = z
       .refine((value) => value >= 0n, { message: "An allowance cannot be negative." })
       .optional(),
   })
-  .strict();
+  .strict()
+  .refine((input) => (input.anchorDate === undefined) !== (input.payScheduleId === undefined), {
+    message:
+      "A mortgage either has its own payment dates or follows a payday - one of the two, not both.",
+  });
 
 const mortgagePatch = z
   .object({
@@ -85,7 +97,9 @@ const mortgagePatch = z
     asOf: plainDate.optional(),
     rateBasisPoints: rateBasisPoints.optional(),
     paymentCents: wireCents.optional(),
-    payScheduleId: z.string().uuid().optional(),
+    /** Switching to its own dates clears the payday it followed, and the reverse. */
+    anchorDate: plainDate.nullish(),
+    payScheduleId: z.string().uuid().nullish(),
     offsetDays: z.number().int().min(0).max(13).optional(),
     compounding: z.enum(["simple_division", "semi_annual"]).optional(),
     prepaymentCapCents: wireCents.optional(),
@@ -132,17 +146,36 @@ const savingsQuery = z.object({
  * desynchronises third cheques from third mortgage payments stays one fact in
  * one place.
  */
-function termsFrom(row: Mortgage, payAnchor: Date): MortgageTerms {
+function termsFrom(row: Mortgage, payAnchor: Date | null): MortgageTerms {
   return {
     balanceCents: row.balanceCents,
     asOf: toPlainDate(row.asOf),
     rateBasisPoints: row.rateBasisPoints,
     paymentCents: row.paymentCents,
-    paymentAnchorDate: addDays(toPlainDate(payAnchor), row.offsetDays),
+    paymentAnchorDate: paymentAnchorOf(row, payAnchor),
     periodsPerYear: row.periodsPerYear,
     cadenceDays: row.cadenceDays,
     compounding: row.compounding,
   };
+}
+
+/**
+ * The date the fortnightly payments step from.
+ *
+ * Its own anchor wins when it has one. Otherwise it is the payday it follows
+ * plus the offset - which is the whole reason a third cheque and a third
+ * mortgage payment are not always in the same month.
+ */
+function paymentAnchorOf(row: Mortgage, payAnchor: Date | null): PlainDate {
+  if (row.anchorDate !== null) return toPlainDate(row.anchorDate);
+  if (payAnchor === null) {
+    throw new HttpError(
+      409,
+      "mortgage_unanchored",
+      "This mortgage has neither its own payment dates nor a payday to follow. Open its details and set one.",
+    );
+  }
+  return addDays(toPlainDate(payAnchor), row.offsetDays);
 }
 
 function toLumpSum(row: Prepayment): LumpSum {
@@ -164,7 +197,7 @@ function toLumpSum(row: Prepayment): LumpSum {
  * the person is still looking at the form, instead of being stored and taking
  * the whole savings screen down on every later read.
  */
-function requireWorkableTerms(row: Mortgage, payAnchor: Date): void {
+function requireWorkableTerms(row: Mortgage, payAnchor: Date | null): void {
   const terms = termsFrom(row, payAnchor);
 
   if (row.cadenceDays === 14 && !isPaydayOn(terms.paymentAnchorDate, terms.asOf)) {
@@ -172,7 +205,8 @@ function requireWorkableTerms(row: Mortgage, payAnchor: Date): void {
       400,
       "invalid_request",
       `The balance date has to be a payment date. Payments fall every ${String(row.cadenceDays)} days ` +
-        `from ${terms.paymentAnchorDate}, which is ${String(row.offsetDays)} day(s) after a payday.`,
+        `from ${terms.paymentAnchorDate}` +
+        (row.anchorDate === null ? `, which is ${String(row.offsetDays)} day(s) after a payday.` : "."),
     );
   }
 
@@ -218,8 +252,9 @@ function project(result: ReturnType<typeof amortize>, today: PlainDate, openingC
 
 interface MortgagePanelInput {
   readonly row: Mortgage;
-  readonly payAnchor: Date;
-  readonly followsName: string;
+  readonly payAnchor: Date | null;
+  /** Whose payday it follows, or null when it keeps its own dates. */
+  readonly followsName: string | null;
   readonly prepayments: readonly Prepayment[];
   readonly today: PlainDate;
   readonly whatIfCents: Cents | null;
@@ -363,6 +398,7 @@ function serialiseMortgage(row: Mortgage) {
     paymentCents: row.paymentCents.toString(),
     payScheduleId: row.payScheduleId,
     offsetDays: row.offsetDays,
+    anchorDate: row.anchorDate === null ? null : toPlainDate(row.anchorDate),
     periodsPerYear: row.periodsPerYear,
     cadenceDays: row.cadenceDays,
     compounding: row.compounding,
@@ -424,6 +460,8 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
           paySchedule: { select: { anchorDate: true, user: { select: { name: true } } } },
           prepayments: { where: { deletedAt: null }, orderBy: { paidOn: "asc" } },
         },
+        // `paySchedule` is null for a mortgage that keeps its own dates.
+
       }),
     ]);
 
@@ -500,8 +538,8 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
           ? null
           : mortgagePanel({
               row: mortgageRow,
-              payAnchor: mortgageRow.paySchedule.anchorDate,
-              followsName: mortgageRow.paySchedule.user.name,
+              payAnchor: mortgageRow.paySchedule?.anchorDate ?? null,
+              followsName: mortgageRow.paySchedule?.user.name ?? null,
               prepayments: mortgageRow.prepayments,
               today,
               whatIfCents: parsedQuery.data.lumpSumCents ?? null,
@@ -536,20 +574,25 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
       requestHash: hashRequest("POST", "/api/mortgage", request.body),
       ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
       work: async (tx) => {
-        const schedule = await tx.paySchedule.findFirst({
-          where: {
-            id: input.payScheduleId,
-            deletedAt: null,
-            user: { householdId: user.householdId, deletedAt: null },
-          },
-          select: { anchorDate: true },
-        });
-        if (!schedule) {
-          throw new HttpError(
-            400,
-            "invalid_request",
-            "That payday schedule is not in this household.",
-          );
+        let payAnchor: Date | null = null;
+
+        if (input.payScheduleId !== undefined) {
+          const schedule = await tx.paySchedule.findFirst({
+            where: {
+              id: input.payScheduleId,
+              deletedAt: null,
+              user: { householdId: user.householdId, deletedAt: null },
+            },
+            select: { anchorDate: true },
+          });
+          if (!schedule) {
+            throw new HttpError(
+              400,
+              "invalid_request",
+              "That payday schedule is not in this household.",
+            );
+          }
+          payAnchor = schedule.anchorDate;
         }
 
         const created = await tx.mortgage.create({
@@ -559,7 +602,8 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
             asOf: fromPlainDate(input.asOf),
             rateBasisPoints: input.rateBasisPoints,
             paymentCents: input.paymentCents,
-            payScheduleId: input.payScheduleId,
+            payScheduleId: input.payScheduleId ?? null,
+            anchorDate: input.anchorDate === undefined ? null : fromPlainDate(input.anchorDate),
             ...(input.offsetDays === undefined ? {} : { offsetDays: input.offsetDays }),
             ...(input.compounding === undefined ? {} : { compounding: input.compounding }),
             ...(input.prepaymentCapCents === undefined
@@ -570,7 +614,7 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
         });
 
         // Inside the transaction, so a refusal takes the row with it.
-        requireWorkableTerms(created, schedule.anchorDate);
+        requireWorkableTerms(created, payAnchor);
 
         await logCreation(tx as unknown as PrismaLike, {
           entity: "mortgage",
@@ -637,6 +681,22 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
         });
         if (!existing) throw new HttpError(404, "not_found", "That mortgage no longer exists.");
 
+        // Naming one clears the other: a mortgage is anchored one way or the
+        // other, and leaving both set would make which one wins a guess.
+        if (typeof changes["anchorDate"] === "string") changes["payScheduleId"] = null;
+        if (typeof changes["payScheduleId"] === "string") changes["anchorDate"] = null;
+
+        if (
+          changes["anchorDate"] === null &&
+          changes["payScheduleId"] === null
+        ) {
+          throw new HttpError(
+            400,
+            "invalid_request",
+            "A mortgage needs either its own payment dates or a payday to follow.",
+          );
+        }
+
         if (typeof changes["payScheduleId"] === "string") {
           const schedule = await tx.paySchedule.findFirst({
             where: {
@@ -674,6 +734,9 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
                 ...(typeof changes["asOf"] === "string"
                   ? { asOf: fromPlainDate(changes["asOf"]) }
                   : {}),
+                ...(typeof changes["anchorDate"] === "string"
+                  ? { anchorDate: fromPlainDate(changes["anchorDate"]) }
+                  : {}),
                 version: nextVersion,
                 updatedById: user.id,
                 updatedAt: new Date(),
@@ -690,11 +753,14 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
 
         // Checked against what the row now says, not against what was sent: a
         // merged change from someone else could make the pair unworkable.
-        const schedule = await tx.paySchedule.findUniqueOrThrow({
-          where: { id: applied.row.payScheduleId },
-          select: { anchorDate: true },
-        });
-        requireWorkableTerms(applied.row, schedule.anchorDate);
+        const schedule =
+          applied.row.payScheduleId === null
+            ? null
+            : await tx.paySchedule.findUniqueOrThrow({
+                where: { id: applied.row.payScheduleId },
+                select: { anchorDate: true },
+              });
+        requireWorkableTerms(applied.row, schedule?.anchorDate ?? null);
 
         await publishChange(tx, {
           householdId: user.householdId,

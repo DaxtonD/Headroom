@@ -99,13 +99,20 @@ export interface MortgagePanel {
   readonly asOf: string;
   readonly rateBasisPoints: number;
   readonly paymentCents: Cents;
-  readonly payScheduleId: string;
+  /**
+   * How the fortnightly dates are decided: one of these two is set.
+   *
+   * `anchorDate` is a payment date of its own, which is what a lender states.
+   * `payScheduleId` + `offsetDays` is a payment that chases a payday.
+   */
+  readonly anchorDate: string | null;
+  readonly payScheduleId: string | null;
   readonly offsetDays: number;
   readonly compounding: RateCompounding;
   readonly prepaymentCapCents: Cents;
   readonly version: number;
-  /** Whose payday the payment follows, for saying it in words. */
-  readonly follows: string;
+  /** Whose payday the payment follows, or null when it keeps its own dates. */
+  readonly follows: string | null;
   readonly prepayments: readonly LumpSum[];
   readonly room: PrepaymentRoom;
   /** Every lump sum on record applied, including ones only intended. */
@@ -314,8 +321,13 @@ export interface MortgageInput {
   /** Whole basis points: 3.99% is 399. */
   readonly rateBasisPoints: number;
   readonly paymentCents: string;
-  readonly payScheduleId: string;
-  readonly offsetDays: number;
+  /**
+   * One of these two, never both: a payment date of its own, or the payday it
+   * follows. Sending one clears the other.
+   */
+  readonly anchorDate?: string;
+  readonly payScheduleId?: string;
+  readonly offsetDays?: number;
   readonly compounding?: RateCompounding;
   readonly prepaymentCapCents?: string;
 }

@@ -511,13 +511,20 @@ model Mortgage {
   /// The regular payment, as a positive magnitude.
   paymentCents    BigInt
 
-  /// Which pay schedule the payment follows, and by how many days.
+  /// How the fortnightly payment dates are decided. One of two ways.
   ///
-  /// The payment comes out a fixed number of days after a payday, so it is
-  /// biweekly like the pay it follows. This offset is the reason a month can
-  /// hold three paycheques but only two mortgage payments.
-  payScheduleId String @db.Uuid
-  offsetDays    Int    @default(1)
+  /// EITHER it follows a payday: the payment comes out a fixed number of days
+  /// after one, so it is biweekly like the pay it follows, and that offset is
+  /// the reason a month can hold three paycheques but only two mortgage
+  /// payments.
+  ///
+  /// OR it has its own anchor: any real payment date, with the rest every
+  /// fourteen days from it. This is what a lender actually gives you, and it
+  /// matters because a payday-anchored mortgage silently moves every payment
+  /// if that pay anchor is ever corrected.
+  payScheduleId String?   @db.Uuid
+  offsetDays    Int       @default(1)
+  anchorDate    DateTime? @db.Date
 
   periodsPerYear Int             @default(26)
   cadenceDays    Int             @default(14)
@@ -535,7 +542,7 @@ model Mortgage {
   deletedById String?   @db.Uuid
 
   household    Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  paySchedule  PaySchedule  @relation(fields: [payScheduleId], references: [id], onDelete: Restrict)
+  paySchedule  PaySchedule? @relation(fields: [payScheduleId], references: [id], onDelete: Restrict)
   prepayments  Prepayment[]
 
   @@index([householdId])
