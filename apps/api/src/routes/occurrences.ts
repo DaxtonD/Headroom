@@ -100,9 +100,17 @@ function serialiseOccurrence(row: Occurrence) {
   };
 }
 
-/** What goes in the audit log: facts, with cents as strings. */
+/**
+ * What goes in the audit log, and what a 409 returns as `current`.
+ *
+ * `version` is here so the client can resend "Use mine" against the version
+ * that actually won, rather than having to refetch the row first. The audit
+ * log is unaffected: it only records the fields a change touched, and
+ * `version` is never one of them.
+ */
 function snapshotOccurrence(row: Occurrence): Record<string, unknown> {
   return {
+    version: row.version,
     name: row.name,
     cents: row.cents.toString(),
     date: row.date ? toPlainDate(row.date) : null,

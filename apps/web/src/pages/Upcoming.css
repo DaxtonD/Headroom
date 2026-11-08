@@ -1,0 +1,138 @@
+.upcoming {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-4);
+}
+
+/* ---- Summary strip ---- */
+
+.upcoming__summary {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--hr-space-2);
+  padding: var(--hr-space-4);
+}
+
+.upcoming__summary-item {
+  min-width: 0;
+}
+
+.upcoming__summary-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--hr-text-secondary);
+  margin-bottom: 2px;
+}
+
+.upcoming__summary-value {
+  font-size: 18px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.upcoming__summary-note {
+  font-size: 12px;
+  color: var(--hr-text-muted);
+}
+
+/* ---- Coverage banner ---- */
+
+.upcoming__banner {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-1);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-card);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.upcoming__banner--ok {
+  background: var(--hr-green-tint-soft);
+  color: var(--hr-positive);
+}
+
+.upcoming__banner--warn {
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+}
+
+.upcoming__banner--ok .coverage-pill {
+  align-self: flex-start;
+}
+
+/* ---- Legend ---- */
+
+.upcoming__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hr-space-5);
+  padding: 0 var(--hr-space-1);
+}
+
+.upcoming__legend-item {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-2);
+  font-size: 13px;
+  color: var(--hr-text-secondary);
+}
+
+/* ---- The list ---- */
+
+.upcoming__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+}
+
+.upcoming__empty,
+.upcoming__error {
+  padding: var(--hr-space-5);
+  color: var(--hr-text-secondary);
+}
+
+.upcoming__error h2 {
+  font-size: 18px;
+  margin-bottom: var(--hr-space-2);
+  color: var(--hr-ink);
+}
+
+/* ---- Footer ---- */
+
+.upcoming__footer {
+  padding: var(--hr-space-5);
+  border-radius: var(--hr-radius-hero);
+  background: var(--hr-hero-bg);
+  color: var(--hr-hero-text);
+}
+
+.upcoming__footer-label {
+  color: var(--hr-hero-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.upcoming__footer-amount {
+  margin: var(--hr-space-1) 0;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.upcoming__footer-note {
+  color: var(--hr-hero-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+@media (min-width: 640px) {
+  .upcoming__summary {
+    padding: var(--hr-space-5);
+  }
+
+  .upcoming__summary-value {
+    font-size: 22px;
+  }
+}

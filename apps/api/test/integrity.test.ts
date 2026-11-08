@@ -111,6 +111,8 @@ describe("two people change the SAME field from the same version", () => {
     // The current value is returned so the UI can offer "Keep $140.00".
     expect(body.current.cents).toBe("14000");
     expect(body.changedAt).toBeDefined();
+    // The version that won, so "Use mine" can be resent without a refetch.
+    expect(body.current.version).toBe(2);
   });
 
   it("does not apply the losing change", async () => {

@@ -1,0 +1,172 @@
+.shell-layout {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-areas:
+    "header"
+    "offline"
+    "main"
+    "nav";
+  grid-template-rows: auto auto 1fr auto;
+}
+
+/* ---- Header ---- */
+
+.shell-header {
+  grid-area: header;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  padding-top: calc(var(--hr-space-3) + env(safe-area-inset-top, 0px));
+  background: var(--hr-card);
+  border-bottom: 1px solid var(--hr-card-border);
+}
+
+.shell-header__wordmark {
+  font-family: var(--hr-font-display);
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.shell-header__right {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-3);
+}
+
+.shell-header__people {
+  display: flex;
+  gap: var(--hr-space-1);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.shell-header__signout {
+  min-height: var(--hr-touch-min);
+  padding: 0 var(--hr-space-2);
+  border: none;
+  background: none;
+  color: var(--hr-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.shell-header__signout:hover {
+  color: var(--hr-ink);
+}
+
+/* ---- Offline banner ---- */
+
+.shell-offline {
+  grid-area: offline;
+  padding: var(--hr-space-3) var(--hr-space-4);
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* ---- Main ---- */
+
+.shell-main {
+  grid-area: main;
+  width: 100%;
+  max-width: 640px;
+  margin: 0 auto;
+  /* 16px side gutter on a phone, per the mockups. */
+  padding: var(--hr-space-4);
+  /* Clear of the tab bar. */
+  padding-bottom: var(--hr-space-6);
+}
+
+/* ---- Bottom tab bar (phones) ---- */
+
+.shell-nav {
+  grid-area: nav;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  background: var(--hr-card);
+  border-top: 1px solid var(--hr-card-border);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.shell-nav__list {
+  display: flex;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.shell-nav__list > li {
+  flex: 1;
+}
+
+.shell-nav__link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* 44px minimum, an M5 acceptance criterion. */
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-2) var(--hr-space-1);
+  color: var(--hr-text-muted);
+  font-size: 12px;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+}
+
+.shell-nav__link--active {
+  color: var(--hr-primary);
+  /* Not colour alone: the active tab also carries a rule above it. */
+  box-shadow: inset 0 2px 0 0 var(--hr-primary);
+}
+
+/* ---- Desktop: left nav, wider content ---- */
+
+@media (min-width: 1024px) {
+  .shell-layout {
+    grid-template-areas:
+      "header header"
+      "offline offline"
+      "nav main";
+    grid-template-columns: 220px 1fr;
+    grid-template-rows: auto auto 1fr;
+  }
+
+  .shell-nav {
+    position: static;
+    border-top: none;
+    border-right: 1px solid var(--hr-card-border);
+    padding: var(--hr-space-4) var(--hr-space-3);
+  }
+
+  .shell-nav__list {
+    flex-direction: column;
+    gap: var(--hr-space-1);
+  }
+
+  .shell-nav__link {
+    justify-content: flex-start;
+    border-radius: var(--hr-radius-input);
+    padding: 0 var(--hr-space-4);
+    font-size: 15px;
+  }
+
+  .shell-nav__link--active {
+    background: var(--hr-green-tint-soft);
+    box-shadow: none;
+  }
+
+  .shell-main {
+    max-width: 880px;
+    margin: 0;
+    padding: var(--hr-space-5);
+  }
+}

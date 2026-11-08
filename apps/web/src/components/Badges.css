@@ -1,0 +1,131 @@
+/* ---- Amounts ---- */
+
+.amount--out {
+  color: var(--hr-ink);
+}
+
+.amount--in {
+  color: var(--hr-positive);
+}
+
+/* ---- Verification badges (HANDOFF section 15) ----
+   Verified: a 32px filled green circle with a white check and an 18px initial
+   bubble at the bottom right. Estimate: a 32px dashed ring with a "~". */
+
+.badge {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--hr-radius-pill);
+}
+
+.badge--verified {
+  background: var(--hr-primary);
+  color: #ffffff;
+}
+
+.badge--verified svg {
+  width: 18px;
+  height: 18px;
+}
+
+.badge--estimate {
+  /* Dashed, not just a different colour: the shape carries the meaning too. */
+  border: 2px dashed var(--hr-estimate-ring);
+  color: var(--hr-text-muted);
+  font-weight: 600;
+  font-size: 15px;
+  line-height: 1;
+}
+
+.badge__initial {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--hr-radius-pill);
+  border: 2px solid var(--hr-card);
+  background: var(--hr-green-tint);
+  color: var(--hr-positive);
+  font-family: var(--hr-font-display);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+/* ---- Chips ---- */
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--hr-space-1);
+  padding: 2px 10px;
+  border-radius: var(--hr-radius-pill);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.chip--neutral {
+  background: var(--hr-neutral-bg);
+  color: var(--hr-neutral-fg);
+}
+
+.chip--flexible {
+  background: var(--hr-flexible-bg);
+  color: var(--hr-flexible-fg);
+}
+
+.chip--oneoff {
+  background: var(--hr-oneoff-bg);
+  color: var(--hr-oneoff-fg);
+}
+
+.chip--payday {
+  background: var(--hr-green-tint);
+  color: var(--hr-positive);
+}
+
+.chip--warning {
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+}
+
+/* ---- Initials ---- */
+
+.initial-bubble {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--hr-radius-pill);
+  font-family: var(--hr-font-display);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* ---- Coverage ---- */
+
+.coverage-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 12px;
+  border-radius: var(--hr-radius-pill);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.coverage-pill--ok {
+  background: var(--hr-green-tint);
+  color: var(--hr-positive);
+}
+
+.coverage-pill--warn {
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+}

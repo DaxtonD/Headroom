@@ -1,0 +1,135 @@
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(23, 32, 29, 0.45);
+}
+
+.sheet {
+  width: 100%;
+  max-width: 560px;
+  max-height: 92dvh;
+  overflow-y: auto;
+  padding: var(--hr-space-5) var(--hr-space-4);
+  /* Rises from the bottom on a phone, which is where the thumb is. */
+  border-radius: var(--hr-radius-hero) var(--hr-radius-hero) 0 0;
+  background: var(--hr-card);
+  /* Clear of the home-screen gesture bar. */
+  padding-bottom: calc(var(--hr-space-5) + env(safe-area-inset-bottom, 0px));
+}
+
+.sheet__title {
+  font-size: 22px;
+  margin-bottom: var(--hr-space-1);
+}
+
+.sheet__intro {
+  color: var(--hr-text-secondary);
+  font-size: 15px;
+  margin-bottom: var(--hr-space-4);
+}
+
+.sheet__error {
+  margin-bottom: var(--hr-space-4);
+}
+
+.sheet__amount {
+  font-family: var(--hr-font-display);
+  font-variant-numeric: tabular-nums;
+  font-size: 24px;
+}
+
+.sheet__clearable {
+  margin: var(--hr-space-5) 0 0;
+  padding: 0;
+  border: none;
+}
+
+.sheet__clearable-legend {
+  padding: 0;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.sheet__clearable-note {
+  margin: var(--hr-space-1) 0 var(--hr-space-3);
+  font-size: 13px;
+  color: var(--hr-text-muted);
+  line-height: 1.45;
+}
+
+.sheet__clearable-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-input);
+  overflow: hidden;
+}
+
+.sheet__clearable-item {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-3);
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-2) var(--hr-space-3);
+  border-top: 1px solid var(--hr-row-divider);
+  cursor: pointer;
+}
+
+.sheet__clearable-list li:first-child .sheet__clearable-item {
+  border-top: none;
+}
+
+.sheet__clearable-item input[type="checkbox"] {
+  /* Big enough to hit reliably with a thumb. */
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  accent-color: var(--hr-primary);
+}
+
+.sheet__clearable-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.sheet__clearable-date {
+  font-size: 12px;
+  color: var(--hr-text-muted);
+  white-space: nowrap;
+}
+
+.sheet__current {
+  margin-top: var(--hr-space-4);
+  font-size: 13px;
+  color: var(--hr-text-muted);
+}
+
+.sheet__actions {
+  display: flex;
+  gap: var(--hr-space-2);
+  margin-top: var(--hr-space-5);
+}
+
+.sheet__actions .hr-button {
+  flex: 1;
+}
+
+@media (min-width: 640px) {
+  .sheet-backdrop {
+    align-items: center;
+  }
+
+  .sheet {
+    border-radius: var(--hr-radius-hero);
+    padding: var(--hr-space-6);
+  }
+}

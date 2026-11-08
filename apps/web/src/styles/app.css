@@ -19,3 +19,18 @@
   color: var(--hr-text-secondary);
   font-size: 15px;
 }
+
+.coming-soon {
+  padding: var(--hr-space-6) var(--hr-space-5);
+  text-align: center;
+}
+
+.coming-soon__title {
+  font-size: 22px;
+  margin-bottom: var(--hr-space-2);
+}
+
+.coming-soon__note {
+  color: var(--hr-text-secondary);
+  font-size: 15px;
+}
