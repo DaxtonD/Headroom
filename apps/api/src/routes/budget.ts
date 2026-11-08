@@ -159,67 +159,88 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
       ];
     });
 
+    /**
+     * Every budget line with the record it came from, in the order the engine
+     * will see it.
+     *
+     * Identity travels alongside rather than being matched back by name
+     * afterwards. Two different things can share a name - a recurring
+     * "Mortgage" bill and a budget category also called "Mortgage" - and
+     * matching on the name labelled the category as a bill and handed the UI
+     * the wrong id to edit.
+     */
+    const sourced = [
+      ...fromBills.map((bill) => ({
+        identity: {
+          id: bill.templateId,
+          source: "bill" as const,
+          version: bill.version,
+          derivedMonthlyCents: bill.derivedMonthlyCents,
+          overridden: bill.overridden,
+        },
+        engineLine: {
+          name: bill.name,
+          section: bill.section,
+          monthlyCents: bill.monthlyCents,
+          yearlyCentsOverride: bill.yearlyCents,
+        },
+      })),
+      ...lines.map((line) => ({
+        identity: {
+          id: line.id,
+          source: "category" as const,
+          version: line.version,
+          derivedMonthlyCents: null,
+          overridden: false,
+        },
+        engineLine: {
+          name: line.name,
+          section: line.section === "fixed" ? ("fixed" as const) : ("variable" as const),
+          monthlyCents: line.monthlyCents,
+          yearlyCentsOverride: line.yearlyCentsOverride ?? undefined,
+        },
+      })),
+    ];
+
     const budget = computeBudget({
       income: {
         netMonthlyCents: household.netMonthlyIncomeCents,
         netYearlyCents: household.netYearlyIncomeCents,
       },
-      lines: [
-        ...fromBills.map((bill) => ({
-          name: bill.name,
-          section: bill.section,
-          monthlyCents: bill.monthlyCents,
-          yearlyCentsOverride: bill.yearlyCents,
-        })),
-        ...lines.map((line) => ({
-          id: line.id,
-          name: line.name,
-          section: line.section === "fixed" ? ("fixed" as const) : ("variable" as const),
-          monthlyCents: line.monthlyCents,
-          yearlyCentsOverride: line.yearlyCentsOverride ?? undefined,
-        })),
-      ],
+      lines: sourced.map((entry) => entry.engineLine),
     });
 
-    // Ids are not the engine's concern, so they are matched back on here for
-    // the UI to edit by. A line comes from either a recurring bill or a
-    // budget-only category, and the UI needs to know which, because the two
-    // are edited in different places.
-    const categoriesByName = new Map(lines.map((line) => [line.section + "|" + line.name, line]));
-    const billsByName = new Map(fromBills.map((bill) => [bill.section + "|" + bill.name, bill]));
+    /**
+     * Attach each line's identity to the engine's result.
+     *
+     * Paired by position, not by name: the engine preserves the order of the
+     * lines it was given within each section, so the Nth line of a section
+     * corresponds to the Nth entry of `sourced` in that section. That holds
+     * even when two different records share a name, which matching by name
+     * did not.
+     */
+    const withIds = (section: "fixed" | "variable") => {
+      const identities = sourced
+        .filter((entry) => entry.engineLine.section === section)
+        .map((entry) => entry.identity);
 
-    const withIds = (section: "fixed" | "variable") =>
-      budget[section].lines.map((line) => {
-        const bill = billsByName.get(section + "|" + line.name);
-        if (bill) {
-          return {
-            id: bill.templateId,
-            source: "bill" as const,
-            name: line.name,
-            monthlyCents: line.monthlyCents,
-            yearlyCents: line.yearlyCents,
-            sharePct: line.sharePct,
-            version: bill.version,
-            // Reported so the gap between a stated figure and the derived one
-            // is visible rather than hidden.
-            derivedMonthlyCents: bill.derivedMonthlyCents,
-            overridden: bill.overridden,
-          };
-        }
-
-        const row = categoriesByName.get(section + "|" + line.name);
+      return budget[section].lines.map((line, index) => {
+        const identity = identities[index];
         return {
-          id: row?.id ?? null,
-          source: "category" as const,
+          id: identity?.id ?? null,
+          source: identity?.source ?? ("category" as const),
           name: line.name,
           monthlyCents: line.monthlyCents,
           yearlyCents: line.yearlyCents,
           sharePct: line.sharePct,
-          version: row?.version ?? 1,
-          derivedMonthlyCents: null,
-          overridden: false,
+          version: identity?.version ?? 1,
+          // Reported so the gap between a stated figure and the derived one is
+          // visible rather than hidden.
+          derivedMonthlyCents: identity?.derivedMonthlyCents ?? null,
+          overridden: identity?.overridden ?? false,
         };
       });
+    };
 
     return reply.send({
       income: {

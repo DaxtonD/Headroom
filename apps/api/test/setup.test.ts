@@ -503,6 +503,44 @@ describe("an expense entered once as a recurring bill", () => {
     expect(food.source).toBe("category");
   });
 
+  it("keeps a bill and a category apart even when they share a name", async () => {
+    // Easily done: a recurring "Mortgage" bill and a budget category also
+    // called "Mortgage". Matching the engine's output back by name labelled
+    // the category as a bill and handed the UI the bill's id to edit, so this
+    // is pinned down.
+    await addBill();
+    await harness.app.inject({
+      method: "POST",
+      url: "/api/budget-lines",
+      headers: headers(),
+      payload: { name: "Mortgage", section: "fixed", monthlyCents: "200000" },
+    });
+
+    const budget = await harness.app
+      .inject({ method: "GET", url: "/api/budget", headers: { cookie } })
+      .then((response) => response.json());
+
+    const mortgages = budget.fixed.lines.filter(
+      (line: { name: string }) => line.name === "Mortgage",
+    );
+    expect(mortgages).toHaveLength(2);
+
+    // Exactly one of each, each with its own id.
+    const sources = mortgages.map((line: { source: string }) => line.source).sort();
+    expect(sources).toEqual(["bill", "category"]);
+
+    const bill = mortgages.find((line: { source: string }) => line.source === "bill");
+    const category = mortgages.find((line: { source: string }) => line.source === "category");
+    expect(bill.id).not.toBe(category.id);
+    // The derived figure belongs to the bill, not to the category.
+    expect(bill.monthlyCents).toBe("216667");
+    expect(category.monthlyCents).toBe("200000");
+    expect(category.derivedMonthlyCents).toBeNull();
+
+    // And both still count toward the section.
+    expect(budget.fixed.monthlyCents).toBe((216_667n + 200_000n).toString());
+  });
+
   it("a monthly bill needs no conversion at all", async () => {
     await harness.app.inject({
       method: "POST",
