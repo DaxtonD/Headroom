@@ -274,6 +274,18 @@ model Template {
   scheduleJson Json
   section      BudgetSection?
   budgetLineId String?        @db.Uuid
+
+  /// The monthly budget figure, when the derived one is not wanted.
+  ///
+  /// Headroom works out what a recurring bill costs per month from its
+  /// cadence (biweekly is 26 times a year, so 26/12 of the amount). Where
+  /// Carol's sheet states a different figure, hers is the spec, and this
+  /// holds it. Null means use the derived figure.
+  monthlyBudgetOverrideCents BigInt?
+
+  /// False archives it: generation stops and it leaves the budget, but every
+  /// past occurrence, amount and verification stays intact. Nothing in
+  /// Headroom is deleted outright.
   active       Boolean        @default(true)
 
   version     Int       @default(1)

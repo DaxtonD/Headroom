@@ -14,13 +14,14 @@
  *    the monthly figure times twelve (section 14 q2). Hers is used as given;
  *    line items are the ones multiplied by twelve.
  */
-import { computeBudget } from "@headroom/core";
+import { cadenceOfSchedule, computeBudget, monthlyFigureFor } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
+import { scheduleSchema } from "../lib/generateService.js";
 import { wireCents } from "../lib/wire.js";
 import type { BudgetLine } from "../generated/prisma/client.js";
 
@@ -87,7 +88,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
 
-    const [household, lines] = await Promise.all([
+    const [household, lines, templates] = await Promise.all([
       app.db.prisma.household.findUniqueOrThrow({
         where: { id: user.householdId },
         select: { netMonthlyIncomeCents: true, netYearlyIncomeCents: true, version: true },
@@ -102,35 +103,121 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
         },
         orderBy: [{ section: "asc" }, { sortIndex: "asc" }, { name: "asc" }],
       }),
+      // Recurring bills carry their own section, so an expense entered once in
+      // Manage appears on the timeline AND here, with no second figure to keep
+      // in step. Archived bills are excluded: they no longer cost anything.
+      app.db.prisma.template.findMany({
+        where: {
+          householdId: user.householdId,
+          deletedAt: null,
+          active: true,
+          section: { in: ["fixed", "variable"] },
+          kind: { in: ["bill", "transfer"] },
+        },
+        select: {
+          id: true,
+          name: true,
+          section: true,
+          defaultCents: true,
+          scheduleJson: true,
+          monthlyBudgetOverrideCents: true,
+          version: true,
+        },
+        orderBy: { name: "asc" },
+      }),
     ]);
+
+    /**
+     * What each recurring bill costs per month, derived from how often it
+     * actually comes out.
+     *
+     * Biweekly is 26 times a year, so 26/12 of the amount, which is more than
+     * twice it. A stated override wins where Carol's sheet says otherwise.
+     */
+    const fromBills = templates.flatMap((template) => {
+      const parsedSchedule = scheduleSchema.safeParse(template.scheduleJson);
+      // A bill with an unreadable schedule is left out rather than guessed at.
+      if (!parsedSchedule.success) return [];
+
+      const figure = monthlyFigureFor({
+        cents: template.defaultCents,
+        cadence: cadenceOfSchedule(parsedSchedule.data),
+        monthlyOverrideCents: template.monthlyBudgetOverrideCents,
+      });
+
+      return [
+        {
+          templateId: template.id,
+          name: template.name,
+          section: template.section === "fixed" ? ("fixed" as const) : ("variable" as const),
+          monthlyCents: figure.monthlyCents,
+          yearlyCents: figure.yearlyCents,
+          derivedMonthlyCents: figure.derivedMonthlyCents,
+          overridden: figure.overridden,
+          version: template.version,
+        },
+      ];
+    });
 
     const budget = computeBudget({
       income: {
         netMonthlyCents: household.netMonthlyIncomeCents,
         netYearlyCents: household.netYearlyIncomeCents,
       },
-      lines: lines.map((line) => ({
-        id: line.id,
-        name: line.name,
-        section: line.section === "fixed" ? "fixed" : "variable",
-        monthlyCents: line.monthlyCents,
-        yearlyCentsOverride: line.yearlyCentsOverride ?? undefined,
-      })),
+      lines: [
+        ...fromBills.map((bill) => ({
+          name: bill.name,
+          section: bill.section,
+          monthlyCents: bill.monthlyCents,
+          yearlyCentsOverride: bill.yearlyCents,
+        })),
+        ...lines.map((line) => ({
+          id: line.id,
+          name: line.name,
+          section: line.section === "fixed" ? ("fixed" as const) : ("variable" as const),
+          monthlyCents: line.monthlyCents,
+          yearlyCentsOverride: line.yearlyCentsOverride ?? undefined,
+        })),
+      ],
     });
 
-    // Line ids are not the engine's concern, so they are matched back on here
-    // for the UI to edit by.
-    const idsByName = new Map(lines.map((line) => [`${line.section}|${line.name}`, line]));
+    // Ids are not the engine's concern, so they are matched back on here for
+    // the UI to edit by. A line comes from either a recurring bill or a
+    // budget-only category, and the UI needs to know which, because the two
+    // are edited in different places.
+    const categoriesByName = new Map(lines.map((line) => [line.section + "|" + line.name, line]));
+    const billsByName = new Map(fromBills.map((bill) => [bill.section + "|" + bill.name, bill]));
+
     const withIds = (section: "fixed" | "variable") =>
       budget[section].lines.map((line) => {
-        const row = idsByName.get(`${section}|${line.name}`);
+        const bill = billsByName.get(section + "|" + line.name);
+        if (bill) {
+          return {
+            id: bill.templateId,
+            source: "bill" as const,
+            name: line.name,
+            monthlyCents: line.monthlyCents,
+            yearlyCents: line.yearlyCents,
+            sharePct: line.sharePct,
+            version: bill.version,
+            // Reported so the gap between a stated figure and the derived one
+            // is visible rather than hidden.
+            derivedMonthlyCents: bill.derivedMonthlyCents,
+            overridden: bill.overridden,
+          };
+        }
+
+        const row = categoriesByName.get(section + "|" + line.name);
         return {
           id: row?.id ?? null,
+          source: "category" as const,
           name: line.name,
           monthlyCents: line.monthlyCents,
           yearlyCents: line.yearlyCents,
           sharePct: line.sharePct,
           version: row?.version ?? 1,
+          derivedMonthlyCents: null,
+          overridden: false,
         };
       });
 

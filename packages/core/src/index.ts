@@ -20,3 +20,4 @@ export * from "./payPeriods.js";
 export * from "./budget.js";
 export * from "./netWorth.js";
 export * from "./recurrence.js";
+export * from "./monthlyEquivalent.js";

@@ -30,6 +30,8 @@ const createBody = z
     schedule: scheduleSchema,
     ownerUserId: z.string().uuid().nullable().optional(),
     section: z.enum(["income", "fixed", "variable"]).nullable().optional(),
+    /** Overrides the monthly figure Headroom would derive from the cadence. */
+    monthlyBudgetOverrideCents: centsSchema.nullable().optional(),
     active: z.boolean().optional(),
   })
   .strict();
@@ -39,6 +41,9 @@ const patchBody = z
     name: z.string().trim().min(1).max(120).optional(),
     defaultCents: centsSchema.optional(),
     ownerUserId: z.string().uuid().nullable().optional(),
+    section: z.enum(["income", "fixed", "variable"]).nullable().optional(),
+    monthlyBudgetOverrideCents: centsSchema.nullable().optional(),
+    /** False archives it: generation stops, history stays. */
     active: z.boolean().optional(),
     schedule: scheduleSchema.optional(),
     baseVersion: z.number().int().min(1).optional(),
@@ -56,6 +61,7 @@ function serialiseTemplate(row: Template) {
     schedule: row.scheduleJson,
     ownerUserId: row.ownerUserId,
     section: row.section,
+    monthlyBudgetOverrideCents: row.monthlyBudgetOverrideCents?.toString() ?? null,
     active: row.active,
     version: row.version,
   };
@@ -67,6 +73,8 @@ function snapshotTemplate(row: Template): Record<string, unknown> {
     name: row.name,
     defaultCents: row.defaultCents.toString(),
     ownerUserId: row.ownerUserId,
+    section: row.section,
+    monthlyBudgetOverrideCents: row.monthlyBudgetOverrideCents?.toString() ?? null,
     active: row.active,
     schedule: JSON.stringify(row.scheduleJson),
   };
@@ -97,6 +105,8 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
 
+    // Archived templates are included: the Manage screen lists them under
+    // "Archived" so a bill that was paid off can be brought back.
     const templates = await app.db.prisma.template.findMany({
       where: { householdId: user.householdId, deletedAt: null },
       orderBy: [{ active: "desc" }, { name: "asc" }],
@@ -157,6 +167,7 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
             scheduleJson: input.schedule,
             ownerUserId: input.ownerUserId ?? null,
             section: input.section ?? null,
+            monthlyBudgetOverrideCents: input.monthlyBudgetOverrideCents ?? null,
             active: input.active ?? true,
             updatedById: user.id,
           },
