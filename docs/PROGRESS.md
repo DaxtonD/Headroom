@@ -11,22 +11,59 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Handoff committed to repo | done | | Real-data files deliberately git-ignored (see "Decisions") |
 | M0 Scaffold, CI, login, compose | done | m0 | Verified end-to-end in the built image: migrations, login, app shell |
 | M1 Calculation engine + golden tests | done | m1 | Reproduces every expected value in BOTH the real seed and the synthetic fixture |
-| M2 Home + Upcoming + integrity layer | not started | | |
-| M3 Recurrence + Pay plan | not started | | |
-| M4 Budget, Goals, Net worth | not started | | |
+| M2 Home + Upcoming + integrity layer | done | m2 | All section 16.8 integrity tests pass against a real Postgres |
+| M3 Recurrence + Pay plan | engine + API done | | **Pay plan screen not built yet** - see "Next session" |
+| M4 Budget, Goals, Net worth | not started | | Engine side is already done and golden-tested |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
 ## Last session
 
 - Date: 2026-11-07
-- Done:
-  - Handoff unpacked; seed spec verified; `.env` created with generated secrets; `.gitignore` rewritten so no real financial data can be committed.
-  - **M0 complete.** pnpm workspaces (`packages/core`, `apps/api`, `apps/web`), the full Prisma data model plus a migration of database-level guards, Zod-validated config, Argon2id login with server-side sessions, health check, operator CLI, Docker image, compose, GitHub Actions CI.
-  - **M1 complete.** The engine reproduces every expected value in the seed: timeline ordering and running balances, lowest point, safe-to-spend, coverage and the first shortfall, left this cycle, all three pay periods, budget and section shares, goals, net worth and the whole retirement chain. Includes the shortfall case and the moved-flexible-bill case.
-  - 248 tests green (194 engine, 54 API against a real Postgres); lint, typecheck and `pnpm build` clean.
-- Next: M2 (Home + Upcoming + the section 16 integrity layer).
-- **Nothing is pushed.** Every commit and tag is local, waiting on Dax's OK.
+- **Nothing is pushed.** 5 commits and 3 tags (`m0`, `m1`, `m2`) are local, waiting on Dax's OK.
+- Done: the handoff, then M0, M1, M2, and the engine and API halves of M3.
+- 331 tests green (218 engine, 113 API against a real Postgres). Lint, typecheck and `pnpm build` clean.
+
+### Where each milestone stands
+
+- **M0 scaffold** - done, tagged `m0`. Verified end to end in the built image.
+- **M1 engine** - done, tagged `m1`. Reproduces every expected value in the seed.
+- **M2 Home + Upcoming + integrity** - done, tagged `m2`. Every HANDOFF section 16.8 test passes.
+- **M3 recurrence + Pay plan** - the engine (`packages/core/src/recurrence.ts`) and the API
+  (`POST /api/templates/generate`, template CRUD, `GET /api/pay-periods`) are done and tested.
+  **The Pay plan screen is not built.** Its tab currently shows a "being built in M3" placeholder.
+- **M4, M5, M6** - not started. Note that M4's engine work is already finished and golden-tested
+  (budget totals and section shares, goals, net worth, the whole retirement chain); M4 is
+  therefore mostly screens and CRUD routes, not calculation.
+
+## Next session: start here
+
+1. Read this file, then `CLAUDE.md`, then `docs/HANDOFF.md` (local only, git-ignored).
+2. `pnpm install` and `node scripts/testdb.mjs up`, then `pnpm test` to confirm 331 green.
+3. **Finish M3**: build the Pay plan screen (HANDOFF section 7.3). Everything it needs exists:
+   - `GET /api/pay-periods` returns the dated two-week windows with in / auto / flexible / left
+     over and the lowest balance inside each; `usePayPeriods()` in `apps/web/src/lib/queries.ts`
+     already parses it.
+   - Moving a flexible bill between periods is `PATCH /api/occurrences/:id` with
+     `anchorOccurrenceId`, which `usePatchOccurrence()` already does and the Upcoming screen
+     already uses. The brief asks for drag handles on desktop and move buttons on the phone;
+     `OccurrenceRow` has the move buttons already, so Pay plan can reuse the same mutation.
+   - Then tag `m3`.
+4. Then M4, M5, M6 in order.
+
+### A running demo exists
+
+A throwaway container is on this machine for looking at the UI:
+`docker ps` shows `headroom-demo` on <http://localhost:8484>, with `headroom-test-db` behind it.
+Sign in as `carol@headroom.local` / `headroom-demo-password`. Invented amounts.
+Remove with `docker rm -f headroom-demo` and `node scripts/testdb.mjs down`.
+
+### Not yet verified
+
+- **The screens have never been looked at.** There was no browser tooling in the session that
+  built them, so Home and Upcoming are verified by typecheck, build, and the API's numbers
+  matching the engine - not by eye. Worth a careful look before building more on their patterns.
+- CI has never run, because nothing is pushed.
 
 ## Verified by hand, not only by tests
 
