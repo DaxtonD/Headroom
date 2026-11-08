@@ -9,7 +9,7 @@
 # past end-of-life and this container is reachable from the household's phones.
 # Every pinned dependency supports both, and CI runs the tests on both.
 
-ARG NODE_VERSION=22.23.4-alpine3.22
+ARG NODE_VERSION=22.23.4-alpine
 
 # ---------------------------------------------------------------- base ------
 FROM node:${NODE_VERSION} AS base

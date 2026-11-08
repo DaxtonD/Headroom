@@ -2,8 +2,12 @@
  * Serves the built web app from the same origin as the API, so one container
  * is the whole deployment (HANDOFF section 10).
  *
- * In development this does nothing: Vite serves the app on its own port and
+ * In development this serves nothing: Vite serves the app on its own port and
  * proxies `/api` here, which keeps hot reload working.
+ *
+ * This module deliberately does NOT install a not-found handler. Fastify
+ * allows only one per prefix, and the single handler lives in `app.ts` so that
+ * API 404s and the single-page-app fallback are decided in one place.
  */
 import { existsSync } from "node:fs";
 import { join, resolve } from "node:path";
@@ -17,32 +21,61 @@ function defaultDistDir(): string {
   return resolve(import.meta.dirname, "../../../web/dist");
 }
 
-export async function registerWebApp(app: FastifyInstance, env: Env): Promise<void> {
+/**
+ * True for a build output whose name carries a content hash.
+ *
+ * Vite names these `index-BqJInBcQ.js`: the hash follows a HYPHEN and is
+ * mixed-case base64url, not a lowercase hex segment between dots. Everything
+ * Vite fingerprints also lands under `assets/`, which is the reliable signal.
+ */
+function isFingerprinted(path: string): boolean {
+  const normalized = path.replaceAll("\\", "/");
+  if (!normalized.includes("/assets/")) return false;
+  return /-[A-Za-z0-9_-]{8,}\.[a-z0-9]+$/.test(normalized);
+}
+
+export interface WebAppRegistration {
+  /** True when a built web app was found and is being served. */
+  readonly hasWebApp: boolean;
+  readonly distDir: string;
+}
+
+export async function registerWebApp(app: FastifyInstance, env: Env): Promise<WebAppRegistration> {
   const distDir = env.WEB_DIST_DIR ? resolve(env.WEB_DIST_DIR) : defaultDistDir();
 
   if (!existsSync(join(distDir, "index.html"))) {
     app.log.info(
       { distDir },
-      "no built web app found; serving the API only (this is expected in development, where Vite serves the app)",
+      "no built web app found; serving the API only (expected in development, where Vite serves the app)",
     );
 
     app.get("/", async (_request, reply) =>
-      reply.status(200).type("text/plain").send(
-        [
-          "Headroom API is running.",
-          "",
-          "The web app is not built into this process. In development, open the Vite",
-          "dev server instead (pnpm dev). In production the built app is served here.",
-          "",
-          "Health check: /api/health",
-        ].join("\n"),
-      ),
+      reply
+        .status(200)
+        .type("text/plain")
+        .send(
+          [
+            "Headroom API is running.",
+            "",
+            "The web app is not built into this process. In development, open the Vite",
+            "dev server instead (pnpm dev). In production the built app is served here.",
+            "",
+            "Health check: /api/health",
+          ].join("\n"),
+        ),
     );
-    return;
+
+    return { hasWebApp: false, distDir };
   }
 
   await app.register(fastifyStatic, {
     root: distDir,
+    // Off, so a path that is not a real file falls through to the not-found
+    // handler in app.ts, which serves the app shell for deep links.
+    wildcard: false,
+    // The plugin sets its own `cache-control: public, max-age=0` and would
+    // override whatever setHeaders writes, so turn it off and decide here.
+    cacheControl: false,
     // The service worker and the HTML shell must never be cached by an
     // intermediary, or an update would never reach the phones.
     //
@@ -64,21 +97,22 @@ export async function registerWebApp(app: FastifyInstance, env: Env): Promise<vo
 
       if (path.endsWith("index.html") || path.endsWith("sw.js") || path.endsWith("manifest.webmanifest")) {
         setHeader("no-cache");
-      } else if (/\.[0-9a-f]{8,}\.(js|css|woff2?|png|svg|webp)$/i.test(path)) {
-        // Vite fingerprints these, so they can be cached hard.
+      } else if (isFingerprinted(path)) {
+        // Vite fingerprints these, so they can be cached hard: a new build
+        // produces a new filename.
         setHeader("public, max-age=31536000, immutable");
+      } else {
+        // Anything unrecognised gets revalidated rather than cached blindly.
+        setHeader("public, max-age=0, must-revalidate");
       }
     },
   });
 
-  // Single-page app: any non-API path that is not a real file is the shell,
-  // so a deep link like /upcoming works on a cold load.
-  app.setNotFoundHandler(async (request, reply) => {
-    if (request.url.startsWith("/api/")) {
-      return reply.status(404).send({ error: "not_found", message: `No route for ${request.url}` });
-    }
-    return reply.status(200).type("text/html").sendFile("index.html");
-  });
+  // @fastify/static already serves index.html at "/" via its `index` option,
+  // so there is no root route to add here. Deep links such as /upcoming are
+  // not real files, so they fall through to the not-found handler in app.ts,
+  // which sends the same shell.
 
   app.log.info({ distDir }, "serving the built web app");
+  return { hasWebApp: true, distDir };
 }

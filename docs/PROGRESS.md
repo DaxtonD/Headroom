@@ -9,8 +9,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Milestone | Status | Tag | Notes |
 |---|---|---|---|
 | Handoff committed to repo | done | | Real-data files deliberately git-ignored (see "Decisions") |
-| M0 Scaffold, CI, login, compose | in progress | | |
-| M1 Calculation engine + golden tests | not started | | |
+| M0 Scaffold, CI, login, compose | done | m0 | Verified end-to-end in the built image: migrations, login, app shell |
+| M1 Calculation engine + golden tests | done | m1 | Reproduces every expected value in BOTH the real seed and the synthetic fixture |
 | M2 Home + Upcoming + integrity layer | not started | | |
 | M3 Recurrence + Pay plan | not started | | |
 | M4 Budget, Goals, Net worth | not started | | |
@@ -20,8 +20,38 @@ Claude Code updates this file at the end of every milestone and every work sessi
 ## Last session
 
 - Date: 2026-11-07
-- Done: Handoff package unpacked into the repo. Seed spec verified (`python3 seed/check_seed.py` → OK, every expected value reproduces). `.env` created locally from `.env.example` with freshly generated `SESSION_SECRET` and `POSTGRES_PASSWORD`; Dax fills `DATABASE_URL` and `APP_ORIGIN`. `.gitignore` rewritten so that no real financial data can be committed.
-- Next: M0 scaffold (pnpm workspaces, Prisma schema, Fastify API, React web, login, health check, compose, CI).
+- Done:
+  - Handoff unpacked; seed spec verified; `.env` created with generated secrets; `.gitignore` rewritten so no real financial data can be committed.
+  - **M0 complete.** pnpm workspaces (`packages/core`, `apps/api`, `apps/web`), the full Prisma data model plus a migration of database-level guards, Zod-validated config, Argon2id login with server-side sessions, health check, operator CLI, Docker image, compose, GitHub Actions CI.
+  - **M1 complete.** The engine reproduces every expected value in the seed: timeline ordering and running balances, lowest point, safe-to-spend, coverage and the first shortfall, left this cycle, all three pay periods, budget and section shares, goals, net worth and the whole retirement chain. Includes the shortfall case and the moved-flexible-bill case.
+  - 248 tests green (194 engine, 54 API against a real Postgres); lint, typecheck and `pnpm build` clean.
+- Next: M2 (Home + Upcoming + the section 16 integrity layer).
+- **Nothing is pushed.** Every commit and tag is local, waiting on Dax's OK.
+
+## Verified by hand, not only by tests
+
+The built image was run against an empty database and checked end to end:
+
+- both migrations applied from scratch;
+- `/api/health` returns `ok` with the database up;
+- `GET /` serves the app shell, and a deep link (`/upcoming`) serves it too, so a bookmarked page survives a cold load;
+- fingerprinted assets come back `immutable`, `index.html` comes back `no-cache`;
+- `create-user` created the household and both accounts, with no password in `.env` or on a command line;
+- sign-in worked, the cookie is `HttpOnly` and signed, `/api/me` returned both members, and a wrong password returned 401;
+- starting the image with an incomplete configuration exits 78 and names the missing variable.
+
+## Bugs caught before deploy (all fixed)
+
+Worth recording, because each would have been invisible until it mattered:
+
+1. **Two not-found handlers.** Fastify allows one per prefix, so the app could not start at all. A single handler now decides both the API 404 and the single-page-app fallback.
+2. **A global `pg` int8 type parser.** Added so raw queries would return `BigInt`; it broke *every* Prisma write, because Prisma's driver adapter relies on the driver's default and converts the value itself. Removed, with a note so it is not re-added.
+3. **BigInt serialization.** `setSerializerCompiler` only applies to routes that declare a response schema, so `/api/me` returned 500 on the household's cushion. Now `setReplySerializer`, which covers every reply.
+4. **The login limiter counted successful sign-ins**, while `.env.example` documents `LOGIN_RATE_LIMIT` as failed attempts. Carol could have locked herself out of her own finances. Replaced with a failure-only throttle that a correct password clears.
+5. **`pino-pretty` in the production image.** `NODE_ENV=development` against the built image crashed at startup, because the pretty transport is a dev dependency. Pretty logging is now used only when the module is actually present.
+6. **Asset cache headers did nothing.** `@fastify/static` sets its own `cache-control` and overrode them, and the pattern looked for `.hash.js` while Vite emits `name-HASH.js`. Both fixed, then verified against the running container.
+7. **A pinned base image tag that did not exist** (`node:22.23.4-alpine3.22`). Now `node:22.23.4-alpine`.
+8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
 
 ## Working agreements with Dax (this build is NOT autonomous)
 
@@ -79,4 +109,33 @@ From HANDOFF section 14. Each default is built and editable in the app where it 
 
 ## How to run
 
-(fill in as the project takes shape)
+Requires Node 20.19+ (what Dax has installed), pnpm 9, and Docker for the test database.
+
+```
+pnpm install
+cp .env.example .env            # fill DATABASE_URL and APP_ORIGIN
+pnpm -F @headroom/api db:generate
+pnpm -F @headroom/core build
+
+node scripts/testdb.mjs up      # throwaway Postgres for tests
+pnpm test                       # 248 tests
+pnpm lint && pnpm typecheck
+pnpm build
+node scripts/testdb.mjs down
+```
+
+Run the whole thing in Docker:
+
+```
+docker compose up -d --build                      # against the Postgres Dax already runs
+docker compose --profile with-db up -d --build     # or let Headroom bring its own
+docker compose exec app node apps/api/dist/cli.js create-user
+```
+
+Verify a seed file's expected values:
+
+```
+python3 seed/check_seed.py                                                   # the real seed, if present
+python3 seed/check_seed.py packages/core/test/fixtures/household-synthetic.json
+python3 seed/make_synthetic_fixture.py                                       # regenerate the fixture
+```

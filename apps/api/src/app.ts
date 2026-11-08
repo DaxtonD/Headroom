@@ -8,6 +8,7 @@
  * the built web app (HANDOFF section 10).
  */
 import { randomUUID } from "node:crypto";
+import { createRequire } from "node:module";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -18,6 +19,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerWebApp } from "./routes/web.js";
 import { resolveSessionUser, type SessionUser } from "./auth/session.js";
+import { LoginThrottle } from "./auth/loginThrottle.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -27,12 +29,24 @@ declare module "fastify" {
   interface FastifyInstance {
     env: Env;
     db: Database;
+    /** Counts FAILED sign-in attempts per IP; a success clears the record. */
+    loginThrottle: LoginThrottle;
   }
 }
 
 export interface BuildAppOptions {
   readonly env: Env;
   readonly db: Database;
+}
+
+/** True when pino-pretty is installed, which it is not in the production image. */
+function hasPinoPretty(): boolean {
+  try {
+    createRequire(import.meta.url).resolve("pino-pretty");
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -55,8 +69,13 @@ export async function buildApp({ env, db }: BuildAppOptions): Promise<FastifyIns
         paths: ["req.headers.cookie", "req.headers.authorization", "req.headers['set-cookie']"],
         remove: true,
       },
+      // Pretty logs are a development convenience, and pino-pretty is a dev
+      // dependency that is deliberately not in the production image. Asking
+      // for it when it is absent makes pino throw at startup, so only use it
+      // when it can actually be resolved: NODE_ENV=development against the
+      // production image is a perfectly reasonable thing to do.
       transport:
-        env.NODE_ENV === "development"
+        env.NODE_ENV === "development" && hasPinoPretty()
           ? { target: "pino-pretty", options: { translateTime: "HH:MM:ss", ignore: "pid,hostname" } }
           : undefined,
     },
@@ -69,9 +88,13 @@ export async function buildApp({ env, db }: BuildAppOptions): Promise<FastifyIns
 
   app.decorate("env", env);
   app.decorate("db", db);
+  app.decorate("loginThrottle", new LoginThrottle({ maxFailures: env.LOGIN_RATE_LIMIT }));
   app.decorateRequest("user", undefined);
 
-  app.setSerializerCompiler(() => (data) => JSON.stringify(data, jsonReplacer));
+  // setReplySerializer, not setSerializerCompiler: the latter only applies to
+  // routes that declare a response schema, so any route without one would hit
+  // Fastify's default serializer and throw on the first BigInt it met.
+  app.setReplySerializer((payload) => JSON.stringify(payload, jsonReplacer));
 
   await app.register(helmet, {
     // The web app is served from the same origin; CSP is configured with the
@@ -85,11 +108,11 @@ export async function buildApp({ env, db }: BuildAppOptions): Promise<FastifyIns
     parseOptions: {},
   });
 
-  await app.register(rateLimit, {
-    // Off by default; the login route opts in. Carol refreshing the dashboard
-    // many times a day must never be throttled.
-    global: false,
-  });
+  // Registered but off by default, so Carol refreshing the dashboard many
+  // times a day is never throttled. Login is protected by `loginThrottle`
+  // instead, which counts only FAILED attempts: a plain request limiter would
+  // also count successful sign-ins and could lock a real user out.
+  await app.register(rateLimit, { global: false });
 
   // Resolve the session once per request, before any handler.
   app.addHook("onRequest", async (request) => {
@@ -117,19 +140,27 @@ export async function buildApp({ env, db }: BuildAppOptions): Promise<FastifyIns
     });
   });
 
-  app.setNotFoundHandler((request, reply) => {
-    if (request.url.startsWith("/api/")) {
-      return reply.status(404).send({ error: "not_found", message: `No route for ${request.url}` });
-    }
-    // Non-API paths fall through to the web app's own handler.
-    return reply.status(404).send({ error: "not_found", message: "Not found" });
-  });
-
   await app.register(registerHealthRoutes, { prefix: "/api" });
   await app.register(registerAuthRoutes, { prefix: "/api" });
 
   // Serve the built web app last, so /api always wins.
-  await registerWebApp(app, env);
+  const web = await registerWebApp(app, env);
+
+  // Exactly one not-found handler, because Fastify allows one per prefix and
+  // two behaviours depend on it: an API miss is a JSON 404, while any other
+  // path is a single-page-app route and gets the app shell, so a deep link
+  // like /upcoming survives a cold load.
+  app.setNotFoundHandler((request, reply) => {
+    if (request.url.startsWith("/api/")) {
+      return reply.status(404).send({ error: "not_found", message: `No route for ${request.url}` });
+    }
+
+    if (web.hasWebApp) {
+      return reply.status(200).type("text/html").sendFile("index.html");
+    }
+
+    return reply.status(404).send({ error: "not_found", message: "Not found" });
+  });
 
   return app;
 }

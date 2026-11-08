@@ -210,8 +210,12 @@ describe("GET /api/me", () => {
     const { password } = await seedHousehold(harness);
     const cookie = await signIn(harness, "carol@example.test", password);
 
-    // The server clock decides, not the client's.
-    await harness.db.pool.query(`UPDATE "session" SET "expiresAt" = now() - interval '1 second'`);
+    // Age the whole row, not just its expiry: a CHECK constraint keeps
+    // expiresAt after createdAt, so a session that expired before it was
+    // created cannot exist. The server clock decides, not the client's.
+    await harness.db.pool.query(
+      `UPDATE "session" SET "createdAt" = now() - interval '2 days', "expiresAt" = now() - interval '1 day'`,
+    );
 
     const response = await harness.app.inject({
       method: "GET",
@@ -259,25 +263,85 @@ describe("POST /api/auth/logout", () => {
   });
 });
 
-describe("login rate limit", () => {
-  it("stops a password guessing run from one address", async () => {
-    const { carol } = await seedHousehold(harness);
+describe("login throttling", () => {
+  const ATTACKER_IP = "203.0.113.9";
 
-    const attempt = () =>
-      harness.app.inject({
-        method: "POST",
-        url: "/api/auth/login",
-        payload: { email: carol.email, password: "wrong-password" },
-        remoteAddress: "203.0.113.9",
-      });
+  const wrongPassword = (ip: string) =>
+    harness.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { email: "carol@example.test", password: "wrong-password" },
+      remoteAddress: ip,
+    });
+
+  it("stops a password guessing run from one address", async () => {
+    await seedHousehold(harness);
 
     const limit = harness.env.LOGIN_RATE_LIMIT;
     for (let i = 0; i < limit; i += 1) {
-      const response = await attempt();
-      expect(response.statusCode, `attempt ${i + 1}`).toBe(401);
+      expect((await wrongPassword(ATTACKER_IP)).statusCode, `attempt ${i + 1}`).toBe(401);
     }
 
-    const blocked = await attempt();
+    const blocked = await wrongPassword(ATTACKER_IP);
     expect(blocked.statusCode).toBe(429);
+    expect(blocked.json().error).toBe("too_many_attempts");
+    expect(blocked.headers["retry-after"]).toBeDefined();
+  });
+
+  it("blocks only the offending address", async () => {
+    const { password } = await seedHousehold(harness);
+
+    for (let i = 0; i < harness.env.LOGIN_RATE_LIMIT; i += 1) {
+      await wrongPassword(ATTACKER_IP);
+    }
+    expect((await wrongPassword(ATTACKER_IP)).statusCode).toBe(429);
+
+    // Carol, at home on a different address, is unaffected.
+    const fromHome = await harness.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { email: "carol@example.test", password },
+      remoteAddress: "198.51.100.4",
+    });
+    expect(fromHome.statusCode).toBe(200);
+  });
+
+  it("counts only failures, so signing in repeatedly never locks anyone out", async () => {
+    const { password } = await seedHousehold(harness);
+
+    // Comfortably more sign-ins than the limit allows as failures.
+    for (let i = 0; i < harness.env.LOGIN_RATE_LIMIT + 5; i += 1) {
+      const response = await harness.app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { email: "carol@example.test", password },
+        remoteAddress: "198.51.100.7",
+      });
+      expect(response.statusCode, `sign-in ${i + 1}`).toBe(200);
+    }
+  });
+
+  it("forgives earlier failures once the right password is used", async () => {
+    const { password } = await seedHousehold(harness);
+    const ip = "198.51.100.9";
+
+    // One short of the limit, then a success, which clears the record.
+    for (let i = 0; i < harness.env.LOGIN_RATE_LIMIT - 1; i += 1) {
+      await wrongPassword(ip);
+    }
+
+    const success = await harness.app.inject({
+      method: "POST",
+      url: "/api/auth/login",
+      payload: { email: "carol@example.test", password },
+      remoteAddress: ip,
+    });
+    expect(success.statusCode).toBe(200);
+
+    // The slate is clean: a fresh run of failures is allowed again.
+    for (let i = 0; i < harness.env.LOGIN_RATE_LIMIT; i += 1) {
+      expect((await wrongPassword(ip)).statusCode, `after reset ${i + 1}`).toBe(401);
+    }
+    expect((await wrongPassword(ip)).statusCode).toBe(429);
   });
 });

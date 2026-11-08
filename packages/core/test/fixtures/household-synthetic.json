@@ -1,0 +1,455 @@
+{
+  "_about": "SYNTHETIC fixture for the engine's golden tests. Every amount here is invented and no real household data is present. The structure - event ids, dates, types, anchors and pay-schedule anchor dates - matches the real seed so the same engine behaviour is exercised. Regenerate with: python3 seed/make_synthetic_fixture.py",
+  "household": {
+    "name": "Synthetic household",
+    "timezone": "America/Regina",
+    "currency": "CAD",
+    "cushionCents": 0
+  },
+  "users": [
+    {
+      "key": "dax",
+      "name": "Dax",
+      "initial": "D"
+    },
+    {
+      "key": "carol",
+      "name": "Carol",
+      "initial": "C"
+    }
+  ],
+  "account": {
+    "name": "Chequing",
+    "balanceCents": 41000,
+    "asOf": "2026-11-07T09:58:00-06:00"
+  },
+  "paySchedules": [
+    {
+      "user": "dax",
+      "cadence": "biweekly",
+      "weekday": "Thu",
+      "anchorDate": "2026-11-12",
+      "defaultCents": 200000
+    },
+    {
+      "user": "carol",
+      "cadence": "biweekly",
+      "weekday": "Thu",
+      "anchorDate": "2026-11-19",
+      "defaultCents": 180000
+    }
+  ],
+  "fixture": {
+    "_about": "Synthetic ledger for Nov 7 to Dec 2, 2026, in the app's date order.",
+    "today": "2026-11-07",
+    "startBalanceCents": 41000,
+    "horizonEnd": "2026-12-02",
+    "anchors": [
+      "now",
+      "pay_dax_2026-11-12",
+      "pay_carol_2026-11-19",
+      "pay_dax_2026-11-26"
+    ],
+    "events": [
+      {
+        "id": "power",
+        "name": "Power",
+        "type": "flexible",
+        "anchor": "now",
+        "cents": -15000
+      },
+      {
+        "id": "pay_dax_2026-11-12",
+        "name": "Dax's pay",
+        "type": "paycheque",
+        "date": "2026-11-12",
+        "cents": 200000
+      },
+      {
+        "id": "energy",
+        "name": "Energy",
+        "type": "flexible",
+        "anchor": "pay_dax_2026-11-12",
+        "cents": -9000
+      },
+      {
+        "id": "sasktel_refund",
+        "name": "Phone refund",
+        "type": "one_off",
+        "anchor": "pay_dax_2026-11-12",
+        "cents": 4000
+      },
+      {
+        "id": "mortgage_1",
+        "name": "Mortgage",
+        "type": "auto",
+        "date": "2026-11-13",
+        "cents": -100000
+      },
+      {
+        "id": "home_insurance",
+        "name": "Home insurance",
+        "type": "auto",
+        "date": "2026-11-17",
+        "cents": -20000
+      },
+      {
+        "id": "pay_carol_2026-11-19",
+        "name": "Carol's pay",
+        "type": "paycheque",
+        "date": "2026-11-19",
+        "cents": 185000
+      },
+      {
+        "id": "water",
+        "name": "Water",
+        "type": "flexible",
+        "anchor": "pay_carol_2026-11-19",
+        "cents": -16000
+      },
+      {
+        "id": "savings",
+        "name": "Savings transfer",
+        "type": "flexible",
+        "anchor": "pay_carol_2026-11-19",
+        "cents": -120000
+      },
+      {
+        "id": "child_tax_credit",
+        "name": "Child tax credit",
+        "type": "auto_deposit",
+        "date": "2026-11-20",
+        "cents": 10000
+      },
+      {
+        "id": "tacoma_license",
+        "name": "Truck license",
+        "type": "auto",
+        "date": "2026-11-21",
+        "cents": -8000
+      },
+      {
+        "id": "rogers_wireless",
+        "name": "Wireless",
+        "type": "auto",
+        "date": "2026-11-22",
+        "cents": -17000
+      },
+      {
+        "id": "pay_dax_2026-11-26",
+        "name": "Dax's pay",
+        "type": "paycheque",
+        "date": "2026-11-26",
+        "cents": 200000
+      },
+      {
+        "id": "mortgage_2",
+        "name": "Mortgage",
+        "type": "auto",
+        "date": "2026-11-27",
+        "cents": -100000
+      },
+      {
+        "id": "bank_fees",
+        "name": "Bank fees",
+        "type": "auto",
+        "date": "2026-11-30",
+        "cents": -1200
+      },
+      {
+        "id": "property_tax",
+        "name": "Property tax",
+        "type": "auto",
+        "date": "2026-12-01",
+        "cents": -30000
+      },
+      {
+        "id": "rav_license",
+        "name": "Car license",
+        "type": "auto",
+        "date": "2026-12-02",
+        "cents": -10000
+      }
+    ],
+    "sheetOrder": [
+      "power",
+      "pay_dax_2026-11-12",
+      "mortgage_1",
+      "rogers_wireless",
+      "home_insurance",
+      "sasktel_refund",
+      "energy",
+      "pay_carol_2026-11-19",
+      "water",
+      "child_tax_credit",
+      "tacoma_license",
+      "savings",
+      "pay_dax_2026-11-26",
+      "mortgage_2",
+      "bank_fees",
+      "property_tax",
+      "rav_license"
+    ],
+    "expected": {
+      "runningCents": [
+        26000,
+        226000,
+        217000,
+        221000,
+        121000,
+        101000,
+        286000,
+        270000,
+        150000,
+        160000,
+        152000,
+        135000,
+        335000,
+        235000,
+        233800,
+        203800,
+        193800
+      ],
+      "leftThisCycleCents": 193800,
+      "lowestCents": 26000,
+      "lowestAfter": "power",
+      "safeToSpendNowCents": 26000,
+      "autoWithdrawalCount": 8,
+      "allAutoCovered": true,
+      "sheetOrderEndCents": 193800,
+      "payPeriods": [
+        {
+          "label": "Now-Nov 11",
+          "start": "2026-11-07",
+          "end": "2026-11-11",
+          "inCents": 41000,
+          "autoCents": 0,
+          "flexibleCents": 15000,
+          "leftCents": 26000
+        },
+        {
+          "label": "Nov 12-25",
+          "start": "2026-11-12",
+          "end": "2026-11-25",
+          "inCents": 399000,
+          "autoCents": 145000,
+          "flexibleCents": 145000,
+          "leftCents": 109000,
+          "lowest": {
+            "cents": 101000,
+            "date": "2026-11-17"
+          }
+        },
+        {
+          "label": "Nov 26-Dec 9",
+          "start": "2026-11-26",
+          "end": "2026-12-09",
+          "inCents": 380000,
+          "autoCents": 141200,
+          "flexibleCents": 0,
+          "leftCents": 238800,
+          "_note": "Includes the next cheque projected from the pay schedule, which falls past the horizon."
+        }
+      ],
+      "shortfallCase": {
+        "_about": "Same fixture with rogers_wireless edited to -170000.",
+        "edit": {
+          "id": "rogers_wireless",
+          "cents": -170000
+        },
+        "firstShortfall": {
+          "id": "rogers_wireless",
+          "date": "2026-11-22",
+          "shortCents": 18000
+        }
+      },
+      "movedFlexibleCase": {
+        "_about": "Move the savings transfer to the following paycheque. End total and lowest point unchanged.",
+        "move": {
+          "id": "savings",
+          "toAnchor": "pay_dax_2026-11-26"
+        },
+        "leftThisCycleCents": 193800,
+        "lowestCents": 26000
+      }
+    }
+  },
+  "monthlyBudget": {
+    "income": {
+      "netMonthlyCents": 900000,
+      "netYearlyCents": 10850000,
+      "_note": "Yearly is deliberately not monthly x 12, mirroring the real sheet."
+    },
+    "fixed": [
+      {
+        "name": "Mortgage",
+        "monthlyCents": 200000
+      },
+      {
+        "name": "Saving",
+        "monthlyCents": 200000
+      },
+      {
+        "name": "Netflix",
+        "monthlyCents": 2000
+      },
+      {
+        "name": "Property Tax",
+        "monthlyCents": 30000
+      },
+      {
+        "name": "Spotify",
+        "monthlyCents": 1500
+      },
+      {
+        "name": "Rogers tv",
+        "monthlyCents": 10000
+      },
+      {
+        "name": "Power",
+        "monthlyCents": 15000
+      },
+      {
+        "name": "Energy",
+        "monthlyCents": 9000
+      },
+      {
+        "name": "Cell Phone",
+        "monthlyCents": 16000
+      },
+      {
+        "name": "RAV Insurance",
+        "monthlyCents": 10000
+      },
+      {
+        "name": "Truck insurance",
+        "monthlyCents": 8000
+      },
+      {
+        "name": "Water",
+        "monthlyCents": 16000
+      },
+      {
+        "name": "Home Insurance",
+        "monthlyCents": 20000
+      },
+      {
+        "name": "Bank Fees",
+        "monthlyCents": 1200
+      }
+    ],
+    "variable": [
+      {
+        "name": "Food",
+        "monthlyCents": 140000
+      },
+      {
+        "name": "Gas",
+        "monthlyCents": 12000
+      },
+      {
+        "name": "Misc. Expenses",
+        "monthlyCents": 40000
+      }
+    ],
+    "expected": {
+      "fixedMonthlyCents": 538700,
+      "fixedYearlyCents": 6464400,
+      "variableMonthlyCents": 192000,
+      "variableYearlyCents": 2304000,
+      "totalMonthlyCents": 730700,
+      "totalYearlyCents": 8768400,
+      "balanceMonthlyCents": 169300,
+      "balanceYearlyCents": 2081600,
+      "fixedSharePct": {
+        "Mortgage": 37,
+        "Saving": 37,
+        "Property Tax": 6,
+        "Power": 3,
+        "Cell Phone": 3,
+        "Water": 3,
+        "Home Insurance": 4
+      },
+      "variableSharePct": {
+        "Food": 73,
+        "Gas": 6,
+        "Misc. Expenses": 21
+      }
+    }
+  },
+  "goals": [
+    {
+      "name": "Trip fund",
+      "targetCents": 450000,
+      "savedCents": 320000,
+      "expected": {
+        "remainingCents": 130000,
+        "pct": 71.1
+      }
+    }
+  ],
+  "reimbursements": {
+    "employer": "Example Co",
+    "statuses": [
+      "bought",
+      "submitted",
+      "paid"
+    ],
+    "items": [],
+    "expectedTotalCents": 0
+  },
+  "bankedHours": {
+    "total": 0
+  },
+  "netWorth": {
+    "assets": [
+      {
+        "name": "Home (market estimate)",
+        "cents": 40000000
+      },
+      {
+        "name": "RRSPs",
+        "cents": 15000000
+      },
+      {
+        "name": "RAV4",
+        "cents": 1200000
+      },
+      {
+        "name": "Tacoma",
+        "cents": 800000
+      }
+    ],
+    "liabilities": [
+      {
+        "name": "Mortgage",
+        "cents": 14000000
+      }
+    ],
+    "expected": {
+      "assetsCents": 57000000,
+      "netWorthCents": 43000000
+    }
+  },
+  "retirement": {
+    "inputs": {
+      "rrspCurrentPlusFourYearsCents": 30000005,
+      "mortgageMonthlyCents": 200000,
+      "redirectYears": 16,
+      "flatGrowthPct": 10,
+      "drawdownYears": 25,
+      "governmentPensionAnnualCents": 2000000,
+      "retirementExpensesAnnualCents": 2200000
+    },
+    "_formula": "rrspAt65 = (rrspCurrentPlusFourYears + mortgageMonthly*12*redirectYears) * (1 + flatGrowthPct/100); draw = rrspAt65 / drawdownYears; extraPerYear = draw + gov - expenses; extraPerMonth = extraPerYear / 12; totalForRetirement = netWorth + rrspAt65. Round half up to cents.",
+    "expected": {
+      "mortgageRedirectCents": 38400000,
+      "growthCents": 6840001,
+      "rrspAt65Cents": 75240006,
+      "annualDrawCents": 3009600,
+      "extraPerYearCents": 2809600,
+      "extraPerMonthCents": 234133,
+      "totalForRetirementCents": 118240006
+    }
+  }
+}

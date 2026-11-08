@@ -31,62 +31,67 @@ function getDummyHash(): Promise<string> {
 }
 
 export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
-  app.post(
-    "/auth/login",
-    {
-      config: {
-        rateLimit: {
-          max: app.env.LOGIN_RATE_LIMIT,
-          timeWindow: "15 minutes",
-          // Per IP, as documented for LOGIN_RATE_LIMIT in .env.example.
-          keyGenerator: (request) => request.ip,
-        },
+  app.post("/auth/login", async (request, reply) => {
+    // Only failed attempts count towards the limit, and a success clears the
+    // record, so a legitimate user cannot lock themselves out by signing in.
+    const throttleKey = request.ip;
+
+    if (app.loginThrottle.isBlocked(throttleKey)) {
+      const retryAfter = app.loginThrottle.retryAfterSeconds(throttleKey);
+      request.log.warn({ ip: request.ip }, "login blocked: too many failed attempts");
+      return reply
+        .status(429)
+        .header("retry-after", String(retryAfter))
+        .send({
+          error: "too_many_attempts",
+          message: `Too many failed sign-in attempts. Try again in ${Math.ceil(retryAfter / 60)} minute(s).`,
+        });
+    }
+
+    const parsed = loginBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "invalid_request",
+        message: parsed.error.issues[0]?.message ?? "Check your email and password.",
+      });
+    }
+
+    const { email, password } = parsed.data;
+
+    const user = await app.db.prisma.user.findFirst({
+      where: { email, deletedAt: null },
+    });
+
+    // Always run a verification, even with no such user, to keep the timing
+    // and the response indistinguishable.
+    const hashToCheck = user?.passwordHash ?? (await getDummyHash());
+    const ok = await verifyPassword(hashToCheck, password);
+
+    if (!user || !ok) {
+      app.loginThrottle.recordFailure(throttleKey);
+      request.log.info({ email, ip: request.ip }, "failed login");
+      return reply.status(401).send({
+        error: "invalid_credentials",
+        message: "That email and password do not match.",
+      });
+    }
+
+    app.loginThrottle.recordSuccess(throttleKey);
+    await startSession(app.db.prisma, app.env, reply, user.id, request);
+    request.log.info({ userId: user.id }, "signed in");
+
+    return reply.send({
+      user: {
+        id: user.id,
+        householdId: user.householdId,
+        name: user.name,
+        initial: user.initial,
+        email: user.email,
+        colorFg: user.colorFg,
+        colorBg: user.colorBg,
       },
-    },
-    async (request, reply) => {
-      const parsed = loginBody.safeParse(request.body);
-      if (!parsed.success) {
-        return reply.status(400).send({
-          error: "invalid_request",
-          message: parsed.error.issues[0]?.message ?? "Check your email and password.",
-        });
-      }
-
-      const { email, password } = parsed.data;
-
-      const user = await app.db.prisma.user.findFirst({
-        where: { email, deletedAt: null },
-      });
-
-      // Always run a verification, even with no such user, to keep the timing
-      // and the response indistinguishable.
-      const hashToCheck = user?.passwordHash ?? (await getDummyHash());
-      const ok = await verifyPassword(hashToCheck, password);
-
-      if (!user || !ok) {
-        request.log.info({ email, ip: request.ip }, "failed login");
-        return reply.status(401).send({
-          error: "invalid_credentials",
-          message: "That email and password do not match.",
-        });
-      }
-
-      await startSession(app.db.prisma, app.env, reply, user.id, request);
-      request.log.info({ userId: user.id }, "signed in");
-
-      return reply.send({
-        user: {
-          id: user.id,
-          householdId: user.householdId,
-          name: user.name,
-          initial: user.initial,
-          email: user.email,
-          colorFg: user.colorFg,
-          colorBg: user.colorBg,
-        },
-      });
-    },
-  );
+    });
+  });
 
   app.post("/auth/logout", async (request, reply) => {
     await endSession(app.db.prisma, app.env, request, reply);

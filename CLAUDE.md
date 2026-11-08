@@ -7,9 +7,18 @@ Household budget web app / PWA for Dax and Carol that replaces Carol's budget sp
 - Seed data and golden expected values: `seed/household-nov-2026.json` (check with `python3 seed/check_seed.py`).
 - Mockup sources (reference only): `design/`.
 
-## Operating mode: autonomous
+## Operating mode
 
-Dax is not available this weekend. Build the whole app, milestone by milestone (HANDOFF section 13), without stopping to ask questions.
+**Superseded on 2026-11-07: this build is NOT autonomous.** Dax is available and answering
+questions, so ask rather than guess whenever an answer would change the work. Two standing
+instructions from him override what follows:
+
+1. **Never push without his explicit OK.** Commit and tag locally as usual; pushing waits.
+2. **No real financial data in git, ever** - broader than the private-repo allowance below.
+   See `docs/PROGRESS.md` for what is git-ignored as a result.
+
+The rest of this section still describes the intended rhythm: build the whole app, milestone by
+milestone (HANDOFF section 13), keeping each one green before starting the next.
 
 - Unclear? Use the default in HANDOFF section 14, or the most conservative reasonable choice. Make it an editable household setting where that makes sense. Record it in `docs/PROGRESS.md` under "Decisions made without asking" (and under "Questions for Carol" if she should confirm). Keep going.
 - Only stop work on an item if it needs a credential you don't have, touches Dax's Unraid server or any machine other than this one, or is irreversible outside this repo. Log it under "Blocked / needs Dax" and move on to other work.
@@ -45,8 +54,18 @@ pnpm workspaces: `apps/web` (React 19, TypeScript, Vite, vite-plugin-pwa, React 
 
 Keep this list current as you build.
 
-- `python3 seed/check_seed.py`: verify the seed spec.
-- (add: install, dev, test, lint, typecheck, build, `docker compose up --build`, create-user, import-seed)
+- `pnpm install`: install every workspace's dependencies.
+- `pnpm dev`: API and web dev server together.
+- `pnpm test`: Vitest everywhere. The API tests need a Postgres; see `testdb` below.
+- `pnpm lint`, `pnpm typecheck`, `pnpm build`.
+- `pnpm -F @headroom/api db:generate | db:migrate | db:deploy`: Prisma client and migrations.
+- `node scripts/testdb.mjs up | down`: throwaway Postgres for tests, never the real database.
+- `python3 seed/check_seed.py [path]`: verify a seed file's expected values. With no path it checks the local real seed and skips cleanly when absent.
+- `python3 seed/make_synthetic_fixture.py`: regenerate the committed synthetic fixture.
+- `docker compose up -d --build`: run against the Postgres Dax already has.
+- `docker compose --profile with-db up -d --build`: run with a bundled Postgres.
+- `docker compose exec app node apps/api/dist/cli.js create-user | list-users | reset-password`.
+- (still to add: import-seed in M6)
 
 ## Definition of done
 

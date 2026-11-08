@@ -1,27 +1,42 @@
 #!/bin/sh
-# Container entrypoint: migrate, then serve (HANDOFF section 10).
+# Container entrypoint: wait for the database, migrate, then serve
+# (HANDOFF section 10).
 #
 # Migrations run before the server accepts traffic, so the schema can never be
 # behind the code that is already answering requests.
+#
+# Configuration problems are deliberately NOT diagnosed here. If DATABASE_URL
+# is missing this script steps aside and lets the app start, because the app
+# validates every variable at once with Zod and prints one complete report
+# before exiting 78 (EX_CONFIG). Two places guessing at config errors would
+# produce two different, partial messages.
 set -eu
+
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "Headroom: DATABASE_URL is not set; starting the app so it can report the configuration problem."
+  exec "$@"
+fi
+
+# `pg` lives in apps/api/node_modules under pnpm's layout, so the wait script
+# has to resolve modules from there rather than from /app.
+cd /app/apps/api
 
 echo "Headroom: waiting for the database..."
 
-# The database may still be starting, and on Unraid it may be a separate box.
-# Retry rather than crash-looping the container.
 attempt=1
 max_attempts=30
 until node -e '
   const pg = require("pg");
-  const url = process.env.DATABASE_URL;
-  if (!url) { console.error("DATABASE_URL is not set"); process.exit(2); }
-  const client = new pg.Client({ connectionString: url, connectionTimeoutMillis: 4000 });
+  const client = new pg.Client({
+    connectionString: process.env.DATABASE_URL,
+    connectionTimeoutMillis: 4000,
+  });
   client.connect()
     .then(() => client.query("SELECT 1"))
     .then(() => client.end())
     .then(() => process.exit(0))
     .catch((error) => { console.error(error.message); process.exit(1); });
-' 2>&1; do
+'; do
   if [ "$attempt" -ge "$max_attempts" ]; then
     echo "Headroom: database still unreachable after ${max_attempts} attempts. Giving up." >&2
     echo "Check DATABASE_URL in .env, and that the database accepts connections from this container." >&2
@@ -33,9 +48,8 @@ until node -e '
 done
 
 echo "Headroom: applying database migrations..."
-cd /app/apps/api
 pnpm exec prisma migrate deploy
-cd /app
 
+cd /app
 echo "Headroom: starting the server..."
 exec "$@"

@@ -12,7 +12,8 @@
  * clearly identify itself as a test database.
  */
 import { execFileSync } from "node:child_process";
-import { resolve } from "node:path";
+import { createRequire } from "node:module";
+import { dirname, join, resolve } from "node:path";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
 import { createDatabase, type Database } from "../../src/db.js";
@@ -59,12 +60,28 @@ export function assertDisposableDatabase(url: string): void {
   }
 }
 
+/**
+ * The Prisma CLI's own entry script.
+ *
+ * Resolved and run with `process.execPath` rather than shelling out to `pnpm`:
+ * on Windows `pnpm` is a `.cmd`, which `execFileSync` cannot launch without a
+ * shell, and a shell would mean quoting a path that contains spaces.
+ */
+function prismaCliPath(): string {
+  const requireFromApi = createRequire(join(API_DIR, "package.json"));
+  const packageJsonPath = requireFromApi.resolve("prisma/package.json");
+  const bin = (requireFromApi("prisma/package.json") as { bin: Record<string, string> }).bin;
+  const entry = bin["prisma"];
+  if (!entry) throw new Error("The prisma package does not declare a `prisma` bin.");
+  return join(dirname(packageJsonPath), entry);
+}
+
 /** Apply migrations to the test database. Idempotent. */
 export function migrateTestDatabase(): void {
   const url = testDatabaseUrl();
   assertDisposableDatabase(url);
 
-  execFileSync("pnpm", ["exec", "prisma", "migrate", "deploy"], {
+  execFileSync(process.execPath, [prismaCliPath(), "migrate", "deploy"], {
     cwd: API_DIR,
     stdio: "pipe",
     env: {
@@ -135,6 +152,9 @@ export async function createHarness(envOverrides: Partial<Record<string, string>
     // TRUNCATE is the only way to clear them. TRUNCATE fires no row triggers,
     // which is exactly why it works here.
     await db.pool.query(`TRUNCATE TABLE ${TABLES.map((table) => `"${table}"`).join(", ")} CASCADE`);
+    // Failed-login counts live in memory and would otherwise leak from one
+    // test into the next.
+    app.loginThrottle.reset();
   };
 
   return {

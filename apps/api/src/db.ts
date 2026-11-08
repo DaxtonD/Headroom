@@ -13,13 +13,20 @@ import { PrismaClient } from "./generated/prisma/client.js";
 import type { Env } from "./env.js";
 
 /**
- * Postgres hands `bigint` (money, in cents) back as a string by default,
- * because a JS `number` cannot hold the whole range. Headroom wants real
- * `BigInt`s, and Prisma's adapter already maps its own BigInt columns, but any
- * raw `pg` query would otherwise return strings. Parse OID 20 (int8) to BigInt
- * so raw queries and Prisma agree.
+ * A note on `bigint` columns, which is where all the money lives.
+ *
+ * Prisma's `BigInt` fields already arrive as JavaScript `BigInt`s, so nothing
+ * needs doing for normal queries.
+ *
+ * Do NOT install a global `pg` type parser for OID 20 (int8) to "help" with
+ * this. Prisma's driver adapter relies on the driver's default behaviour of
+ * returning int8 as a string and converts the value itself; overriding the
+ * parser globally makes every Prisma write fail with a confusing type error.
+ *
+ * Raw `pg` queries therefore return int8 as a string. Convert those at the
+ * call site with `BigInt(value)` - never with `Number(value)`, which would
+ * silently lose precision above 2^53.
  */
-pg.types.setTypeParser(20, (value: string) => BigInt(value));
 
 export interface Database {
   readonly prisma: PrismaClient;
