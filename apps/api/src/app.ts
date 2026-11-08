@@ -19,6 +19,7 @@ import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBalanceRoutes } from "./routes/balance.js";
 import { registerEventRoutes } from "./routes/events.js";
 import { registerOccurrenceRoutes } from "./routes/occurrences.js";
+import { registerTemplateRoutes } from "./routes/templates.js";
 import { registerViewRoutes } from "./routes/views.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerWebApp } from "./routes/web.js";
@@ -169,6 +170,7 @@ export async function buildApp({ env, db, changeStream }: BuildAppOptions): Prom
   await app.register(registerViewRoutes, { prefix: "/api" });
   await app.register(registerOccurrenceRoutes, { prefix: "/api" });
   await app.register(registerBalanceRoutes, { prefix: "/api" });
+  await app.register(registerTemplateRoutes, { prefix: "/api" });
   await app.register(registerEventRoutes, { prefix: "/api" });
 
   // Serve the built web app last, so /api always wins.
