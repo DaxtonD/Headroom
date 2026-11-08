@@ -14,6 +14,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | M2 Home + Upcoming + integrity layer | done | m2 | All section 16.8 integrity tests pass against a real Postgres |
 | M3 Recurrence + Pay plan | done | m3 | Generation never undoes an edit; flexible bills move between periods |
 | M4 Budget, Goals, Net worth | done | m4 | Every retirement assumption editable; shares are of the section |
+| Manage screen + expense model | done | | Added at Dax's request, before M5. One entry feeds timeline and budget |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -40,17 +41,40 @@ Claude Code updates this file at the end of every milestone and every work sessi
 
 1. Read this file, then `CLAUDE.md`, then `docs/HANDOFF.md` (local only, git-ignored).
 2. `pnpm install` and `node scripts/testdb.mjs up`, then `pnpm test`.
-3. **M5 next**: PWA and polish. `vite-plugin-pwa` is already a dependency but is not wired up
-   yet, so there is no manifest, no icons and no service worker. Needs: the installable
-   manifest and icons, the read-only offline cache behind the "Offline, as of ..." banner that
+3. **M5 next**: PWA and polish. `vite-plugin-pwa` is a dependency but is not wired up, so
+   there is no manifest, no icons and no service worker. Needs: the installable manifest and
+   icons, the read-only offline cache behind the "Offline, as of ..." banner that
    `useLiveUpdates` already drives, the App Badging API for the count of unverified bills, an
-   "Update balance" manifest shortcut, the desktop layouts, and the accessibility pass
-   (44px targets, 4.5:1 contrast). Dax can test this at `https://dev.headroom.daxtond.com`.
+   "Update balance" manifest shortcut, desktop layouts, and the accessibility pass
+   (44px targets, 4.5:1 contrast).
 4. Then M6: backup sidecar with a tested restore, `import-seed` for the real figures, the
    GHCR image, and finishing `docs/DEPLOY.md`.
 
-Note for M5: the PWA needs a secure context, so it can only be tested over the HTTPS domain,
-never over a LAN IP.
+The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
+Proxy Manager, never over a LAN IP.
+
+## The expense model (added before M5, at Dax's request)
+
+Dax pointed out that the app could display and adjust money but could not be **set up or
+maintained**, and that it was hard to make sense of. He was right, and the gap was wide: bills,
+budget lines, goals, assets, work expenses, banked hours and income all had APIs with no UI,
+and pay schedules and the household settings had no API at all.
+
+Decisions taken with him on 2026-11-08:
+
+1. **One entry per expense.** A bill used to exist twice - as a timeline item with an amount
+   and a recurrence, and again as a budget line with a monthly amount. Now it is entered once
+   and the monthly figure is derived from the cadence, with an optional override where the
+   spreadsheet states something different. The derived figure is always reported alongside an
+   override so the difference is visible.
+   - The conversion that matters: **biweekly is 26 times a year, not 24**, so 26/12 of the
+     amount. Treating it as semi-monthly understates the year by two whole payments.
+   - Budget-only categories (food, gas, everyday) stay as budget lines: spending with no due
+     date and no bill.
+2. **A sixth "Manage" tab** holds all of it, with a checklist of what is still missing and what
+   each gap breaks.
+3. **Archive, never delete.** A paid-off bill stops generating and leaves the budget; its
+   history stays whole and one button brings it back.
 
 ### A running demo exists
 
@@ -111,6 +135,13 @@ Dax in the running app rather than being caught here, which is the one that matt
 5. **`pino-pretty` in the production image.** `NODE_ENV=development` against the built image crashed at startup, because the pretty transport is a dev dependency. Pretty logging is now used only when the module is actually present.
 6. **Asset cache headers did nothing.** `@fastify/static` sets its own `cache-control` and overrode them, and the pattern looked for `.hash.js` while Vite emits `name-HASH.js`. Both fixed, then verified against the running container.
 7. **A pinned base image tag that did not exist** (`node:22.23.4-alpine3.22`). Now `node:22.23.4-alpine`.
+10. **A bill and a budget category sharing a name** confused the Budget page: the category was
+   labelled as coming from a bill and carried the bill's id, so editing it would have edited
+   the wrong record. The cause was matching the engine's output back to source rows by name
+   after the fact; identity now travels with each line and is paired back by position. Found
+   by using the running app, not by a test.
+11. **The override checkbox defaulted to ON for a new expense**, because with optional chaining
+   `existing?.field !== null` is true when there is no existing record at all.
 9. **A bill saved as 100x its amount** - found by Dax, not by the tests. Typing 186 stored
    $18,600. The amount was converted twice: the web app turned "186" into 18600 cents and
    sent `"-18600"`, and the API ran `parseCents` over that again and read it as dollars.
