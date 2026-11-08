@@ -613,3 +613,181 @@ describe("the setup routes need a session", () => {
     ).toBe(401);
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Removing things, and renaming the account                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * These four routes existed nowhere until the Manage screen needed them.
+ *
+ * The web app listed goals, assets and the account as read-only text, so there
+ * was no pressure on the API to let them be changed — and a goal that was
+ * reached or a car that was sold could only be dealt with in SQL.
+ *
+ * Removal is soft everywhere: a figure that used to count towards net worth is
+ * part of the explanation for past numbers, so the row stays and only stops
+ * counting.
+ */
+describe("removing a goal", () => {
+  const addGoal = async (): Promise<{ id: string; version: number }> => {
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/api/goals",
+      headers: headers(),
+      payload: { name: "Trip", targetCents: "437100", savedCents: "111300" },
+    });
+    expect(response.statusCode).toBe(201);
+    return response.json().goal;
+  };
+
+  it("takes it off the overview but keeps the row", async () => {
+    const goal = await addGoal();
+
+    const before = await harness.app
+      .inject({ method: "GET", url: "/api/goals-overview", headers: { cookie } })
+      .then((response) => response.json());
+    expect(before.goals).toHaveLength(1);
+
+    const removed = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/goals/${goal.id}`,
+      headers: { ...headers(), "if-match": String(goal.version) },
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const after = await harness.app
+      .inject({ method: "GET", url: "/api/goals-overview", headers: { cookie } })
+      .then((response) => response.json());
+    expect(after.goals).toEqual([]);
+
+    // Soft: the row is still there, flagged as deleted.
+    const row = await harness.db.prisma.goal.findUnique({ where: { id: goal.id } });
+    expect(row?.deletedAt).not.toBeNull();
+  });
+
+  it("refuses a second removal", async () => {
+    const goal = await addGoal();
+
+    const first = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/goals/${goal.id}`,
+      headers: { ...headers(), "if-match": String(goal.version) },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const second = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/goals/${goal.id}`,
+      headers: { ...headers(), "if-match": String(goal.version) },
+    });
+    expect(second.statusCode).toBe(404);
+  });
+
+  it("needs the version it is based on", async () => {
+    const goal = await addGoal();
+
+    const response = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/goals/${goal.id}`,
+      headers: headers(),
+    });
+    expect(response.statusCode).toBe(428);
+  });
+});
+
+describe("removing something owned or owed", () => {
+  it("stops it counting towards net worth", async () => {
+    const created = await harness.app.inject({
+      method: "POST",
+      url: "/api/assets",
+      headers: headers(),
+      payload: { kind: "liability", name: "Car loan", cents: "862400" },
+    });
+    expect(created.statusCode).toBe(201);
+    const asset = created.json().asset;
+
+    const before = await harness.app
+      .inject({ method: "GET", url: "/api/net-worth", headers: { cookie } })
+      .then((response) => response.json());
+    expect(before.liabilitiesCents).toBe("862400");
+
+    const removed = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/assets/${asset.id}`,
+      headers: { ...headers(), "if-match": String(asset.version) },
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const after = await harness.app
+      .inject({ method: "GET", url: "/api/net-worth", headers: { cookie } })
+      .then((response) => response.json());
+    expect(after.liabilitiesCents).toBe("0");
+    expect(after.liabilities).toEqual([]);
+  });
+});
+
+describe("renaming the account", () => {
+  /** The seeded household already has one, which is the realistic case. */
+  const existingAccount = async (): Promise<{ id: string; name: string; version: number }> => {
+    const setup = await harness.app
+      .inject({ method: "GET", url: "/api/setup", headers: { cookie } })
+      .then((response) => response.json());
+    const account = setup.accounts[0];
+    expect(account).toBeDefined();
+    return account;
+  };
+
+  it("changes the name the Home screen shows", async () => {
+    const account = await existingAccount();
+
+    const renamed = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/accounts/${account.id}`,
+      headers: { ...headers(), "if-match": String(account.version) },
+      payload: { name: "Joint chequing" },
+    });
+    expect(renamed.statusCode).toBe(200);
+
+    const setup = await harness.app
+      .inject({ method: "GET", url: "/api/setup", headers: { cookie } })
+      .then((response) => response.json());
+
+    const names = setup.accounts.map((entry: { name: string }) => entry.name);
+    expect(names).toContain("Joint chequing");
+    expect(names).not.toContain(account.name);
+  });
+
+  it("refuses an empty name", async () => {
+    const account = await existingAccount();
+
+    const response = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/accounts/${account.id}`,
+      headers: { ...headers(), "if-match": String(account.version) },
+      payload: { name: "   " },
+    });
+    expect(response.statusCode).toBe(400);
+  });
+
+  it("refuses a rename based on a stale version", async () => {
+    const account = await existingAccount();
+
+    const first = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/accounts/${account.id}`,
+      headers: { ...headers(), "if-match": String(account.version) },
+      payload: { name: "Joint chequing" },
+    });
+    expect(first.statusCode).toBe(200);
+
+    // Same field, same stale version: the second writer must not win silently.
+    const second = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/accounts/${account.id}`,
+      headers: { ...headers(), "if-match": String(account.version) },
+      payload: { name: "Something else" },
+    });
+    expect(second.statusCode).toBe(409);
+  });
+});

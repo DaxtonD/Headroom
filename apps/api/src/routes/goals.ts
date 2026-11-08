@@ -304,6 +304,78 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(result.statusCode).send(result.body);
   });
 
+  /**
+   * Remove a goal.
+   *
+   * Soft, like every other removal here: a goal that was reached and cleared
+   * away is still part of the history that explains where the money went, so
+   * the row stays and only stops counting.
+   */
+  app.delete<{ Params: { id: string } }>("/goals/:id", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const baseVersion = requireBaseVersion(request);
+    const key = requireIdempotencyKey(request);
+
+    const result = await runIdempotent({
+      prisma: app.db.prisma,
+      key,
+      userId: user.id,
+      method: "DELETE",
+      path: `/api/goals/${request.params.id}`,
+      requestHash: hashRequest("DELETE", `/api/goals/${request.params.id}`, {}),
+      ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
+      work: async (tx) => {
+        const existing = await tx.goal.findFirst({
+          where: { id: request.params.id, householdId: user.householdId, deletedAt: null },
+        });
+        if (!existing) throw new HttpError(404, "not_found", "That goal no longer exists.");
+
+        const applied = await applyVersionedChange<Goal>({
+          tx: tx as unknown as PrismaLike,
+          entity: "goal",
+          id: existing.id,
+          baseVersion,
+          userId: user.id,
+          householdId: user.householdId,
+          action: "soft_delete",
+          changes: { deletedAt: new Date().toISOString() },
+          readRow: () => tx.goal.findUnique({ where: { id: existing.id } }),
+          writeRow: (nextVersion) =>
+            tx.goal.update({
+              where: { id: existing.id },
+              data: {
+                deletedAt: new Date(),
+                deletedById: user.id,
+                version: nextVersion,
+                updatedById: user.id,
+                updatedAt: new Date(),
+              },
+            }),
+          snapshot: (row) => ({
+            version: row.version,
+            name: row.name,
+            targetCents: row.targetCents.toString(),
+            savedCents: row.savedCents.toString(),
+          }),
+        });
+
+        await publishChange(tx, {
+          householdId: user.householdId,
+          entity: "goal",
+          id: applied.row.id,
+          version: applied.row.version,
+          by: user.id,
+        });
+
+        return { statusCode: 200, body: { ok: true } };
+      },
+    });
+
+    return reply.status(result.statusCode).send(result.body);
+  });
+
   /* ---- Reimbursements ---- */
 
   app.post("/reimbursements", async (request, reply) => {

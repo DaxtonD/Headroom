@@ -13,12 +13,17 @@ import { generateForHousehold, scheduleSchema } from "../lib/generateService.js"
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
+import { wireCents } from "../lib/wire.js";
 import type { Template } from "../generated/prisma/client.js";
 
-const centsSchema = z.union([
-  z.string().regex(/^-?\d+$/, "An amount must be whole cents.").transform((value) => BigInt(value)),
-  z.number().int().transform((value) => BigInt(value)),
-]);
+/**
+ * One parser for amounts, shared with every other route.
+ *
+ * This file used to define its own, which meant two places decided what an
+ * amount on the wire looks like. That is the seam the $186-becomes-$18,600 bug
+ * came through, so there is deliberately only one now.
+ */
+const centsSchema = wireCents;
 
 const createBody = z
   .object({

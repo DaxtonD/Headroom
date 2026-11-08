@@ -57,6 +57,13 @@ const householdPatch = z
 
 const accountCreate = z.object({ name: z.string().trim().min(1).max(60) }).strict();
 
+const accountPatch = z
+  .object({
+    name: z.string().trim().min(1).max(60).optional(),
+    baseVersion: z.number().int().min(1).optional(),
+  })
+  .strict();
+
 function serialiseSchedule(row: PaySchedule & { user?: { id: string; name: string; initial: string } }) {
   return {
     id: row.id,
@@ -342,6 +349,77 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         });
 
         return { statusCode: 201, body: { account: serialiseAccount(created) } };
+      },
+    });
+
+    return reply.status(result.statusCode).send(result.body);
+  });
+
+  /** Rename the account, since its name is the label on the Home screen. */
+  app.patch<{ Params: { id: string } }>("/accounts/:id", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const parsed = accountPatch.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      throw new HttpError(400, "invalid_request", parsed.error.issues[0]?.message ?? "Could not read that change.");
+    }
+
+    const { baseVersion: _ignored, ...requested } = parsed.data;
+    const changes = Object.fromEntries(
+      Object.entries(requested).filter(([, value]) => value !== undefined),
+    );
+    if (Object.keys(changes).length === 0) {
+      throw new HttpError(400, "nothing_to_change", "That request did not change anything.");
+    }
+
+    const baseVersion = requireBaseVersion(request);
+    const key = requireIdempotencyKey(request);
+
+    const result = await runIdempotent({
+      prisma: app.db.prisma,
+      key,
+      userId: user.id,
+      method: "PATCH",
+      path: `/api/accounts/${request.params.id}`,
+      requestHash: hashRequest("PATCH", `/api/accounts/${request.params.id}`, request.body),
+      ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
+      work: async (tx) => {
+        const existing = await tx.account.findFirst({
+          where: { id: request.params.id, householdId: user.householdId, deletedAt: null },
+        });
+        if (!existing) throw new HttpError(404, "not_found", "That account no longer exists.");
+
+        const applied = await applyVersionedChange<Account>({
+          tx: tx as unknown as PrismaLike,
+          entity: "account",
+          id: existing.id,
+          baseVersion,
+          userId: user.id,
+          householdId: user.householdId,
+          action: "update",
+          changes,
+          readRow: () => tx.account.findUnique({ where: { id: existing.id } }),
+          writeRow: (nextVersion) =>
+            tx.account.update({
+              where: { id: existing.id },
+              data: { ...changes, version: nextVersion, updatedById: user.id, updatedAt: new Date() },
+            }),
+          snapshot: (row) => ({ version: row.version, name: row.name }),
+        });
+
+        await publishChange(tx, {
+          householdId: user.householdId,
+          entity: "account",
+          id: applied.row.id,
+          version: applied.row.version,
+          by: user.id,
+        });
+
+        return {
+          statusCode: 200,
+          body: { account: serialiseAccount(applied.row), merged: applied.merged },
+        };
       },
     });
 

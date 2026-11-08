@@ -288,6 +288,72 @@ export async function registerNetWorthRoutes(app: FastifyInstance): Promise<void
   });
 
   /**
+   * Remove something owned or owed.
+   *
+   * Soft, so a car that was sold or a loan that was paid off stops counting
+   * towards net worth without erasing the figures it used to contribute.
+   */
+  app.delete<{ Params: { id: string } }>("/assets/:id", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const baseVersion = requireBaseVersion(request);
+    const key = requireIdempotencyKey(request);
+
+    const result = await runIdempotent({
+      prisma: app.db.prisma,
+      key,
+      userId: user.id,
+      method: "DELETE",
+      path: `/api/assets/${request.params.id}`,
+      requestHash: hashRequest("DELETE", `/api/assets/${request.params.id}`, {}),
+      ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
+      work: async (tx) => {
+        const existing = await tx.asset.findFirst({
+          where: { id: request.params.id, householdId: user.householdId, deletedAt: null },
+        });
+        if (!existing) throw new HttpError(404, "not_found", "That entry no longer exists.");
+
+        const applied = await applyVersionedChange<Asset>({
+          tx: tx as unknown as PrismaLike,
+          entity: "asset",
+          id: existing.id,
+          baseVersion,
+          userId: user.id,
+          householdId: user.householdId,
+          action: "soft_delete",
+          changes: { deletedAt: new Date().toISOString() },
+          readRow: () => tx.asset.findUnique({ where: { id: existing.id } }),
+          writeRow: (nextVersion) =>
+            tx.asset.update({
+              where: { id: existing.id },
+              data: {
+                deletedAt: new Date(),
+                deletedById: user.id,
+                version: nextVersion,
+                updatedById: user.id,
+                updatedAt: new Date(),
+              },
+            }),
+          snapshot: snapshotAsset,
+        });
+
+        await publishChange(tx, {
+          householdId: user.householdId,
+          entity: "asset",
+          id: applied.row.id,
+          version: applied.row.version,
+          by: user.id,
+        });
+
+        return { statusCode: 200, body: { ok: true } };
+      },
+    });
+
+    return reply.status(result.statusCode).send(result.body);
+  });
+
+  /**
    * The retirement assumptions.
    *
    * A PUT rather than a PATCH: these are read and edited as one set on the
