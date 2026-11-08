@@ -1,15 +1,17 @@
 /**
  * The app shell and routes.
  *
- * Home and Upcoming are built (M2). Pay plan, Budget and Goals land in M3 and
- * M4; their tabs are present and say so rather than being hidden, so the
- * navigation does not change shape as the app fills in.
+ * Every screen in the brief now exists. Net worth is reached from Goals rather
+ * than the tab bar, which is what HANDOFF section 7 asks for.
  */
 import { useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { Shell } from "./components/Shell.js";
 import { UpdateBalanceSheet } from "./components/UpdateBalanceSheet.js";
+import { Budget } from "./pages/Budget.js";
+import { Goals } from "./pages/Goals.js";
 import { Home } from "./pages/Home.js";
+import { NetWorth } from "./pages/NetWorth.js";
 import { PayPlan } from "./pages/PayPlan.js";
 import { Upcoming } from "./pages/Upcoming.js";
 import { useLogout, useSession } from "./lib/session.js";
@@ -68,8 +70,10 @@ export function App(): React.JSX.Element {
         <Route path="/" element={<Home onUpdateBalance={() => setBalanceSheetOpen(true)} />} />
         <Route path="/upcoming" element={<Upcoming canEdit={canEdit} />} />
         <Route path="/pay-plan" element={<PayPlan canEdit={canEdit} />} />
-        <Route path="/budget" element={<ComingSoon title="Budget" milestone="M4" />} />
-        <Route path="/goals" element={<ComingSoon title="Goals" milestone="M4" />} />
+        <Route path="/budget" element={<Budget />} />
+        <Route path="/goals" element={<Goals canEdit={canEdit} />} />
+        {/* Reached from Goals rather than the tab bar, as the brief asks. */}
+        <Route path="/net-worth" element={<NetWorth canEdit={canEdit} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 
@@ -78,16 +82,5 @@ export function App(): React.JSX.Element {
         <UpdateBalanceSheet onClose={() => setBalanceSheetOpen(false)} />
       ) : null}
     </Shell>
-  );
-}
-
-function ComingSoon({ title, milestone }: { title: string; milestone: string }): React.JSX.Element {
-  return (
-    <div className="hr-card coming-soon">
-      <h1 className="coming-soon__title">{title}</h1>
-      <p className="coming-soon__note">
-        Being built in {milestone}. Home and Upcoming are working now.
-      </p>
-    </div>
   );
 }

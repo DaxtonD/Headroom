@@ -112,9 +112,11 @@ function up(origin) {
     `APP_ORIGIN=${origin}`,
     "--env",
     `COOKIE_SECURE=${cookieSecure}`,
-    // Plain http is only allowed outside production, and the app enforces that.
+    // Always development: this is a demo container with invented amounts, and
+    // that stays true however it is served. Only COOKIE_SECURE follows the
+    // scheme, because that is the setting the browser actually acts on.
     "--env",
-    `NODE_ENV=${isHttps ? "production" : "development"}`,
+    "NODE_ENV=development",
     "--env",
     `SESSION_SECRET=${randomBytes(32).toString("hex")}`,
     "--env",

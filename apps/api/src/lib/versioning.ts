@@ -74,19 +74,27 @@ function describeField(field: string): string {
   }
 }
 
-/** Which physical table a lockable entity lives in. */
-const ENTITY_TABLES: Record<string, string> = {
-  occurrence: "occurrence",
-  household: "household",
-  goal: "goal",
-  template: "template",
-  budget_line: "budget_line",
-  asset: "asset",
-  reimbursement: "reimbursement",
-  retirement_settings: "retirement_settings",
-  pay_schedule: "pay_schedule",
-  account: "account",
-  user: "user",
+/**
+ * Which physical table a lockable entity lives in, and the column its primary
+ * key is in.
+ *
+ * Most tables are keyed by `id`, but `retirement_settings` is one row per
+ * household and is keyed by `householdId`. Assuming `id` everywhere made the
+ * lock query fail with `column "id" does not exist` the first time those
+ * settings were edited rather than created.
+ */
+const ENTITY_TABLES: Record<string, { table: string; idColumn: string }> = {
+  occurrence: { table: "occurrence", idColumn: "id" },
+  household: { table: "household", idColumn: "id" },
+  goal: { table: "goal", idColumn: "id" },
+  template: { table: "template", idColumn: "id" },
+  budget_line: { table: "budget_line", idColumn: "id" },
+  asset: { table: "asset", idColumn: "id" },
+  reimbursement: { table: "reimbursement", idColumn: "id" },
+  retirement_settings: { table: "retirement_settings", idColumn: "householdId" },
+  pay_schedule: { table: "pay_schedule", idColumn: "id" },
+  account: { table: "account", idColumn: "id" },
+  user: { table: "user", idColumn: "id" },
 };
 
 /**
@@ -101,12 +109,13 @@ export async function lockRowVersion(
   entity: string,
   id: string,
 ): Promise<number | null> {
-  const table = ENTITY_TABLES[entity];
-  if (!table) throw new Error(`No lockable table registered for entity "${entity}".`);
+  const target = ENTITY_TABLES[entity];
+  if (!target) throw new Error(`No lockable table registered for entity "${entity}".`);
 
-  // The table name comes from the map above, never from user input.
+  // Both the table and the key column come from the map above, never from
+  // user input, so interpolating them is safe.
   const rows = await (tx as unknown as PrismaClient).$queryRawUnsafe<{ version: number }[]>(
-    `SELECT "version" FROM "${table}" WHERE "id" = $1::uuid FOR UPDATE`,
+    `SELECT "version" FROM "${target.table}" WHERE "${target.idColumn}" = $1::uuid FOR UPDATE`,
     id,
   );
 

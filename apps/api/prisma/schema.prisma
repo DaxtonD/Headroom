@@ -112,6 +112,13 @@ model Household {
 
   weekendWithdrawalRule WeekendWithdrawalRule @default(as_scheduled)
 
+  /// Carol's stated net income for the Budget screen (HANDOFF section 4.3).
+  /// The yearly figure is NOT monthly x 12 - hers do not agree exactly, and
+  /// section 14 q2 says to use her numbers as given rather than reconcile
+  /// them. So both are stored, and both are editable.
+  netMonthlyIncomeCents BigInt @default(0)
+  netYearlyIncomeCents  BigInt @default(0)
+
   version     Int       @default(1)
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
   updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
