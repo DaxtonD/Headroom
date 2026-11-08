@@ -1,0 +1,145 @@
+/**
+ * The read endpoints behind Home, Upcoming and Pay plan (HANDOFF section 9).
+ *
+ * Every figure here is computed by `@headroom/core` from stored facts, on this
+ * request. None of it is cached in the database, so there is no way for a
+ * stored total to drift from the facts it came from.
+ *
+ * Amounts leave as strings: the reply serialiser turns every `bigint` into one,
+ * because JSON has no bigint and a `number` would risk precision.
+ */
+import type { FastifyInstance } from "fastify";
+import { HttpError } from "../lib/http.js";
+import { loadOccurrenceDecorations, loadTimelineContext } from "../lib/timelineService.js";
+
+/** How many upcoming automatic withdrawals Home lists. */
+const HOME_AUTO_COUNT = 4;
+
+export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
+  /** Home: the one screen Carol opens several times a day. */
+  app.get("/dashboard", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const context = await loadTimelineContext(app.db.prisma, user.householdId);
+    const { timeline } = context;
+
+    const autoRows = timeline.rows.filter((row) => row.requiresCoverage);
+    const nextAutoIds = autoRows.slice(0, HOME_AUTO_COUNT).map((row) => row.event.id);
+    const decorations = await loadOccurrenceDecorations(app.db.prisma, nextAutoIds);
+
+    return reply.send({
+      today: context.today,
+      horizonEnd: context.horizonEnd,
+      cushionCents: context.cushionCents,
+
+      balance: {
+        cents: context.balance.effectiveCents,
+        // What the user actually typed in, and when, for "Updated today, 9:58 AM".
+        snapshotCents: context.balance.cents,
+        asOf: context.balance.asOf?.toISOString() ?? null,
+        enteredBy: context.balance.enteredBy,
+      },
+
+      // Spending now lowers every later balance, so this is the lowest point
+      // over the whole horizon less the cushion.
+      safeToSpendNowCents: timeline.safeToSpendNowCents,
+      leftThisCycleCents: timeline.leftThisCycleCents,
+      lowest: timeline.lowest,
+
+      coverage: {
+        autoWithdrawalCount: timeline.coverage.autoWithdrawalCount,
+        allCovered: timeline.coverage.allCovered,
+        firstShortfall: timeline.coverage.firstShortfall,
+      },
+
+      estimatesCount: timeline.estimatesCount,
+
+      nextAutoWithdrawals: autoRows.slice(0, HOME_AUTO_COUNT).map((row) => {
+        const decoration = decorations.get(row.event.id);
+        return {
+          id: row.event.id,
+          name: row.event.name,
+          cents: row.event.cents,
+          date: row.effectiveDate,
+          balanceAfterCents: row.runningCents,
+          verified: row.event.verified === true,
+          verifiedBy: decoration?.verifiedBy ?? null,
+          owner: decoration?.owner ?? null,
+          version: decoration?.version ?? 1,
+        };
+      }),
+    });
+  });
+
+  /** Upcoming: the full timeline with a running balance on every line. */
+  app.get<{ Querystring: { until?: string } }>("/timeline", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const until = request.query.until;
+    if (until !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(until)) {
+      throw new HttpError(400, "invalid_request", "`until` must look like 2026-12-02.");
+    }
+
+    const context = await loadTimelineContext(app.db.prisma, user.householdId);
+
+    const rows = until
+      ? context.timeline.rows.filter((row) => row.effectiveDate === null || row.effectiveDate <= until)
+      : context.timeline.rows;
+
+    const decorations = await loadOccurrenceDecorations(
+      app.db.prisma,
+      rows.map((row) => row.event.id),
+    );
+
+    return reply.send({
+      today: context.today,
+      horizonEnd: context.horizonEnd,
+      startBalanceCents: context.timeline.startBalanceCents,
+      leftThisCycleCents: context.timeline.leftThisCycleCents,
+      lowest: context.timeline.lowest,
+      safeToSpendNowCents: context.timeline.safeToSpendNowCents,
+      coverage: context.timeline.coverage,
+      estimatesCount: context.timeline.estimatesCount,
+
+      rows: rows.map((row) => {
+        const decoration = decorations.get(row.event.id);
+        return {
+          id: row.event.id,
+          name: row.event.name,
+          cents: row.event.cents,
+          kind: row.event.kind,
+          placement: row.event.placement,
+          date: row.effectiveDate,
+          // True when this row has its own date, rather than borrowing its
+          // anchor paycheque's. The UI words the two differently.
+          isDated: row.event.placement === "auto",
+          anchorOccurrenceId: row.event.anchorId ?? null,
+          isOneOff: row.event.isOneOff === true,
+          verified: row.event.verified === true,
+          verifiedBy: decoration?.verifiedBy ?? null,
+          verifiedAt: decoration?.verifiedAt?.toISOString() ?? null,
+          owner: decoration?.owner ?? null,
+          requiresCoverage: row.requiresCoverage,
+          runningCents: row.runningCents,
+          version: decoration?.version ?? 1,
+          fromTemplate: decoration?.templateId !== null,
+        };
+      }),
+    });
+  });
+
+  /** Pay plan: the two-week windows. */
+  app.get<{ Querystring: { count?: string } }>("/pay-periods", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const context = await loadTimelineContext(app.db.prisma, user.householdId);
+
+    return reply.send({
+      today: context.today,
+      periods: context.payPeriods,
+    });
+  });
+}

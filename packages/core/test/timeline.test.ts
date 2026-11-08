@@ -273,9 +273,9 @@ describe("effectiveBalance", () => {
   it("is the snapshot plus anything cleared since it was taken", () => {
     // Section 6.1: a cleared bill has already hit the account, so it is added
     // to the typed-in balance and leaves the timeline.
-    expect(effectiveBalance(53_000n, [])).toBe(53_000n);
-    expect(effectiveBalance(53_000n, [-15_000n])).toBe(38_000n);
-    expect(effectiveBalance(53_000n, [-15_000n, 200_000n])).toBe(238_000n);
+    expect(effectiveBalance(41_000n, [])).toBe(41_000n);
+    expect(effectiveBalance(41_000n, [-15_000n])).toBe(26_000n);
+    expect(effectiveBalance(41_000n, [-15_000n, 200_000n])).toBe(226_000n);
   });
 });
 

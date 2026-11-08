@@ -8,9 +8,12 @@
 import { buildApp } from "./app.js";
 import { purgeExpiredSessions } from "./auth/session.js";
 import { createDatabase } from "./db.js";
+import { ChangeStream } from "./lib/changeStream.js";
+import { purgeIdempotencyKeys } from "./lib/idempotency.js";
 import { EnvValidationError, getEnv } from "./env.js";
 
 const SESSION_PURGE_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const IDEMPOTENCY_PURGE_INTERVAL_MS = 60 * 60 * 1000;
 
 async function main(): Promise<void> {
   let env;
@@ -30,16 +33,39 @@ async function main(): Promise<void> {
   process.env.TZ = env.TZ;
 
   const db = createDatabase(env);
-  const app = await buildApp({ env, db });
 
-  const purgeTimer = setInterval(() => {
+  // The change stream owns a dedicated LISTEN connection, so the server owns
+  // its lifecycle rather than the app factory.
+  const changeStream = new ChangeStream(env);
+  const app = await buildApp({ env, db, changeStream });
+
+  // Fastify's logger only exists once the app is built, so hand it over now.
+  changeStream.setLogger({
+    info: (object, message) => app.log.info(object as object, message),
+    warn: (object, message) => app.log.warn(object as object, message),
+    error: (object, message) => app.log.error(object as object, message),
+  });
+
+  await changeStream.start();
+
+  const sessionPurgeTimer = setInterval(() => {
     purgeExpiredSessions(db.prisma)
       .then((count) => {
         if (count > 0) app.log.info({ count }, "purged expired sessions");
       })
       .catch((error: unknown) => app.log.error({ err: error }, "session purge failed"));
   }, SESSION_PURGE_INTERVAL_MS);
-  purgeTimer.unref();
+  sessionPurgeTimer.unref();
+
+  // Idempotency receipts only need to outlive a retry.
+  const keyPurgeTimer = setInterval(() => {
+    purgeIdempotencyKeys(db.prisma, env.IDEMPOTENCY_KEY_TTL_HOURS)
+      .then((count) => {
+        if (count > 0) app.log.info({ count }, "purged idempotency keys");
+      })
+      .catch((error: unknown) => app.log.error({ err: error }, "idempotency purge failed"));
+  }, IDEMPOTENCY_PURGE_INTERVAL_MS);
+  keyPurgeTimer.unref();
 
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
@@ -47,8 +73,10 @@ async function main(): Promise<void> {
     shuttingDown = true;
     app.log.info({ signal }, "shutting down");
 
-    clearInterval(purgeTimer);
+    clearInterval(sessionPurgeTimer);
+    clearInterval(keyPurgeTimer);
     try {
+      await changeStream.stop();
       await app.close();
       await db.close();
       process.exit(0);
@@ -74,6 +102,7 @@ async function main(): Promise<void> {
     );
   } catch (error) {
     app.log.error({ err: error }, "failed to start");
+    await changeStream.stop();
     await db.close();
     process.exit(1);
   }

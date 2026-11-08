@@ -28,7 +28,7 @@ describe("balance_snapshot is insert-only", () => {
     const { account, carol } = await seedHousehold(harness);
 
     await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 53_000n, asOf: new Date(), enteredById: carol.id },
+      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: carol.id },
     });
 
     expect(await harness.db.prisma.balanceSnapshot.count()).toBe(1);
@@ -37,7 +37,7 @@ describe("balance_snapshot is insert-only", () => {
   it("refuses an UPDATE: a correction is a new snapshot", async () => {
     const { account, carol } = await seedHousehold(harness);
     const snapshot = await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 53_000n, asOf: new Date(), enteredById: carol.id },
+      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: carol.id },
     });
 
     await expect(
@@ -50,7 +50,7 @@ describe("balance_snapshot is insert-only", () => {
   it("refuses a DELETE", async () => {
     const { account, carol } = await seedHousehold(harness);
     const snapshot = await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 53_000n, asOf: new Date(), enteredById: carol.id },
+      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: carol.id },
     });
 
     await expect(
@@ -65,10 +65,10 @@ describe("balance_snapshot is insert-only", () => {
     const later = new Date("2026-11-07T18:30:00-06:00");
 
     await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 53_000n, asOf: earlier, enteredById: carol.id },
+      data: { accountId: account.id, cents: 41_000n, asOf: earlier, enteredById: carol.id },
     });
     await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 61_250n, asOf: later, enteredById: carol.id },
+      data: { accountId: account.id, cents: 52_750n, asOf: later, enteredById: carol.id },
     });
 
     const latest = await harness.db.prisma.balanceSnapshot.findFirst({
@@ -76,7 +76,7 @@ describe("balance_snapshot is insert-only", () => {
       orderBy: { asOf: "desc" },
     });
 
-    expect(latest?.cents).toBe(61_250n);
+    expect(latest?.cents).toBe(52_750n);
     // Both rows survive: the history is the audit trail.
     expect(await harness.db.prisma.balanceSnapshot.count()).toBe(2);
   });
@@ -116,7 +116,7 @@ describe("occurrence shape", () => {
       data: {
         householdId: household.id,
         name: "Home insurance",
-        cents: -24_260n,
+        cents: -21_500n,
         kind: "bill",
         withdrawal: "auto",
         date: new Date("2026-11-17"),
@@ -133,7 +133,7 @@ describe("occurrence shape", () => {
       data: {
         householdId: household.id,
         name: "Power",
-        cents: -18_600n,
+        cents: -12_345n,
         kind: "bill",
         withdrawal: "flexible",
       },
@@ -150,7 +150,7 @@ describe("occurrence shape", () => {
         data: {
           householdId: household.id,
           name: "Mortgage",
-          cents: -115_887n,
+          cents: -98_765n,
           kind: "bill",
           withdrawal: "auto",
         },
@@ -166,7 +166,7 @@ describe("occurrence shape", () => {
         data: {
           householdId: household.id,
           name: "Water",
-          cents: -18_000n,
+          cents: -14_400n,
           kind: "bill",
           withdrawal: "flexible",
           date: new Date("2026-11-19"),
@@ -197,7 +197,7 @@ describe("occurrence shape", () => {
       data: {
         householdId: household.id,
         name: "Power",
-        cents: -18_600n,
+        cents: -12_345n,
         kind: "bill",
         withdrawal: "flexible",
       },
@@ -219,7 +219,7 @@ describe("occurrence shape", () => {
         householdId: household.id,
         kind: "bill",
         name: "Power",
-        defaultCents: 18_600n,
+        defaultCents: 12_345n,
         withdrawal: "flexible",
         scheduleType: "flexible",
         scheduleJson: { frequency: "monthly" },
@@ -231,7 +231,7 @@ describe("occurrence shape", () => {
       templateId: template.id,
       periodKey: "2026-11",
       name: "Power",
-      cents: -18_600n,
+      cents: -12_345n,
       kind: "bill" as const,
       withdrawal: "flexible" as const,
     };

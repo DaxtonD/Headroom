@@ -158,6 +158,8 @@ model User {
   paySchedules     PaySchedule[]
   ownedTemplates   Template[]         @relation("templateOwner")
   ownedOccurrences Occurrence[]       @relation("occurrenceOwner")
+  verifiedOccurrences Occurrence[]    @relation("occurrenceVerifier")
+  clearedOccurrences  Occurrence[]    @relation("occurrenceClearer")
   snapshots        BalanceSnapshot[]
   bankedHours      BankedHoursEntry[]
   activities       Activity[]
@@ -318,11 +320,15 @@ model Occurrence {
   deletedAt   DateTime? @db.Timestamptz(6)
   deletedById String?   @db.Uuid
 
-  household Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  template  Template?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  owner     User?        @relation("occurrenceOwner", fields: [ownerUserId], references: [id])
-  anchor    Occurrence?  @relation("anchorChildren", fields: [anchorOccurrenceId], references: [id], onDelete: SetNull)
-  anchored  Occurrence[] @relation("anchorChildren")
+  household  Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  template   Template?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  owner      User?        @relation("occurrenceOwner", fields: [ownerUserId], references: [id])
+  // Who entered the real amount, and who marked it paid. The other person has
+  // to be able to see this clearly (HANDOFF section 5 rule 5).
+  verifiedBy User?        @relation("occurrenceVerifier", fields: [verifiedById], references: [id])
+  clearedBy  User?        @relation("occurrenceClearer", fields: [clearedById], references: [id])
+  anchor     Occurrence?  @relation("anchorChildren", fields: [anchorOccurrenceId], references: [id], onDelete: SetNull)
+  anchored   Occurrence[] @relation("anchorChildren")
 
   @@unique([templateId, periodKey], name: "template_period_unique")
   @@index([householdId, date])

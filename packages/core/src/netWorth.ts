@@ -19,9 +19,9 @@ import type { AssetInput, NetWorthResult, RetirementInputs, RetirementResult } f
 /**
  * Own minus owe.
  *
- * Both lists hold positive magnitudes: a liability of $170,701 is stored as
- * `17070100n`, not as a negative. That matches how the sheet lists them and
- * how the UI shows "own" and "owe" side by side.
+ * Both lists hold positive magnitudes: a liability of $1,234.56 is stored as
+ * `123456n`, not as a negative. That matches how the sheet lists them and how
+ * the UI shows "own" and "owe" side by side.
  */
 export function computeNetWorth(options: {
   readonly assets: readonly AssetInput[];

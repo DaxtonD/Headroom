@@ -86,10 +86,10 @@ describe("computeBudget", () => {
 
 describe("computeGoal", () => {
   it("reports what is left and how far along it is", () => {
-    const goal = computeGoal({ name: "Trip fund", targetCents: 600_000n, savedCents: 500_000n });
+    const goal = computeGoal({ name: "Saving up", targetCents: 240_000n, savedCents: 180_000n });
 
-    expect(goal.remainingCents).toBe(100_000n);
-    expect(goal.pct).toBe(83.3);
+    expect(goal.remainingCents).toBe(60_000n);
+    expect(goal.pct).toBe(75);
   });
 
   it("handles a goal already met, and one overshot", () => {

@@ -16,10 +16,16 @@ import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import type { Database } from "./db.js";
 import type { Env } from "./env.js";
 import { registerAuthRoutes } from "./routes/auth.js";
+import { registerBalanceRoutes } from "./routes/balance.js";
+import { registerEventRoutes } from "./routes/events.js";
+import { registerOccurrenceRoutes } from "./routes/occurrences.js";
+import { registerViewRoutes } from "./routes/views.js";
 import { registerHealthRoutes } from "./routes/health.js";
 import { registerWebApp } from "./routes/web.js";
 import { resolveSessionUser, type SessionUser } from "./auth/session.js";
+import { HttpError } from "./lib/http.js";
 import { LoginThrottle } from "./auth/loginThrottle.js";
+import { ChangeStream } from "./lib/changeStream.js";
 
 declare module "fastify" {
   interface FastifyRequest {
@@ -31,12 +37,20 @@ declare module "fastify" {
     db: Database;
     /** Counts FAILED sign-in attempts per IP; a success clears the record. */
     loginThrottle: LoginThrottle;
+    /** Relays Postgres change notifications to connected clients over SSE. */
+    changeStream: ChangeStream;
   }
 }
 
 export interface BuildAppOptions {
   readonly env: Env;
   readonly db: Database;
+  /**
+   * Supplied by the server so it owns the lifecycle. Tests pass one that is
+   * never started, since they drive the app with `inject` rather than over a
+   * socket.
+   */
+  readonly changeStream?: ChangeStream;
 }
 
 /** True when pino-pretty is installed, which it is not in the production image. */
@@ -59,7 +73,7 @@ function jsonReplacer(_key: string, value: unknown): unknown {
   return typeof value === "bigint" ? value.toString() : value;
 }
 
-export async function buildApp({ env, db }: BuildAppOptions): Promise<FastifyInstance> {
+export async function buildApp({ env, db, changeStream }: BuildAppOptions): Promise<FastifyInstance> {
   const app = Fastify({
     logger: {
       level: env.LOG_LEVEL,
@@ -89,6 +103,9 @@ export async function buildApp({ env, db }: BuildAppOptions): Promise<FastifyIns
   app.decorate("env", env);
   app.decorate("db", db);
   app.decorate("loginThrottle", new LoginThrottle({ maxFailures: env.LOGIN_RATE_LIMIT }));
+  // Tests pass no stream and get an inert one: nothing calls start(), so no
+  // LISTEN connection is opened and publishes simply reach no subscribers.
+  app.decorate("changeStream", changeStream ?? new ChangeStream(env));
   app.decorateRequest("user", undefined);
 
   // setReplySerializer, not setSerializerCompiler: the latter only applies to
@@ -133,15 +150,26 @@ export async function buildApp({ env, db }: BuildAppOptions): Promise<FastifyIns
     }
 
     request.log.info({ err: error.message, statusCode }, "request rejected");
+
+    // A 409 carries what the UI needs to offer "Keep theirs" or "Use mine":
+    // the current row, which fields clashed, and who changed them. Dropping
+    // the details would leave the client with nothing to show.
+    const details = error instanceof HttpError ? error.details : undefined;
+
     return reply.status(statusCode).send({
       error: error.code ?? "request_error",
       message: error.message,
       requestId: request.id,
+      ...(details ?? {}),
     });
   });
 
   await app.register(registerHealthRoutes, { prefix: "/api" });
   await app.register(registerAuthRoutes, { prefix: "/api" });
+  await app.register(registerViewRoutes, { prefix: "/api" });
+  await app.register(registerOccurrenceRoutes, { prefix: "/api" });
+  await app.register(registerBalanceRoutes, { prefix: "/api" });
+  await app.register(registerEventRoutes, { prefix: "/api" });
 
   // Serve the built web app last, so /api always wins.
   const web = await registerWebApp(app, env);
