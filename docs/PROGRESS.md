@@ -12,7 +12,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | M0 Scaffold, CI, login, compose | done | m0 | Verified end-to-end in the built image: migrations, login, app shell |
 | M1 Calculation engine + golden tests | done | m1 | Reproduces every expected value in BOTH the real seed and the synthetic fixture |
 | M2 Home + Upcoming + integrity layer | done | m2 | All section 16.8 integrity tests pass against a real Postgres |
-| M3 Recurrence + Pay plan | engine + API done | | **Pay plan screen not built yet** - see "Next session" |
+| M3 Recurrence + Pay plan | done | m3 | Generation never undoes an edit; flexible bills move between periods |
 | M4 Budget, Goals, Net worth | not started | | Engine side is already done and golden-tested |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
@@ -39,17 +39,13 @@ Claude Code updates this file at the end of every milestone and every work sessi
 ## Next session: start here
 
 1. Read this file, then `CLAUDE.md`, then `docs/HANDOFF.md` (local only, git-ignored).
-2. `pnpm install` and `node scripts/testdb.mjs up`, then `pnpm test` to confirm 331 green.
-3. **Finish M3**: build the Pay plan screen (HANDOFF section 7.3). Everything it needs exists:
-   - `GET /api/pay-periods` returns the dated two-week windows with in / auto / flexible / left
-     over and the lowest balance inside each; `usePayPeriods()` in `apps/web/src/lib/queries.ts`
-     already parses it.
-   - Moving a flexible bill between periods is `PATCH /api/occurrences/:id` with
-     `anchorOccurrenceId`, which `usePatchOccurrence()` already does and the Upcoming screen
-     already uses. The brief asks for drag handles on desktop and move buttons on the phone;
-     `OccurrenceRow` has the move buttons already, so Pay plan can reuse the same mutation.
-   - Then tag `m3`.
-4. Then M4, M5, M6 in order.
+2. `pnpm install` and `node scripts/testdb.mjs up`, then `pnpm test`.
+3. **M4 next**: Budget, Goals, Net worth and the editable retirement assumptions.
+   The calculation side is already finished and golden-tested against both seeds, so this is
+   screens plus CRUD routes - `computeBudget`, `computeGoals`, `computeReimbursements`,
+   `sumBankedHours`, `computeNetWorth` and `computeRetirement` all exist and are exported.
+4. Then M5 (PWA, desktop polish, accessibility pass) and M6 (backups, `import-seed`, GHCR,
+   finish `docs/DEPLOY.md`).
 
 ### A running demo exists
 
@@ -77,9 +73,32 @@ The built image was run against an empty database and checked end to end:
 - sign-in worked, the cookie is `HttpOnly` and signed, `/api/me` returned both members, and a wrong password returned 401;
 - starting the image with an incomplete configuration exits 78 and names the missing variable.
 
+## Known environment quirk: the phone cannot reach the dev machine over the LAN
+
+Chased at length on 2026-11-08. Worth not repeating: **the development machine is not the
+problem.** Windows Firewall is disabled on all profiles, routing is clean, the Privado
+WireGuard tunnel service is stopped with no addresses or routes, and the app listens on
+`0.0.0.0`. A plain `node.exe` listener on another port behaved identically, so it is not
+Docker-specific either.
+
+Measured facts: the phone (192.168.2.106, same /24 as the PC at 192.168.2.105) produced
+**zero** inbound TCP connections at a test listener, and the PC cannot ping even its own
+default gateway despite having working internet - so ICMP is filtered locally and any
+ping-based evidence is worthless here.
+
+Remaining candidates are wireless-to-wired isolation on the router, or an inbound filter on
+the PC (Bitdefender's Network Threat Prevention is present in every tier, not just the ones
+with a firewall). The test that separates them is a `curl` from the wired Unraid box to
+`http://192.168.2.105:8484/api/health`, which is also the first step of the Nginx Proxy
+Manager route. `docs/DEPLOY.md` has the ordered checklist and the proxy settings.
+
+Note that the PWA parts will need real HTTPS regardless: browsers only treat `localhost` as a
+secure context, never a LAN IP.
+
 ## Bugs caught before deploy (all fixed)
 
-Worth recording, because each would have been invisible until it mattered:
+Worth recording, because each would have been invisible until it mattered. Number 9 reached
+Dax in the running app rather than being caught here, which is the one that matters most:
 
 1. **Two not-found handlers.** Fastify allows one per prefix, so the app could not start at all. A single handler now decides both the API 404 and the single-page-app fallback.
 2. **A global `pg` int8 type parser.** Added so raw queries would return `BigInt`; it broke *every* Prisma write, because Prisma's driver adapter relies on the driver's default and converts the value itself. Removed, with a note so it is not re-added.
@@ -88,6 +107,15 @@ Worth recording, because each would have been invisible until it mattered:
 5. **`pino-pretty` in the production image.** `NODE_ENV=development` against the built image crashed at startup, because the pretty transport is a dev dependency. Pretty logging is now used only when the module is actually present.
 6. **Asset cache headers did nothing.** `@fastify/static` sets its own `cache-control` and overrode them, and the pattern looked for `.hash.js` while Vite emits `name-HASH.js`. Both fixed, then verified against the running container.
 7. **A pinned base image tag that did not exist** (`node:22.23.4-alpine3.22`). Now `node:22.23.4-alpine`.
+9. **A bill saved as 100x its amount** - found by Dax, not by the tests. Typing 186 stored
+   $18,600. The amount was converted twice: the web app turned "186" into 18600 cents and
+   sent `"-18600"`, and the API ran `parseCents` over that again and read it as dollars.
+   Both sides had passing tests; neither crossed the seam between them, because the API's
+   tests sent dollar strings while the client sent cents. Fixed by making integer cents the
+   only wire format (`apps/api/src/lib/wire.ts`), refusing a decimal outright rather than
+   guessing, and adding `apps/api/test/wire.test.ts`, which follows an amount all the way
+   round - typed, sent, stored, read back, formatted - through the same engine functions the
+   UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
 
 ## Working agreements with Dax (this build is NOT autonomous)
