@@ -73,27 +73,26 @@ The built image was run against an empty database and checked end to end:
 - sign-in worked, the cookie is `HttpOnly` and signed, `/api/me` returned both members, and a wrong password returned 401;
 - starting the image with an incomplete configuration exits 78 and names the missing variable.
 
-## Known environment quirk: the phone cannot reach the dev machine over the LAN
+## Resolved: the phone could not reach the dev machine over the LAN
 
-Chased at length on 2026-11-08. Worth not repeating: **the development machine is not the
-problem.** Windows Firewall is disabled on all profiles, routing is clean, the Privado
-WireGuard tunnel service is stopped with no addresses or routes, and the app listens on
-`0.0.0.0`. A plain `node.exe` listener on another port behaved identically, so it is not
-Docker-specific either.
+Chased at length on 2026-11-08 and settled. **The development machine was never the problem**:
+Windows Firewall is disabled on all profiles, routing is clean, the Privado WireGuard tunnel
+service is stopped with no addresses or routes, and the app listens on `0.0.0.0`. A plain
+`node.exe` listener on another port behaved identically, so it was not Docker-specific either.
 
-Measured facts: the phone (192.168.2.106, same /24 as the PC at 192.168.2.105) produced
-**zero** inbound TCP connections at a test listener, and the PC cannot ping even its own
-default gateway despite having working internet - so ICMP is filtered locally and any
-ping-based evidence is worthless here.
+The cause was **wireless-to-wired isolation on the router**: the phone, on wifi, could not reach
+the PC, which is on wired Ethernet. Confirmed by the Nginx Proxy Manager route working from the
+wired Unraid box immediately.
 
-Remaining candidates are wireless-to-wired isolation on the router, or an inbound filter on
-the PC (Bitdefender's Network Threat Prevention is present in every tier, not just the ones
-with a firewall). The test that separates them is a `curl` from the wired Unraid box to
-`http://192.168.2.105:8484/api/health`, which is also the first step of the Nginx Proxy
-Manager route. `docs/DEPLOY.md` has the ordered checklist and the proxy settings.
+Two things learned worth keeping:
 
-Note that the PWA parts will need real HTTPS regardless: browsers only treat `localhost` as a
-secure context, never a LAN IP.
+- The PC cannot ping even its own default gateway while having working internet, so ICMP is
+  filtered locally and **ping and ARP evidence is worthless on this machine**. Use a real TCP
+  listener and check whether connections arrive.
+- Browsers only treat `localhost` as a secure context, never a LAN IP, so the PWA parts need
+  real HTTPS regardless. The domain through NPM is the way to test those.
+
+`docs/DEPLOY.md` has the proxy-host settings and the SSE-through-a-proxy notes.
 
 ## Bugs caught before deploy (all fixed)
 
