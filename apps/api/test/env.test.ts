@@ -63,13 +63,63 @@ describe("parseEnv", () => {
     expect(() => parseEnv(validEnv({ DATABASE_URL: "not a url" }))).toThrow(EnvValidationError);
   });
 
-  it("requires HTTPS for the origin, because the PWA and cookies depend on it", () => {
+  it("requires HTTPS for a public origin, because the PWA and cookies depend on it", () => {
     expect(() => parseEnv(validEnv({ APP_ORIGIN: "http://headroom.example.com" }))).toThrow(
       EnvValidationError,
     );
     expect(() => parseEnv(validEnv({ APP_ORIGIN: "headroom.example.com" }))).toThrow(
       EnvValidationError,
     );
+    expect(() => parseEnv(validEnv({ APP_ORIGIN: "ftp://headroom.example.com" }))).toThrow(
+      EnvValidationError,
+    );
+  });
+
+  it("allows plain http on the house network, for testing on a phone", () => {
+    // Browsers do not treat these as secure contexts, so the PWA parts will
+    // not work, but the app itself is perfectly usable for development.
+    for (const origin of [
+      "http://192.168.2.105:8484",
+      "http://10.0.0.5:8484",
+      "http://172.16.4.2:8484",
+      "http://172.31.255.1:8484",
+      "http://169.254.1.1:8484",
+      "http://daxpc.local:8484",
+    ]) {
+      const env = parseEnv(
+        validEnv({ APP_ORIGIN: origin, COOKIE_SECURE: "false", NODE_ENV: "development" }),
+      );
+      expect(env.APP_ORIGIN, origin).toBe(origin);
+    }
+  });
+
+  it("does not mistake a public address for a private one", () => {
+    for (const origin of [
+      // Just outside 172.16.0.0/12 on either side.
+      "http://172.15.0.1:8484",
+      "http://172.32.0.1:8484",
+      // Looks private but is not.
+      "http://11.0.0.1:8484",
+      "http://192.169.0.1:8484",
+      // Not a valid address at all.
+      "http://999.1.1.1:8484",
+    ]) {
+      expect(
+        () => parseEnv(validEnv({ APP_ORIGIN: origin, COOKIE_SECURE: "false", NODE_ENV: "development" })),
+        origin,
+      ).toThrow(EnvValidationError);
+    }
+  });
+
+  it("refuses plain http in production, however private the address looks", () => {
+    // Household finances in clear text is not a trade-off worth offering.
+    expect(() =>
+      parseEnv(validEnv({ APP_ORIGIN: "http://192.168.2.105:8484", NODE_ENV: "production" })),
+    ).toThrow(/must be HTTPS in production/);
+
+    expect(() =>
+      parseEnv(validEnv({ APP_ORIGIN: "http://localhost:8484", NODE_ENV: "production" })),
+    ).toThrow(/must be HTTPS in production/);
   });
 
   it("allows plain http on localhost, which browsers treat as secure", () => {

@@ -96,12 +96,12 @@ describe("two people change the SAME field from the same version", () => {
     const bill = await makeBill(-12_345n);
 
     // Carol verifies it at her figure.
-    const first = await patch(carolCookie, bill.id, { cents: "140.00" }, { baseVersion: 1 });
+    const first = await patch(carolCookie, bill.id, { cents: "14000" }, { baseVersion: 1 });
     expect(first.statusCode).toBe(200);
     expect(first.json().occurrence.version).toBe(2);
 
     // Dax was looking at version 1 and types a different amount.
-    const second = await patch(daxCookie, bill.id, { cents: "155.00" }, { baseVersion: 1 });
+    const second = await patch(daxCookie, bill.id, { cents: "15500" }, { baseVersion: 1 });
 
     expect(second.statusCode).toBe(409);
     const body = second.json();
@@ -109,6 +109,7 @@ describe("two people change the SAME field from the same version", () => {
     expect(body.changedFields).toEqual(["cents"]);
     expect(body.changedBy.name).toBe("Carol");
     // The current value is returned so the UI can offer "Keep $140.00".
+    // Integer cents on the wire: $140.00 is "14000".
     expect(body.current.cents).toBe("14000");
     expect(body.changedAt).toBeDefined();
     // The version that won, so "Use mine" can be resent without a refetch.
@@ -118,8 +119,8 @@ describe("two people change the SAME field from the same version", () => {
   it("does not apply the losing change", async () => {
     const bill = await makeBill(-12_345n);
 
-    await patch(carolCookie, bill.id, { cents: "140.00" }, { baseVersion: 1 });
-    await patch(daxCookie, bill.id, { cents: "155.00" }, { baseVersion: 1 });
+    await patch(carolCookie, bill.id, { cents: "14000" }, { baseVersion: 1 });
+    await patch(daxCookie, bill.id, { cents: "15500" }, { baseVersion: 1 });
 
     const row = await harness.db.prisma.occurrence.findUniqueOrThrow({ where: { id: bill.id } });
     expect(row.cents).toBe(14_000n);
@@ -129,13 +130,13 @@ describe("two people change the SAME field from the same version", () => {
   it("lets the loser retry against the new version, and logs the override", async () => {
     const bill = await makeBill(-12_345n);
 
-    await patch(carolCookie, bill.id, { cents: "140.00", verified: true }, { baseVersion: 1 });
+    await patch(carolCookie, bill.id, { cents: "14000", verified: true }, { baseVersion: 1 });
 
-    // "Use $155.00": resent against version 2, which also un-verifies it.
+    // "Use $155.00" (sent as 15500 cents): resent against version 2, which also un-verifies it.
     const override = await patch(
       daxCookie,
       bill.id,
-      { cents: "155.00", verified: false },
+      { cents: "15500", verified: false },
       { baseVersion: 2 },
     );
     expect(override.statusCode).toBe(200);
@@ -157,7 +158,7 @@ describe("two people change the SAME field from the same version", () => {
 
   it("refuses a version that is ahead of the row", async () => {
     const bill = await makeBill(-12_345n);
-    const response = await patch(carolCookie, bill.id, { cents: "1.00" }, { baseVersion: 99 });
+    const response = await patch(carolCookie, bill.id, { cents: "100" }, { baseVersion: 99 });
 
     expect(response.statusCode).toBe(409);
     expect(response.json().error).toBe("version_ahead");
@@ -235,7 +236,7 @@ describe("idempotency", () => {
   it("applies the same key three times once, with identical responses", async () => {
     const bill = await makeBill(-12_345n);
     const key = randomUUID();
-    const body = { cents: "131.50" };
+    const body = { cents: "13150" };
 
     const first = await patch(carolCookie, bill.id, body, { baseVersion: 1, key });
     const second = await patch(carolCookie, bill.id, body, { baseVersion: 1, key });
@@ -264,10 +265,10 @@ describe("idempotency", () => {
     const bill = await makeBill(-12_345n);
     const key = randomUUID();
 
-    const first = await patch(carolCookie, bill.id, { cents: "131.50" }, { baseVersion: 1, key });
+    const first = await patch(carolCookie, bill.id, { cents: "13150" }, { baseVersion: 1, key });
     expect(first.statusCode).toBe(200);
 
-    const reused = await patch(carolCookie, bill.id, { cents: "999.99" }, { baseVersion: 1, key });
+    const reused = await patch(carolCookie, bill.id, { cents: "99999" }, { baseVersion: 1, key });
     expect(reused.statusCode).toBe(422);
     expect(reused.json().error).toBe("idempotency_key_reused");
 
@@ -278,7 +279,7 @@ describe("idempotency", () => {
 
   it("creates a one-off once however many times the tap is repeated", async () => {
     const key = randomUUID();
-    const payload = { name: "Christmas bonus", cents: "275.00", kind: "deposit" as const };
+    const payload = { name: "Christmas bonus", cents: "27500", kind: "deposit" as const };
 
     const responses = await Promise.all(
       [1, 2, 3].map(() =>
@@ -306,7 +307,7 @@ describe("idempotency", () => {
       method: "PATCH",
       url: `/api/occurrences/${bill.id}`,
       headers: { cookie: carolCookie, "if-match": '"1"' },
-      payload: { cents: "1.00" },
+      payload: { cents: "100" },
     });
 
     expect(response.statusCode).toBe(400);
@@ -320,7 +321,7 @@ describe("idempotency", () => {
       method: "PATCH",
       url: `/api/occurrences/${bill.id}`,
       headers: { cookie: carolCookie, "if-match": '"1"', "idempotency-key": "not-a-uuid" },
-      payload: { cents: "1.00" },
+      payload: { cents: "100" },
     });
 
     expect(response.statusCode).toBe(400);
@@ -330,7 +331,7 @@ describe("idempotency", () => {
   it("survives the same key arriving twice at once", async () => {
     const bill = await makeBill(-12_345n);
     const key = randomUUID();
-    const body = { cents: "131.50" };
+    const body = { cents: "13150" };
 
     // Both in flight together: one wins the primary key, the other replays it.
     const [a, b] = await Promise.all([
@@ -437,7 +438,7 @@ describe("balance snapshots", () => {
       method: "POST",
       url: "/api/balance",
       headers: { cookie: carolCookie, "idempotency-key": randomUUID() },
-      payload: { cents: "410.00", clearedOccurrenceIds: [bill.id] },
+      payload: { cents: "41000", clearedOccurrenceIds: [bill.id] },
     });
 
     expect(response.statusCode).toBe(201);
@@ -454,7 +455,7 @@ describe("balance snapshots", () => {
       method: "POST",
       url: "/api/balance",
       headers: { cookie: carolCookie, "idempotency-key": randomUUID() },
-      payload: { cents: "410.00" },
+      payload: { cents: "41000" },
     });
     expect(first.statusCode).toBe(201);
     const snapshotId = first.json().snapshot.id;
@@ -472,7 +473,7 @@ describe("balance snapshots", () => {
       method: "POST",
       url: "/api/balance",
       headers: { cookie: carolCookie, "idempotency-key": randomUUID() },
-      payload: { cents: "527.50" },
+      payload: { cents: "52750" },
     });
     expect(corrected.statusCode).toBe(201);
 
@@ -480,7 +481,8 @@ describe("balance snapshots", () => {
   });
 
   it("makes the derived balance follow the latest snapshot", async () => {
-    for (const cents of ["410.00", "527.50"]) {
+    // Integer cents on the wire: $410.00 then a correction to $527.50.
+    for (const cents of ["41000", "52750"]) {
       await harness.app.inject({
         method: "POST",
         url: "/api/balance",
@@ -501,7 +503,7 @@ describe("balance snapshots", () => {
       method: "POST",
       url: "/api/balance",
       headers: { cookie: carolCookie, "idempotency-key": randomUUID() },
-      payload: { cents: "410.00" },
+      payload: { cents: "41000" },
     });
 
     const bill = await makeBill(-15_000n);
@@ -534,7 +536,7 @@ describe("If-Match", () => {
   it("returns 428 when a change does not say which version it saw", async () => {
     const bill = await makeBill(-12_345n);
 
-    const response = await patch(carolCookie, bill.id, { cents: "1.00" }, { omitIfMatch: true });
+    const response = await patch(carolCookie, bill.id, { cents: "100" }, { omitIfMatch: true });
 
     expect(response.statusCode).toBe(428);
     expect(response.json().error).toBe("version_required");
@@ -547,7 +549,7 @@ describe("If-Match", () => {
       method: "PATCH",
       url: `/api/occurrences/${bill.id}`,
       headers: { cookie: carolCookie, "idempotency-key": randomUUID() },
-      payload: { cents: "1.00", baseVersion: 1 },
+      payload: { cents: "100", baseVersion: 1 },
     });
 
     expect(response.statusCode).toBe(200);
@@ -560,7 +562,7 @@ describe("If-Match", () => {
       method: "PATCH",
       url: `/api/occurrences/${bill.id}`,
       headers: { cookie: carolCookie, "idempotency-key": randomUUID(), "if-match": "*" },
-      payload: { cents: "1.00" },
+      payload: { cents: "100" },
     });
 
     expect(response.statusCode).toBe(428);
@@ -655,7 +657,7 @@ describe("household isolation", () => {
       },
     });
 
-    const response = await patch(carolCookie, otherBill.id, { cents: "1.00" }, { baseVersion: 1 });
+    const response = await patch(carolCookie, otherBill.id, { cents: "100" }, { baseVersion: 1 });
     expect(response.statusCode).toBe(404);
 
     const untouched = await harness.db.prisma.occurrence.findUniqueOrThrow({
@@ -682,7 +684,7 @@ describe("household isolation", () => {
       method: "PATCH",
       url: `/api/occurrences/${bill.id}`,
       headers: { "if-match": '"1"', "idempotency-key": randomUUID() },
-      payload: { cents: "1.00" },
+      payload: { cents: "100" },
     });
     expect(write.statusCode).toBe(401);
   });

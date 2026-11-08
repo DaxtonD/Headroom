@@ -406,7 +406,7 @@ describe("editing changes the derived numbers immediately", () => {
       method: "PATCH",
       url: `/api/occurrences/${ids.insurance.id}`,
       headers: { cookie, "if-match": '"1"', "idempotency-key": randomUUID() },
-      payload: { cents: "-310.00" },
+      payload: { cents: "-31000" },
     });
     expect(patched.statusCode).toBe(200);
 

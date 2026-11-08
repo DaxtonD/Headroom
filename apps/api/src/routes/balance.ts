@@ -12,7 +12,6 @@
  * (section 16.1 rule 8), so the balance can never be recorded without the
  * clearings it was counted against.
  */
-import { parseCents } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
@@ -20,23 +19,12 @@ import { HttpError, hashRequest, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { logCreation, type PrismaLike } from "../lib/versioning.js";
 import { loadTimelineContext } from "../lib/timelineService.js";
+import { wireCentsNonNegative } from "../lib/wire.js";
 
 const body = z
   .object({
-    cents: z.union([
-      z.string().transform((value, ctx) => {
-        try {
-          return parseCents(value);
-        } catch (error) {
-          ctx.addIssue({
-            code: "custom",
-            message: error instanceof Error ? error.message : "That is not an amount.",
-          });
-          return z.NEVER;
-        }
-      }),
-      z.number().int().transform((value) => BigInt(value)),
-    ]),
+    // Integer cents, as a string. See lib/wire.ts.
+    cents: wireCentsNonNegative,
     /** Anything the user ticked as having cleared since the last update. */
     clearedOccurrenceIds: z.array(z.string().uuid()).max(200).optional(),
     note: z.string().trim().max(200).optional(),

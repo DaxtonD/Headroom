@@ -285,7 +285,7 @@ describe("POST /api/templates/generate", () => {
       method: "PATCH",
       url: `/api/occurrences/${occurrence.id}`,
       headers: { cookie, "if-match": `"${occurrence.version}"`, "idempotency-key": randomUUID() },
-      payload: { cents: "-1012.40", verified: true },
+      payload: { cents: "-101240", verified: true },
     });
     expect(patched.statusCode).toBe(200);
 

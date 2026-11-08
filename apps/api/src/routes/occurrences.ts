@@ -14,31 +14,21 @@
  * and repeating one that is already true is a no-op that returns the current
  * state (section 16.1 rule 6).
  */
-import { parseCents } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
+import { wireCents } from "../lib/wire.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
 import { fromPlainDate, toPlainDate } from "../lib/timelineService.js";
 import type { ActivityAction, Occurrence } from "../generated/prisma/client.js";
 
-/** Cents arrive as a string, because JSON has no bigint. */
-const centsSchema = z.union([
-  z.string().transform((value, ctx) => {
-    try {
-      return parseCents(value);
-    } catch (error) {
-      ctx.addIssue({
-        code: "custom",
-        message: error instanceof Error ? error.message : "That is not an amount.",
-      });
-      return z.NEVER;
-    }
-  }),
-  z.number().int().transform((value) => BigInt(value)),
-]);
+/**
+ * Amounts arrive as integer cents in a string. See `lib/wire.ts` - parsing a
+ * human-typed decimal is the UI's job, not this route's.
+ */
+const centsSchema = wireCents;
 
 const plainDateSchema = z
   .string()

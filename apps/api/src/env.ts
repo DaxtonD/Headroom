@@ -57,6 +57,54 @@ const intInRange = (min: number, max: number, defaultValue?: number) =>
       return parsed;
     });
 
+/**
+ * Loopback: the browser treats this as a secure context, so everything
+ * including service workers works over plain http.
+ */
+function isLoopbackHost(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "[::1]" || hostname === "::1";
+}
+
+/**
+ * A private network address, for testing on a phone over the house wifi.
+ *
+ * Browsers do NOT treat these as secure contexts, so a service worker, the
+ * install prompt and Web Push will not work here - only localhost gets that
+ * exemption. Real use needs HTTPS, which `docs/DEPLOY.md` covers via Tailscale
+ * or the reverse proxy (HANDOFF section 11).
+ */
+function isPrivateNetworkHost(hostname: string): boolean {
+  // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, and 169.254.0.0/16 link-local.
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+  if (match) {
+    const octets = match.slice(1, 5).map(Number);
+    const [a, b] = octets as [number, number, number, number];
+    if (octets.some((octet) => octet > 255)) return false;
+    if (a === 10) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+    return false;
+  }
+  // mDNS names, e.g. a machine advertised as "daxpc.local".
+  return hostname.endsWith(".local");
+}
+
+/** HTTPS anywhere, or plain http on a host the developer clearly controls. */
+function isAcceptableOrigin(value: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    return false;
+  }
+
+  if (url.protocol === "https:") return true;
+  if (url.protocol !== "http:") return false;
+
+  return isLoopbackHost(url.hostname) || isPrivateNetworkHost(url.hostname);
+}
+
 const envSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("production"),
 
@@ -65,20 +113,10 @@ const envSchema = z.object({
    * depend on it, so it must be the real origin, not a guess.
    */
   APP_ORIGIN: notPlaceholder("APP_ORIGIN").pipe(
-    z.string().refine(
-      (value) => {
-        try {
-          const url = new URL(value);
-          return url.protocol === "https:" || url.hostname === "localhost" || url.hostname === "127.0.0.1";
-        } catch {
-          return false;
-        }
-      },
-      {
-        message:
-          "must be a full URL, and HTTPS unless it is localhost (service workers and install prompts require HTTPS).",
-      },
-    ),
+    z.string().refine((value) => isAcceptableOrigin(value), {
+      message:
+        "must be a full URL. HTTPS is required, except on localhost or a private network address (192.168.x.x, 10.x.x.x, 172.16-31.x.x), which is allowed for development only.",
+    }),
   ),
 
   /** Port inside the container. The host mapping lives in docker-compose.yml. */
@@ -157,6 +195,15 @@ export function parseEnv(source: NodeJS.ProcessEnv): Env {
 
   const env = result.data;
   const extraProblems: string[] = [];
+
+  // Plain http is a development convenience only. In production this is
+  // household financial data over the wire in clear text, and the PWA would
+  // not work either, so it is refused outright.
+  if (env.NODE_ENV === "production" && !env.APP_ORIGIN.startsWith("https://")) {
+    extraProblems.push(
+      `APP_ORIGIN must be HTTPS in production; received "${env.APP_ORIGIN}". Plain http is allowed only for local and private-network development. See docs/DEPLOY.md for the Tailscale and reverse-proxy routes.`,
+    );
+  }
 
   // A Secure cookie over plain http never reaches the browser, so the app
   // would look broken rather than insecure. Catch it at startup instead.
