@@ -4,7 +4,7 @@
  * Something bought on the card for work: it leaves the chequing account now
  * and comes back later, so it is tracked separately from a bill. Only the
  * creation is here — moving it along to "submitted" and "paid back" happens on
- * the Goals screen, where the whole trail is visible.
+ * the Savings screen, where the whole trail is visible.
  */
 import { formatCents, parseCents } from "@headroom/core";
 import { useId, useState } from "react";

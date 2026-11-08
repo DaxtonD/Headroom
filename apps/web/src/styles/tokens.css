@@ -28,6 +28,16 @@
   --hr-primary: #0f6b55;
   --hr-primary-hover: #0c5745;
   --hr-positive: #0f5f4c;
+  /*
+   * Bad news. 6.5:1 on white, so it reads as text and not only as decoration.
+   *
+   * It was referenced by the destructive button and the Year screen's squeeze
+   * months before it was ever defined, which meant `border: 1px solid
+   * var(--hr-negative)` was an invalid declaration and the button had no
+   * border and no colour at all. css-tokens.test.ts now fails on a token used
+   * and not defined.
+   */
+  --hr-negative: #b3261e;
   --hr-green-tint: #d7ebe3;
   --hr-green-tint-soft: #e3f1eb;
   --hr-payday-row: #eef6f2;

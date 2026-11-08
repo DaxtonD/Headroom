@@ -46,9 +46,11 @@ const apiSource = filesUnder(API_SRC, [".ts"])
 describe("every mutation hook is reachable from the interface", () => {
   // The query layer's whole purpose is to be called by a component. A hook
   // nobody calls is a feature nobody can use.
-  const queryLayerFiles = webFiles.filter(
-    (file) => file.endsWith("manageQueries.ts") || file.endsWith("plannerQueries.ts"),
-  );
+  // Every query module, matched by shape rather than by name. Listing two file
+  // names here meant a third one - savingsQueries.ts - would have been exempt
+  // from the check the moment it was created, which is exactly the hole this
+  // test exists to close.
+  const queryLayerFiles = webFiles.filter((file) => /queries\.ts$/i.test(file));
 
   const hooks = queryLayerFiles.flatMap((file) => {
     const source = readFileSync(file, "utf8");

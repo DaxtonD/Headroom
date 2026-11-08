@@ -27,7 +27,9 @@ const TABS = [
   // schedules, so it is accurate far further out than the timeline.
   { to: "/year", label: "Year" },
   { to: "/budget", label: "Budget" },
-  { to: "/goals", label: "Goals" },
+  // The one real savings account, what it is earmarked for, and what a lump
+  // sum takes off the mortgage.
+  { to: "/savings", label: "Savings" },
   // Where the household is set up and kept current.
   { to: "/manage", label: "Manage" },
 ] as const;

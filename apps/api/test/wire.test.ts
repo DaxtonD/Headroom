@@ -231,6 +231,32 @@ describe("a one-off added by hand", () => {
     expect(created.json().occurrence.cents).toBe("4735");
     expect(formatCents(BigInt(created.json().occurrence.cents))).toBe("$47.35");
   });
+
+  it("is signed by what it is, not by how it was typed", async () => {
+    // A generated bill is negative because the engine signs it that way. One
+    // added by hand has to follow the same rule, or the same bill is an
+    // outflow from a template and income when someone types it in - and the
+    // running balance goes UP when a bill is added.
+    const bill = await harness.app.inject({
+      method: "POST",
+      url: "/api/occurrences",
+      headers: { cookie, "idempotency-key": randomUUID() },
+      payload: { name: "Dentist", cents: "12500", kind: "bill" },
+    });
+
+    expect(bill.statusCode).toBe(201);
+    expect(bill.json().occurrence.cents).toBe("-12500");
+
+    // And a deposit stays an inflow even if someone puts a minus on it.
+    const deposit = await harness.app.inject({
+      method: "POST",
+      url: "/api/occurrences",
+      headers: { cookie, "idempotency-key": randomUUID() },
+      payload: { name: "Rebate", cents: "-3300", kind: "deposit" },
+    });
+
+    expect(deposit.json().occurrence.cents).toBe("3300");
+  });
 });
 
 describe("every amount the API sends is integer cents in a string", () => {

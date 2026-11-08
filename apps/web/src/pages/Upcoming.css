@@ -136,3 +136,9 @@
     font-size: 22px;
   }
 }
+
+.upcoming__actions {
+  display: flex;
+  justify-content: center;
+  padding: var(--hr-space-2) 0;
+}

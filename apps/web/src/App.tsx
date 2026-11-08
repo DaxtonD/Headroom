@@ -1,7 +1,7 @@
 /**
  * The app shell and routes.
  *
- * Every screen in the brief now exists. Net worth is reached from Goals rather
+ * Every screen in the brief now exists. Net worth is reached from Savings rather
  * than the tab bar, which is what HANDOFF section 7 asks for.
  */
 import { useState } from "react";
@@ -9,7 +9,7 @@ import { Navigate, Route, Routes } from "react-router";
 import { Shell } from "./components/Shell.js";
 import { UpdateBalanceSheet } from "./components/UpdateBalanceSheet.js";
 import { Budget } from "./pages/Budget.js";
-import { Goals } from "./pages/Goals.js";
+import { Savings } from "./pages/Savings.js";
 import { Home } from "./pages/Home.js";
 import { Manage } from "./pages/Manage.js";
 import { NetWorth } from "./pages/NetWorth.js";
@@ -74,8 +74,14 @@ export function App(): React.JSX.Element {
         <Route path="/pay-plan" element={<PayPlan canEdit={canEdit} />} />
         <Route path="/year" element={<Year />} />
         <Route path="/budget" element={<Budget />} />
-        <Route path="/goals" element={<Goals canEdit={canEdit} />} />
-        {/* Reached from Goals rather than the tab bar, as the brief asks. */}
+        <Route path="/savings" element={<Savings canEdit={canEdit} />} />
+        {/*
+          Goals became Savings: the screen is now about one real account and
+          what the money in it is for. The old path still works, because it is
+          what any bookmark or installed shortcut points at.
+        */}
+        <Route path="/goals" element={<Navigate to="/savings" replace />} />
+        {/* Reached from Savings rather than the tab bar, as the brief asks. */}
         <Route path="/net-worth" element={<NetWorth canEdit={canEdit} />} />
         <Route path="/manage" element={<Manage canEdit={canEdit} />} />
         <Route path="*" element={<Navigate to="/" replace />} />

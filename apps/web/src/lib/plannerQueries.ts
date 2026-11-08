@@ -1,5 +1,6 @@
 /**
- * Data for the planning screens: Budget, Goals, and Net worth & retirement.
+ * Data for the planning screens: Budget, Net worth & retirement, and the work
+ * expenses and banked hours that sit at the foot of Savings.
  *
  * Kept apart from `queries.ts`, which is the day-to-day money timeline. These
  * change rarely and are read as whole screens; those change constantly and are

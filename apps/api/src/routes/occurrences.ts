@@ -14,6 +14,7 @@
  * and repeating one that is already true is a no-op that returns the current
  * state (section 16.1 rule 6).
  */
+import { signedForKind } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
@@ -288,7 +289,11 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
           data: {
             householdId: user.householdId,
             name: input.name,
-            cents: input.cents,
+            // Signed by what it is, not by what was sent. A generated bill is
+            // negative because the engine says so; a hand-added one has to
+            // follow the same rule, or the same bill would be an outflow when
+            // it comes from a template and income when it is typed in.
+            cents: signedForKind(input.kind, input.cents),
             kind: input.kind,
             // Dated items are placed by date; everything else hangs off a
             // payday, with no anchor meaning "now".

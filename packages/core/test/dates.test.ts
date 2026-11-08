@@ -19,6 +19,7 @@ import {
   firstPaydayOnOrAfter,
   formatDateShort,
   formatDayAndMonth,
+  formatDayMonthAndYear,
   isPaydayOn,
   isPlainDate,
   isWeekend,
@@ -265,5 +266,17 @@ describe("display", () => {
     expect(formatDateShort("2026-11-12")).toBe("Thu, Nov 12");
     expect(formatDayAndMonth("2026-12-02")).toBe("Dec 2");
     expect(formatDayAndMonth("2026-11-12")).toBe("Nov 12");
+  });
+});
+
+describe("a date with the year on it", () => {
+  it("writes the month, the day and the year", () => {
+    expect(formatDayMonthAndYear("2027-08-13")).toBe("Aug 13, 2027");
+    expect(formatDayMonthAndYear("2030-01-01")).toBe("Jan 1, 2030");
+  });
+
+  it("is the only formatter that keeps the year, because a payoff date needs it", () => {
+    expect(formatDayAndMonth("2027-08-13")).toBe("Aug 13");
+    expect(formatDayMonthAndYear("2027-08-13")).toContain("2027");
   });
 });

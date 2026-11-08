@@ -370,8 +370,8 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             >
               Add a goal
             </button>
-            <Link className="hr-button hr-button--secondary" to="/goals">
-              See goals
+            <Link className="hr-button hr-button--secondary" to="/savings">
+              See savings
             </Link>
           </>
         }

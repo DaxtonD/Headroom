@@ -9,6 +9,7 @@ import { formatCents, formatDateShort } from "@headroom/core";
 import { useMemo, useState } from "react";
 import { CoveragePill, VerificationBadge } from "../components/Badges.js";
 import { OccurrenceRow, type MoveTarget } from "../components/OccurrenceRow.js";
+import { OneOffForm } from "../components/OneOffForm.js";
 import { usePatchOccurrence, useTimeline } from "../lib/queries.js";
 import "./Upcoming.css";
 
@@ -16,6 +17,7 @@ export function Upcoming({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const timeline = useTimeline();
   const patch = usePatchOccurrence();
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [addingOneOff, setAddingOneOff] = useState(false);
 
   const moveTargets = useMemo<MoveTarget[]>(() => {
     const rows = timeline.data?.rows ?? [];
@@ -126,6 +128,26 @@ export function Upcoming({ canEdit }: { canEdit: boolean }): React.JSX.Element {
           ))}
         </ul>
       )}
+
+      {/*
+        Carol's "add a few extra rows". A dentist bill, or an extra amount into
+        savings because a third cheque landed - the things that make a month
+        unusual, which is the whole reason the Year screen exists.
+      */}
+      <div className="upcoming__actions">
+        <button
+          className="hr-button"
+          type="button"
+          disabled={!canEdit}
+          onClick={() => setAddingOneOff(true)}
+        >
+          Add a one-off
+        </button>
+      </div>
+
+      {addingOneOff ? (
+        <OneOffForm paydays={moveTargets} onClose={() => setAddingOneOff(false)} />
+      ) : null}
 
       {/* ---- Footer ---- */}
       <section className="upcoming__footer">

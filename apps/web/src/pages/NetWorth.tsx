@@ -58,8 +58,8 @@ export function NetWorth({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
   return (
     <div className="networth">
-      <Link className="networth__back" to="/goals">
-        ← Goals
+      <Link className="networth__back" to="/savings">
+        ← Savings
       </Link>
 
       {/* ---- Net worth ---- */}

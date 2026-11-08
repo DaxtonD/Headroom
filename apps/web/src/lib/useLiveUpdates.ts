@@ -13,7 +13,40 @@
  */
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { billsKey, categoriesKey, setupKey } from "./manageQueries.js";
+import { budgetKey, goalsKey, netWorthKey, yearKey } from "./plannerQueries.js";
 import { dashboardKey, payPeriodsKey, timelineKey } from "./queries.js";
+import { savingsKey } from "./savingsQueries.js";
+
+/**
+ * The money screens, which a ping almost always concerns.
+ */
+const MONEY_KEYS = [dashboardKey, timelineKey, payPeriodsKey] as const;
+
+/**
+ * Everything else a change could have touched.
+ *
+ * The ping carries only an entity name, never an amount, so the client has to
+ * refetch through the authenticated API anyway. It used to act on three entity
+ * names and ignore every other one, which meant an earmark, a bill, a budget
+ * line or a mortgage edited on one phone did not appear on the other until a
+ * reload - silently, because nothing was broken, just stale.
+ *
+ * Refetching the lot is cheaper than that bug and needs no table of entity
+ * names to keep in step: TanStack only refetches queries that are actually
+ * mounted, so on Home this costs three requests and on Savings it costs one.
+ */
+const ALL_KEYS = [
+  ...MONEY_KEYS,
+  setupKey,
+  billsKey,
+  categoriesKey,
+  budgetKey,
+  goalsKey,
+  netWorthKey,
+  savingsKey,
+  yearKey,
+] as const;
 
 export interface LiveStatus {
   /** The browser believes it has a connection. */
@@ -62,9 +95,8 @@ export function useLiveUpdates(enabled: boolean): LiveStatus {
 
     const refresh = (): void => {
       if (document.visibilityState !== "visible") return;
-      void queryClient.invalidateQueries({ queryKey: dashboardKey });
-      void queryClient.invalidateQueries({ queryKey: timelineKey });
-      void queryClient.invalidateQueries({ queryKey: payPeriodsKey });
+      // Coming back after the phone was asleep: anything could have changed.
+      for (const key of ALL_KEYS) void queryClient.invalidateQueries({ queryKey: key });
     };
 
     document.addEventListener("visibilitychange", refresh);
@@ -88,23 +120,12 @@ export function useLiveUpdates(enabled: boolean): LiveStatus {
       setLastSyncedAt(new Date());
     };
 
-    const onChanged = (event: MessageEvent<string>): void => {
+    // The payload is deliberately not read: it carries only an entity name and
+    // a version, never an amount, so there is nothing in it worth acting on
+    // that a refetch does not settle more reliably.
+    const onChanged = (): void => {
       setLastSyncedAt(new Date());
-
-      let entity = "";
-      try {
-        entity = (JSON.parse(event.data) as { entity?: string }).entity ?? "";
-      } catch {
-        // A malformed ping is not worth failing over; refetch everything.
-      }
-
-      // The ping carries no amounts by design, so the only safe response is
-      // to refetch through the authenticated API.
-      if (entity === "occurrence" || entity === "balance_snapshot" || entity === "") {
-        void queryClient.invalidateQueries({ queryKey: dashboardKey });
-        void queryClient.invalidateQueries({ queryKey: timelineKey });
-        void queryClient.invalidateQueries({ queryKey: payPeriodsKey });
-      }
+      for (const key of ALL_KEYS) void queryClient.invalidateQueries({ queryKey: key });
     };
 
     const onError = (): void => {
@@ -113,12 +134,12 @@ export function useLiveUpdates(enabled: boolean): LiveStatus {
     };
 
     source.addEventListener("ready", onReady);
-    source.addEventListener("changed", onChanged as EventListener);
+    source.addEventListener("changed", onChanged);
     source.addEventListener("error", onError);
 
     return () => {
       source.removeEventListener("ready", onReady);
-      source.removeEventListener("changed", onChanged as EventListener);
+      source.removeEventListener("changed", onChanged);
       source.removeEventListener("error", onError);
       source.close();
       setStreaming(false);

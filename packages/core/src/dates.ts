@@ -289,6 +289,18 @@ export function formatDayAndMonth(value: PlainDate): string {
 }
 
 /**
+ * `Aug 13, 2027`, for a date far enough away that the year is the point.
+ *
+ * Every other formatter here leaves the year out, because on the timeline it
+ * is noise - everything is within a few weeks. A payoff date is years out, and
+ * leaving the year off it would be the one place that omission misleads.
+ */
+export function formatDayMonthAndYear(value: PlainDate): string {
+  const { year, month, day } = parseDate(value);
+  return `${MONTHS_SHORT[month - 1]} ${day}, ${String(year)}`;
+}
+
+/**
  * `Nov 2026`, for the year view, which lists whole months rather than days.
  *
  * Takes the year and month directly because its caller is iterating months,

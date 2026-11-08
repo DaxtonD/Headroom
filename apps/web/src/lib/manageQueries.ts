@@ -7,7 +7,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Cents } from "@headroom/core";
 import { api, newIdempotencyKey } from "./api.js";
-import { budgetKey, goalsKey, netWorthKey } from "./plannerQueries.js";
+import { budgetKey, goalsKey, netWorthKey, yearKey } from "./plannerQueries.js";
+import { savingsKey } from "./savingsQueries.js";
 import { dashboardKey, payPeriodsKey, timelineKey } from "./queries.js";
 
 const toCents = (value: string): Cents => BigInt(value);
@@ -69,6 +70,8 @@ export interface HouseholdSettings {
 export interface AccountEntry {
   readonly id: string;
   readonly name: string;
+  /** Chequing is the one the timeline reads; savings is its own screen. */
+  readonly kind: "chequing" | "savings";
   readonly version: number;
 }
 
@@ -213,6 +216,8 @@ function invalidateEverything(queryClient: ReturnType<typeof useQueryClient>): P
       budgetKey,
       goalsKey,
       netWorthKey,
+      savingsKey,
+      yearKey,
       dashboardKey,
       timelineKey,
       payPeriodsKey,
@@ -510,7 +515,9 @@ export function useCreateAccount() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { name: string }) =>
+    // `kind` absent means chequing, which is what a household's first account
+    // is. A savings account is the same row with a different kind.
+    mutationFn: (input: { name: string; kind?: "chequing" | "savings" }) =>
       api.post("/api/accounts", input, { idempotencyKey: newIdempotencyKey() }),
     onSuccess: () => invalidateEverything(queryClient),
   });

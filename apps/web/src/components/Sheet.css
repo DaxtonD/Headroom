@@ -183,3 +183,50 @@
 .sheet__checkbox input[type="checkbox"]:disabled + span {
   opacity: 0.6;
 }
+
+/*
+ * A set of mutually exclusive choices.
+ *
+ * Radios rather than a <select> where the options carry an explanation: the
+ * trade-off between "the bank takes it that day" and "this can be moved" is
+ * the thing being chosen, and a dropdown hides it behind a tap.
+ *
+ * The whole row is the label, so the 44px target is the line and not the
+ * 22px dot.
+ */
+.sheet__choices {
+  border: none;
+  margin: var(--hr-space-4) 0 0;
+  padding: 0;
+}
+
+.sheet__choices legend {
+  padding: 0;
+  margin-bottom: var(--hr-space-2);
+}
+
+.sheet__choice {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hr-space-3);
+  min-height: var(--hr-touch-min);
+  font-size: 15px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.sheet__choice input[type="radio"] {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  accent-color: var(--hr-primary);
+}
+
+.sheet__choice input[type="radio"]:disabled {
+  cursor: not-allowed;
+}
+
+.sheet__choice input[type="radio"]:disabled + span {
+  opacity: 0.6;
+}

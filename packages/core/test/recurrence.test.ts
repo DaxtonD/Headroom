@@ -12,6 +12,7 @@ import {
   GENERATION_LOOKAHEAD_DAYS,
   generateOccurrences,
   generationWindow,
+  signedForKind,
   type TemplateSpec,
 } from "../src/recurrence.js";
 import type { PaySchedule } from "../src/types.js";
@@ -416,5 +417,30 @@ describe("generationWindow", () => {
     expect(window.from).toBe("2026-11-07");
     expect(window.to).toBe("2026-12-16");
     expect(GENERATION_LOOKAHEAD_DAYS).toBe(14);
+  });
+});
+
+describe("which way the money goes", () => {
+  it("takes a bill and a transfer off the balance", () => {
+    expect(signedForKind("bill", 7_325n)).toBe(-7_325n);
+    expect(signedForKind("transfer", 41_900n)).toBe(-41_900n);
+  });
+
+  it("adds a paycheque and a deposit to it", () => {
+    expect(signedForKind("paycheque", 215_050n)).toBe(215_050n);
+    expect(signedForKind("deposit", 6_150n)).toBe(6_150n);
+  });
+
+  it("decides from the kind, whichever sign it was handed", () => {
+    // The point of the rule: a bill typed in as a positive amount is still
+    // money leaving. Without it, the same bill is an outflow when a template
+    // generates it and income when someone adds it by hand.
+    expect(signedForKind("bill", -7_325n)).toBe(-7_325n);
+    expect(signedForKind("deposit", -6_150n)).toBe(6_150n);
+  });
+
+  it("leaves nothing as nothing", () => {
+    expect(signedForKind("bill", 0n)).toBe(0n);
+    expect(signedForKind("deposit", 0n)).toBe(0n);
   });
 });

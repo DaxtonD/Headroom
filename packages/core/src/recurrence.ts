@@ -371,7 +371,21 @@ function absOf(value: Cents): Cents {
  * comes from what kind of thing it is. A bill or a transfer leaves the
  * account; a deposit or a paycheque arrives.
  */
+/**
+ * Which way the money goes, from what kind of thing it is.
+ *
+ * Exported because the API needs the same answer when someone adds a one-off
+ * by hand, and two copies of this rule would be one copy too many: a bill
+ * stored positive is added to the balance instead of taken off it, and the
+ * screens would show a bill as income without anything failing.
+ *
+ * The magnitude is taken first, so a caller may send either sign.
+ */
+export function signedForKind(kind: OccurrenceKind, cents: Cents): Cents {
+  const magnitude = cents < 0n ? -cents : cents;
+  return kind === "bill" || kind === "transfer" ? -magnitude : magnitude;
+}
+
 function outflowSign(template: TemplateSpec): Cents {
-  const magnitude = absOf(template.defaultCents);
-  return template.kind === "bill" || template.kind === "transfer" ? -magnitude : magnitude;
+  return signedForKind(template.kind, template.defaultCents);
 }
