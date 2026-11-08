@@ -1,21 +1,23 @@
 /**
  * The app shell and routes.
  *
- * Every screen in the brief now exists. Net worth is reached from Savings rather
- * than the tab bar, which is what HANDOFF section 7 asks for.
+ * Net worth is reached from Savings rather than the tab bar, which is what
+ * HANDOFF section 7 asks for.
+ *
+ * Home, Upcoming and Pay plan have merged into one ledger at `/`. The brief
+ * described them as three screens; the household's complaint about the result
+ * was that one list had been split across three places.
  */
 import { useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { Shell } from "./components/Shell.js";
 import { UpdateBalanceSheet } from "./components/UpdateBalanceSheet.js";
 import { Budget } from "./pages/Budget.js";
-import { Savings } from "./pages/Savings.js";
-import { Home } from "./pages/Home.js";
+import { Ledger } from "./pages/Ledger.js";
 import { Manage } from "./pages/Manage.js";
 import { NetWorth } from "./pages/NetWorth.js";
-import { PayPlan } from "./pages/PayPlan.js";
+import { Savings } from "./pages/Savings.js";
 import { Year } from "./pages/Year.js";
-import { Upcoming } from "./pages/Upcoming.js";
 import { useLogout, useSession } from "./lib/session.js";
 import { useLiveUpdates } from "./lib/useLiveUpdates.js";
 import { Login } from "./pages/Login.js";
@@ -69,9 +71,20 @@ export function App(): React.JSX.Element {
       onSignOut={() => logout.mutate()}
     >
       <Routes>
-        <Route path="/" element={<Home onUpdateBalance={() => setBalanceSheetOpen(true)} />} />
-        <Route path="/upcoming" element={<Upcoming canEdit={canEdit} />} />
-        <Route path="/pay-plan" element={<PayPlan canEdit={canEdit} />} />
+        <Route
+          path="/"
+          element={
+            <Ledger canEdit={canEdit} onUpdateBalance={() => setBalanceSheetOpen(true)} />
+          }
+        />
+        {/*
+          Home, Upcoming and Pay plan were three views of one list, and keeping
+          them apart was the actual complaint: "the data is too spread out - she
+          can't easily see everything." Both old paths still work, because an
+          installed shortcut may point at either.
+        */}
+        <Route path="/upcoming" element={<Navigate to="/" replace />} />
+        <Route path="/pay-plan" element={<Navigate to="/" replace />} />
         <Route path="/year" element={<Year />} />
         <Route path="/budget" element={<Budget />} />
         <Route path="/savings" element={<Savings canEdit={canEdit} />} />

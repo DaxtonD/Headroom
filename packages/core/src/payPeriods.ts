@@ -88,6 +88,17 @@ export function payPeriodWindows(
   today: PlainDate,
   anchorSchedule: PaySchedule,
   periodCount: number,
+  /**
+   * Keep adding windows until one reaches this date.
+   *
+   * The windows have to cover the whole timeline or rows fall off the end of
+   * the last one and are counted by nothing. Three windows happen to outrun
+   * the default horizon, but the horizon is an editable household setting:
+   * raise it and a dated row beyond the last window would vanish from the
+   * ledger while still lowering every balance on it. Passing the horizon here
+   * removes that dependence on a coincidence.
+   */
+  coverThrough?: PlainDate,
 ): WindowSpec[] {
   const nextPayday = firstPaydayOnOrAfter(anchorSchedule.anchorDate, today);
   const windows: WindowSpec[] = [];
@@ -96,8 +107,16 @@ export function payPeriodWindows(
     windows.push({ start: today, end: addDays(nextPayday, -1), isCurrentPartial: true });
   }
 
+  const covers = (): boolean => {
+    if (coverThrough === undefined) return true;
+    const last = windows[windows.length - 1];
+    return last !== undefined && compareDates(last.end, coverThrough) >= 0;
+  };
+
   let start = nextPayday;
-  while (windows.length < periodCount) {
+  // A ceiling as well, so a horizon set absurdly far out cannot run away.
+  const MAX_WINDOWS = 60;
+  while ((windows.length < periodCount || !covers()) && windows.length < MAX_WINDOWS) {
     windows.push({ start, end: addDays(start, PERIOD_DAYS - 1), isCurrentPartial: false });
     start = addDays(start, PERIOD_DAYS);
   }
@@ -115,7 +134,7 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
   const periodCount = options.periodCount ?? DEFAULT_PERIOD_COUNT;
   const anchorSchedule = resolveAnchorSchedule(paySchedules, options.anchorScheduleId);
 
-  const windows = payPeriodWindows(today, anchorSchedule, periodCount);
+  const windows = payPeriodWindows(today, anchorSchedule, periodCount, options.coverThrough);
 
   // Which scheduled paydays already exist as placed paycheques, so they are
   // not counted twice. Matched by schedule when the data says which schedule a
@@ -143,15 +162,33 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
     return false;
   };
 
+  /**
+   * Which window a row belongs to.
+   *
+   * The first window absorbs anything earlier than itself, and that is not a
+   * nicety. The timeline deliberately keeps a dated item that is past and has
+   * not cleared - the money has not moved yet, so it is still coming - and it
+   * keeps undated items anchored to "now". Neither has a date inside any
+   * window, so both used to belong to no window at all: left out of the rows
+   * AND out of the totals, while still being subtracted from the running
+   * balance and from safe-to-spend. A bill overdue by a week vanished from the
+   * pay plan while still lowering every figure on it.
+   *
+   * Attributing them to the first window is also the truthful answer: an
+   * overdue bill comes out of the money in hand, which is what the first
+   * window holds.
+   */
+  const firstWindow = windows[0];
+  const belongsTo = (row: TimelineRow, window: WindowSpec): boolean => {
+    const isFirst = firstWindow !== undefined && window === firstWindow;
+
+    if (row.effectiveDate === null) return isFirst;
+    if (isFirst && compareDates(row.effectiveDate, window.start) < 0) return true;
+    return withinWindow(row.effectiveDate, window.start, window.end);
+  };
+
   return windows.map((window) => {
-    const rows = timeline.rows.filter((row) => {
-      if (row.effectiveDate === null) {
-        // Anchored to "now": it belongs to the current partial window, which
-        // is where "before the first upcoming paycheque" means.
-        return window.isCurrentPartial;
-      }
-      return withinWindow(row.effectiveDate, window.start, window.end);
-    });
+    const rows = timeline.rows.filter((row) => belongsTo(row, window));
 
     const roomToSaveCents = roomToSaveFrom(timeline, window, cushionCents);
 
@@ -202,6 +239,15 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       allAutoCovered: autoRows.every((row) => row.runningCents >= cushionCents),
       projectedPaychequeIds,
       roomToSaveCents,
+      /**
+       * The rows this window counted, by id.
+       *
+       * Published so a caller grouping rows for display uses the same decision
+       * the totals were computed from. The API used to re-derive membership
+       * from the dates, which is the same rule written twice - and the two
+       * disagreed the moment this one was corrected.
+       */
+      rowIds: rows.map((row) => row.event.id),
     } satisfies PayPeriod;
   });
 }

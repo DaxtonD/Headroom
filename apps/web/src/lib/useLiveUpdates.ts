@@ -15,13 +15,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { billsKey, categoriesKey, setupKey } from "./manageQueries.js";
 import { budgetKey, goalsKey, netWorthKey, yearKey } from "./plannerQueries.js";
-import { dashboardKey, payPeriodsKey, timelineKey } from "./queries.js";
+import { dashboardKey, payPeriodsKey } from "./queries.js";
 import { savingsKey } from "./savingsQueries.js";
 
 /**
  * The money screens, which a ping almost always concerns.
  */
-const MONEY_KEYS = [dashboardKey, timelineKey, payPeriodsKey] as const;
+const MONEY_KEYS = [dashboardKey, payPeriodsKey] as const;
 
 /**
  * Everything else a change could have touched.

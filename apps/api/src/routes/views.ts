@@ -174,11 +174,13 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
       today: context.today,
       horizonEnd: context.horizonEnd,
       periods: context.payPeriods.map((period) => {
-        const rows = context.timeline.rows.filter((row) =>
-          row.effectiveDate === null
-            ? period.isCurrentPartial
-            : row.effectiveDate >= period.start && row.effectiveDate <= period.end,
-        );
+        // Grouped by the ids the ENGINE counted, not by re-deriving the dates.
+        // This was the same rule written twice, and the copies disagreed the
+        // moment the engine's was corrected: a bill overdue by a week belongs
+        // to the window it will actually come out of, and the date test here
+        // put it in no window at all while the totals still felt it.
+        const inWindow = new Set(period.rowIds);
+        const rows = context.timeline.rows.filter((row) => inWindow.has(row.event.id));
 
         return {
           label: period.label,
@@ -189,6 +191,11 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
           autoCents: period.autoCents,
           flexibleCents: period.flexibleCents,
           leftCents: period.leftCents,
+          // "Safe to spend now" asked at a later point on the timeline: what
+          // could be moved into savings out of this window without pushing any
+          // later balance below the cushion. This is what turns a third cheque
+          // from "silently absorbed" into a decision.
+          roomToSaveCents: period.roomToSaveCents,
           lowest: period.lowest,
           allAutoCovered: period.allAutoCovered,
 

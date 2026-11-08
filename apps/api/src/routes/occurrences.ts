@@ -331,6 +331,87 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
     return reply.status(result.statusCode).send(result.body);
   });
 
+  /**
+   * Remove a one-off.
+   *
+   * Only a one-off. A generated occurrence belongs to its template, and
+   * removing it here would be undone or made permanent by the next generation
+   * run depending on how the period key matched - neither of which is a thing
+   * anyone asked for. Those are ended by changing the bill on Manage.
+   *
+   * This exists because the one-off form does: being able to add a row without
+   * being able to remove one leaves a typo distorting every figure on the
+   * ledger with no way out but SQL. Marking it cleared is not the same thing -
+   * that says it happened.
+   */
+  app.delete<{ Params: { id: string } }>("/occurrences/:id", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const baseVersion = requireBaseVersion(request);
+    const key = requireIdempotencyKey(request);
+
+    const result = await runIdempotent({
+      prisma: app.db.prisma,
+      key,
+      userId: user.id,
+      method: "DELETE",
+      path: `/api/occurrences/${request.params.id}`,
+      requestHash: hashRequest("DELETE", `/api/occurrences/${request.params.id}`, {}),
+      ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
+      work: async (tx) => {
+        const existing = await tx.occurrence.findFirst({
+          where: { id: request.params.id, householdId: user.householdId, deletedAt: null },
+        });
+        if (!existing) throw new HttpError(404, "not_found", "That item no longer exists.");
+
+        if (!existing.isOneOff) {
+          throw new HttpError(
+            409,
+            "not_a_one_off",
+            "This one comes from a bill, so it cannot be removed here. Change the bill on Manage, or mark this cleared if it has already come out.",
+          );
+        }
+
+        const applied = await applyVersionedChange<Occurrence>({
+          tx: tx as unknown as PrismaLike,
+          entity: "occurrence",
+          id: existing.id,
+          baseVersion,
+          userId: user.id,
+          householdId: user.householdId,
+          action: "soft_delete",
+          changes: { deletedAt: new Date().toISOString() },
+          readRow: () => tx.occurrence.findUnique({ where: { id: existing.id } }),
+          writeRow: (nextVersion) =>
+            tx.occurrence.update({
+              where: { id: existing.id },
+              data: {
+                deletedAt: new Date(),
+                deletedById: user.id,
+                version: nextVersion,
+                updatedById: user.id,
+                updatedAt: new Date(),
+              },
+            }),
+          snapshot: snapshotOccurrence,
+        });
+
+        await publishChange(tx, {
+          householdId: user.householdId,
+          entity: "occurrence",
+          id: applied.row.id,
+          version: applied.row.version,
+          by: user.id,
+        });
+
+        return { statusCode: 200, body: { ok: true } };
+      },
+    });
+
+    return reply.status(result.statusCode).send(result.body);
+  });
+
   /** Per-item history, which the Upcoming screen shows when a row is expanded. */
   app.get<{ Params: { id: string } }>("/occurrences/:id/history", async (request, reply) => {
     const user = request.user;

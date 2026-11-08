@@ -158,7 +158,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             {data.missing.includes("pay_schedule") ? (
               <li>
                 <strong>Paydays.</strong> Without these, pay periods and the horizon cannot be
-                worked out, so Upcoming and Pay plan will look empty.
+                worked out, so the ledger will look empty.
               </li>
             ) : null}
             {data.missing.includes("income") ? (
@@ -183,7 +183,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       <Section
         title="Expenses"
         count={expenses.length}
-        note="Entered once. Each one appears on Upcoming with its due date and on Budget with its monthly cost."
+        note="Entered once. Each one appears on the ledger with its due date and on Budget with its monthly cost."
         empty="No expenses yet."
         isEmpty={expenses.length === 0}
         actions={
@@ -462,7 +462,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       <Section
         title="Paydays"
         count={data.paySchedules.length}
-        note="Pay is every two weeks. Give one real payday and Headroom works out the rest. Everything on Upcoming and Pay plan depends on these."
+        note="Pay is every two weeks. Give one real payday and Headroom works out the rest. Everything on the ledger depends on these."
         empty="No paydays yet. Most of the app needs these."
         isEmpty={data.paySchedules.length === 0}
         actions={

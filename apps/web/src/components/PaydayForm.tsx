@@ -156,7 +156,7 @@ export function PaydayForm({
             after that, 26 times a year.
           </p>
           <p className="sheet__preview-note">
-            If those dates look wrong, the anchor is wrong — everything on Upcoming and Pay plan
+            If those dates look wrong, the anchor is wrong — everything on the ledger
             is worked out from it.
           </p>
         </div>

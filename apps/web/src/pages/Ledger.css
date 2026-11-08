@@ -1,0 +1,323 @@
+/*
+ * The ledger.
+ *
+ * One scroll, so the only real layout decisions are: the balance has to be the
+ * first thing the eye lands on, and the running balance has to line up down
+ * the right-hand edge. Carol reads that column the way she reads it in the
+ * spreadsheet, and a column that does not align is a column nobody scans.
+ */
+.ledger {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-4);
+}
+
+/* ---- The balance, and what follows from it ---- */
+
+.ledger__hero {
+  padding: var(--hr-space-5);
+  border-radius: var(--hr-radius-hero);
+  background: var(--hr-hero-bg);
+  color: var(--hr-hero-text);
+  box-shadow: var(--hr-shadow-hero);
+}
+
+.ledger__hero--skeleton {
+  min-height: 260px;
+  opacity: 0.35;
+}
+
+.ledger__hero-label {
+  color: var(--hr-hero-muted);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.ledger__hero-amount {
+  margin: var(--hr-space-2) 0 var(--hr-space-1);
+  /* Big enough to read at arm's length, and it shrinks on a narrow phone. */
+  font-size: clamp(40px, 13vw, 56px);
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+
+.ledger__hero-meta {
+  color: var(--hr-hero-muted);
+  font-size: 14px;
+}
+
+.ledger__update {
+  margin-top: var(--hr-space-4);
+  width: 100%;
+  background: var(--hr-hero-text);
+  color: var(--hr-hero-bg);
+}
+
+.ledger__update:hover:not(:disabled) {
+  background: #ffffff;
+}
+
+/*
+ * The two numbers that used to be cards of their own on Home. Inside the hero
+ * now: they are both read off the same balance, and a card each pushed the
+ * list itself below the fold.
+ */
+.ledger__hero-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--hr-space-4);
+  margin-top: var(--hr-space-5);
+  padding-top: var(--hr-space-4);
+  border-top: 1px solid rgb(255 255 255 / 0.18);
+}
+
+.ledger__hero-sublabel {
+  color: var(--hr-hero-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.ledger__hero-subamount {
+  margin-top: 2px;
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ledger__hero-note {
+  margin-top: var(--hr-space-3);
+  color: var(--hr-hero-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ---- Coverage ---- */
+
+.ledger__warning {
+  padding: var(--hr-space-4) var(--hr-space-5);
+  border-radius: var(--hr-radius-card);
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+}
+
+.ledger__warning-title {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ledger__warning-detail {
+  margin-top: var(--hr-space-1);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.ledger__covered {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-3);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-card);
+  background: var(--hr-green-tint-soft);
+  color: var(--hr-text-secondary);
+  font-size: 14px;
+}
+
+.ledger__estimates,
+.ledger__loading {
+  padding: 0 var(--hr-space-2);
+  color: var(--hr-text-secondary);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+/* ---- The windows ---- */
+
+.ledger__periods,
+.ledger__rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.ledger__periods {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-4);
+}
+
+.ledger__period {
+  padding: var(--hr-space-4) var(--hr-space-4) var(--hr-space-3);
+  border-radius: var(--hr-radius-card);
+  border: 1px solid var(--hr-card-border);
+  background: var(--hr-card);
+  box-shadow: var(--hr-shadow-card);
+}
+
+.ledger__period-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  flex-wrap: wrap;
+  padding-bottom: var(--hr-space-2);
+  border-bottom: 2px solid var(--hr-payday-row);
+}
+
+.ledger__period-title {
+  font-family: var(--hr-font-body);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.ledger__period-dates {
+  color: var(--hr-text-muted);
+  font-size: 13px;
+}
+
+.ledger__period-note {
+  margin-top: var(--hr-space-2);
+  color: var(--hr-text-secondary);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+/* ---- Rows ---- */
+
+/*
+ * The rows themselves are the shared OccurrenceRow, which carries its own
+ * styles: the running balance, the badges, the expanded editor. Only the bits
+ * this screen adds live here.
+ */
+.ledger__projected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-2) 0;
+  border-top: 1px solid var(--hr-row-divider);
+  opacity: 0.8;
+}
+
+.ledger__projected-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hr-space-2);
+  font-size: 15px;
+}
+
+/* ---- What a window leaves behind ---- */
+
+.ledger__subtotal {
+  margin-top: var(--hr-space-3);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-card);
+  background: var(--hr-neutral-bg);
+}
+
+.ledger__subtotal--short {
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+}
+
+.ledger__subtotal-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  min-height: 26px;
+  font-size: 14px;
+  color: var(--hr-text-secondary);
+}
+
+.ledger__subtotal--short .ledger__subtotal-row {
+  color: inherit;
+}
+
+/* Room to save is the decision this screen now supports, so it leads. */
+.ledger__subtotal-row--strong {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--hr-ink);
+}
+
+.ledger__subtotal--short .ledger__subtotal-row--strong {
+  color: inherit;
+}
+
+.ledger__subtotal-note {
+  margin-top: var(--hr-space-1);
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--hr-text-muted);
+}
+
+.ledger__subtotal--short .ledger__subtotal-note {
+  color: inherit;
+}
+
+.ledger__empty {
+  padding: var(--hr-space-3) 0;
+  color: var(--hr-text-secondary);
+  font-size: 14px;
+}
+
+.ledger__actions {
+  display: flex;
+  justify-content: center;
+}
+
+/* ---- The bottom line ---- */
+
+.ledger__footer {
+  padding: var(--hr-space-5);
+  border-radius: var(--hr-radius-hero);
+  background: var(--hr-hero-bg);
+  color: var(--hr-hero-text);
+}
+
+.ledger__footer-label {
+  color: var(--hr-hero-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ledger__footer-amount {
+  margin: var(--hr-space-1) 0;
+  font-size: 32px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.ledger__footer-note {
+  color: var(--hr-hero-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.ledger__error {
+  padding: var(--hr-space-5);
+}
+
+.ledger__error h2 {
+  font-size: 18px;
+  margin-bottom: var(--hr-space-2);
+}
+
+.ledger__error p {
+  color: var(--hr-text-secondary);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* ---- Wider screens ---- */
+
+@media (min-width: 640px) {
+  .ledger__period {
+    padding: var(--hr-space-5);
+  }
+}

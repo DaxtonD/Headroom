@@ -3,7 +3,7 @@
  *
  * A category is spending with no bill and no due date — food, gas, everyday
  * things. It has a monthly figure and nothing else, which is what separates it
- * from an expense: an expense has a date and so lands on Upcoming, a category
+ * from an expense: an expense has a date and so lands on the ledger, a category
  * only ever appears on Budget.
  *
  * The yearly figure is normally twelve times the monthly one. It can be stated

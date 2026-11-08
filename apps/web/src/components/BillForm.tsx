@@ -297,8 +297,8 @@ export function BillForm({
       }
       intro={
         incoming
-          ? "Money arriving that is not a paycheque — a refund, or a transfer in. It appears on Upcoming on the day it lands."
-          : "Entered once. It appears on Upcoming with its due date, and on Budget with its monthly cost."
+          ? "Money arriving that is not a paycheque — a refund, or a transfer in. It appears on the ledger on the day it lands."
+          : "Entered once. It appears on the ledger with its due date, and on Budget with its monthly cost."
       }
       error={error}
       saving={saving}

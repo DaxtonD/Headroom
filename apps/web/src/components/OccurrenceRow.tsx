@@ -1,10 +1,11 @@
 /**
- * One row of the Upcoming timeline, and what it does when expanded
+ * One row of the ledger, and what it does when expanded
  * (HANDOFF section 7.2).
  *
  * Expanded, a row offers exactly the things the brief asks for: edit the
  * amount, verify it, move a flexible bill to an earlier or later payday, and
- * mark it paid or received.
+ * mark it paid or received. A one-off can also be removed, which a row from a
+ * bill cannot: that one belongs to the bill.
  *
  * Every save carries the version this row was rendered from, so if the other
  * person changed the same field first the server says so and this component
@@ -34,6 +35,14 @@ export interface OccurrenceRowProps {
     changes: OccurrenceChange;
     idempotencyKey: string;
   }) => Promise<unknown>;
+  /**
+   * Remove this row entirely. Offered only for a one-off, and only when the
+   * screen supplies it.
+   *
+   * Separate from `onSave` because it is not a field change: it takes the row
+   * off the ledger, which is a different statement from marking it paid.
+   */
+  readonly onRemove?: (input: { id: string; version: number }) => Promise<unknown>;
 }
 
 export function OccurrenceRow({
@@ -43,6 +52,7 @@ export function OccurrenceRow({
   canEdit,
   moveTargets,
   onSave,
+  onRemove,
 }: OccurrenceRowProps): React.JSX.Element {
   const amountId = useId();
   const panelId = useId();
@@ -61,6 +71,10 @@ export function OccurrenceRow({
   // an effect would paint once with the old amount and then again with the
   // new one. (Remounting on a key would also work, but it would collapse the
   // expanded panel every time anyone saved anything.)
+  // Two presses to remove rather than a confirm(): the native dialog is
+  // blocked in some installed-PWA contexts, and a button that becomes the
+  // question keeps it where the answer is.
+  const [armed, setArmed] = useState(false);
   const [seenVersion, setSeenVersion] = useState(row.version);
   if (seenVersion !== row.version) {
     setSeenVersion(row.version);
@@ -299,6 +313,64 @@ export function OccurrenceRow({
                 {row.cents > 0n ? "Mark as received" : "Mark as paid"}
               </button>
             </div>
+
+            {/*
+              Removing is for a row somebody typed in by hand. Without it, a
+              mistyped one-off would distort every figure on the ledger with no
+              way out but SQL - and marking it paid would be a lie.
+            */}
+            {row.isOneOff && onRemove ? (
+              <div className="row__remove">
+                {armed ? (
+                  <>
+                    <p className="row__note">
+                      Remove {row.name}? It stops counting. The record of it stays in the history.
+                    </p>
+                    <div className="row__buttons">
+                      <button
+                        className="hr-button row__danger"
+                        type="button"
+                        disabled={!canEdit || saving}
+                        onClick={() => {
+                          setSaving(true);
+                          setError(null);
+                          void onRemove({ id: row.id, version: row.version })
+                            .catch((caught: unknown) => {
+                              setError(
+                                caught instanceof OfflineError || caught instanceof ApiError
+                                  ? caught.message
+                                  : "Could not remove it.",
+                              );
+                            })
+                            .finally(() => {
+                              setSaving(false);
+                              setArmed(false);
+                            });
+                        }}
+                      >
+                        Yes, remove it
+                      </button>
+                      <button
+                        className="hr-button hr-button--secondary"
+                        type="button"
+                        onClick={() => setArmed(false)}
+                      >
+                        Keep it
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <button
+                    className="hr-button hr-button--secondary"
+                    type="button"
+                    disabled={!canEdit || saving}
+                    onClick={() => setArmed(true)}
+                  >
+                    Remove this one-off
+                  </button>
+                )}
+              </div>
+            ) : null}
 
             {!row.isDated && moveTargets.length > 0 ? (
               <div className="row__move">

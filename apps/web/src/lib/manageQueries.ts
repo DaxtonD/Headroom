@@ -9,7 +9,7 @@ import type { Cents } from "@headroom/core";
 import { api, newIdempotencyKey } from "./api.js";
 import { budgetKey, goalsKey, netWorthKey, yearKey } from "./plannerQueries.js";
 import { savingsKey } from "./savingsQueries.js";
-import { dashboardKey, payPeriodsKey, timelineKey } from "./queries.js";
+import { dashboardKey, payPeriodsKey } from "./queries.js";
 
 const toCents = (value: string): Cents => BigInt(value);
 
@@ -219,7 +219,6 @@ function invalidateEverything(queryClient: ReturnType<typeof useQueryClient>): P
       savingsKey,
       yearKey,
       dashboardKey,
-      timelineKey,
       payPeriodsKey,
     ].map((key) => queryClient.invalidateQueries({ queryKey: key })),
   ).then(() => undefined);

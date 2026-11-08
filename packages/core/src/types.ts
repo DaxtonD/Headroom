@@ -161,13 +161,29 @@ export interface PayPeriod {
    * rather than a room of zero.
    */
   readonly roomToSaveCents: Cents;
+  /**
+   * The ids of the timeline rows this window counted.
+   *
+   * Published so that anything grouping rows for display groups them the way
+   * the totals were worked out, rather than reimplementing the rule. Every
+   * timeline row belongs to exactly one window: the first one absorbs
+   * anything undated or dated before it starts.
+   */
+  readonly rowIds: readonly string[];
 }
 
 export interface PayPeriodOptions {
   readonly timeline: TimelineResult;
   readonly paySchedules: readonly PaySchedule[];
   readonly today: PlainDate;
-  /** How many two-week windows to report. */
+  /**
+   * Keep adding windows until one reaches this date, whatever `periodCount`
+   * says. Pass the timeline's horizon: every row has to land in some window,
+   * and without this that only held because three windows happened to outrun
+   * the default horizon.
+   */
+  readonly coverThrough?: PlainDate;
+  /** How many two-week windows to report, at minimum. */
   readonly periodCount?: number;
   /**
    * Whose paydays the windows are anchored on. The windows in the spreadsheet

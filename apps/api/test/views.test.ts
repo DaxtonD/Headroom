@@ -408,6 +408,49 @@ describe("GET /api/pay-periods", () => {
     }
   });
 
+  it("does not lose a bill that is overdue and has not cleared", async () => {
+    // The test above has always asserted that every timeline row is in some
+    // window, and it passed while this case was broken, because the scenario
+    // never contained one. The timeline deliberately keeps a dated item that
+    // is past and uncleared - the money has not moved yet - and no window's
+    // date range covers it, so it was dropped from the rows and from the
+    // totals while still lowering every running balance on the screen.
+    await buildScenario();
+
+    const overdue = await harness.db.prisma.occurrence.create({
+      data: {
+        householdId,
+        name: "Overdue thing",
+        cents: -3_300n,
+        kind: "bill",
+        withdrawal: "auto",
+        // Comfortably before any window could start.
+        date: new Date("2020-01-15T00:00:00.000Z"),
+        sortIndex: 0,
+      },
+    });
+
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/pay-periods", headers: { cookie } })
+      .then((response) => response.json());
+
+    const first = body.periods[0];
+    expect(first.rows.map((row: { id: string }) => row.id)).toContain(overdue.id);
+
+    // And it is counted, not merely listed: an overdue automatic withdrawal
+    // comes out of the money in hand, which is what the first window holds.
+    const autoInFirst = first.rows
+      .filter((row: { cents: string; isDated: boolean }) => BigInt(row.cents) < 0n && row.isDated)
+      .reduce((total: bigint, row: { cents: string }) => total - BigInt(row.cents), 0n);
+    expect(BigInt(first.autoCents)).toBe(autoInFirst);
+
+    // Still exactly once across the whole scroll.
+    const placed = body.periods.flatMap((period: { rows: { id: string }[] }) =>
+      period.rows.map((row) => row.id),
+    );
+    expect(placed.filter((id: string) => id === overdue.id)).toHaveLength(1);
+  });
+
   it("names the cheques it counted but has not placed yet", async () => {
     await buildScenario();
 
@@ -471,6 +514,116 @@ describe("GET /api/pay-periods", () => {
     if (partial) {
       expect(BigInt(partial.inCents) >= START_CENTS).toBe(true);
     }
+  });
+});
+
+describe("DELETE /api/occurrences/:id", () => {
+  /**
+   * Added because the one-off form was: being able to add a row without being
+   * able to remove one leaves a mistyped amount distorting every figure on the
+   * ledger, with no way out but SQL. Marking it cleared is a different
+   * statement - that it happened.
+   */
+  async function addOneOff() {
+    const created = await harness.app.inject({
+      method: "POST",
+      url: "/api/occurrences",
+      headers: { cookie, "idempotency-key": randomUUID() },
+      payload: { name: "Dentist", cents: "12500", kind: "bill", date: "2026-11-16" },
+    });
+    expect(created.statusCode).toBe(201);
+    return created.json().occurrence;
+  }
+
+  it("removes a one-off softly, and takes it off the timeline", async () => {
+    await buildScenario();
+    const one = await addOneOff();
+
+    const before = await harness.app
+      .inject({ method: "GET", url: "/api/timeline", headers: { cookie } })
+      .then((response) => response.json());
+    expect(before.rows.map((row: { id: string }) => row.id)).toContain(one.id);
+
+    const removed = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/occurrences/${one.id as string}`,
+      headers: { cookie, "idempotency-key": randomUUID(), "if-match": `"${String(one.version)}"` },
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const after = await harness.app
+      .inject({ method: "GET", url: "/api/timeline", headers: { cookie } })
+      .then((response) => response.json());
+    expect(after.rows.map((row: { id: string }) => row.id)).not.toContain(one.id);
+
+    // The row is still there, with who removed it and when.
+    const row = await harness.db.prisma.occurrence.findUniqueOrThrow({ where: { id: one.id } });
+    expect(row.deletedAt).not.toBeNull();
+    expect(row.deletedById).toBe(carolId);
+
+    // And the figures move with it: the bill is no longer taken off.
+    expect(BigInt(after.leftThisCycleCents)).toBe(BigInt(before.leftThisCycleCents) + 12_500n);
+  });
+
+  it("refuses to remove one that comes from a bill", async () => {
+    const { ids } = await buildScenario();
+
+    const response = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/occurrences/${ids.mortgage.id as string}`,
+      headers: {
+        cookie,
+        "idempotency-key": randomUUID(),
+        "if-match": `"${String(ids.mortgage.version)}"`,
+      },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toBe("not_a_one_off");
+
+    const row = await harness.db.prisma.occurrence.findUniqueOrThrow({
+      where: { id: ids.mortgage.id },
+    });
+    expect(row.deletedAt).toBeNull();
+  });
+
+  it("needs an If-Match, like every other change", async () => {
+    await buildScenario();
+    const one = await addOneOff();
+
+    const response = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/occurrences/${one.id as string}`,
+      headers: { cookie, "idempotency-key": randomUUID() },
+    });
+
+    expect(response.statusCode).toBe(428);
+  });
+
+  it("is idempotent, so a double tap removes it once", async () => {
+    await buildScenario();
+    const one = await addOneOff();
+    const key = randomUUID();
+    const headers = {
+      cookie,
+      "idempotency-key": key,
+      "if-match": `"${String(one.version)}"`,
+    };
+
+    const first = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/occurrences/${one.id as string}`,
+      headers,
+    });
+    const second = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/occurrences/${one.id as string}`,
+      headers,
+    });
+
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(second.json()).toEqual(first.json());
   });
 });
 

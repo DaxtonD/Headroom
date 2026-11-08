@@ -229,6 +229,10 @@ export async function loadTimelineContext(
           paySchedules,
           today,
           periodCount: 3,
+          // Three windows is the minimum the mockups show; the horizon is an
+          // editable setting, so the windows follow it rather than assuming
+          // three will reach far enough.
+          coverThrough: horizonEnd,
           // Windows are anchored on the earliest schedule, which is how the
           // spreadsheet's two-week columns line up.
           anchorScheduleId: paySchedules[0]?.id,

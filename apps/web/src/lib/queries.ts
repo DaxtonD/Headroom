@@ -1,5 +1,6 @@
 /**
- * The data layer for Home, Upcoming and Pay plan.
+ * The data layer for the ledger: the balance, every event with its running
+ * balance, and the two-week windows they fall into.
  *
  * Amounts arrive as decimal strings and are turned into `bigint` cents here,
  * at the edge, so no component ever handles money as a `number`.
@@ -88,18 +89,6 @@ interface TimelineRowWire {
   readonly fromTemplate: boolean;
 }
 
-interface TimelineWire {
-  readonly today: string;
-  readonly horizonEnd: string;
-  readonly startBalanceCents: string;
-  readonly leftThisCycleCents: string;
-  readonly lowest: LowestWire;
-  readonly safeToSpendNowCents: string;
-  readonly coverage: DashboardWire["coverage"];
-  readonly estimatesCount: number;
-  readonly rows: readonly TimelineRowWire[];
-}
-
 /* -------------------------------------------------------------------------- */
 /* Parsed shapes                                                              */
 /* -------------------------------------------------------------------------- */
@@ -170,18 +159,6 @@ export interface TimelineRow {
   readonly version: number;
 }
 
-export interface Timeline {
-  readonly today: string;
-  readonly horizonEnd: string;
-  readonly startBalanceCents: Cents;
-  readonly leftThisCycleCents: Cents;
-  readonly lowest: Lowest;
-  readonly safeToSpendNowCents: Cents;
-  readonly coverage: Coverage;
-  readonly estimatesCount: number;
-  readonly rows: readonly TimelineRow[];
-}
-
 /** A cheque a window counts but which is not on the timeline yet. */
 export interface ProjectedPaycheque {
   readonly scheduleId: string;
@@ -199,6 +176,13 @@ export interface PayPeriod {
   readonly autoCents: Cents;
   readonly flexibleCents: Cents;
   readonly leftCents: Cents;
+  /**
+   * What could go into savings out of this window.
+   *
+   * The same computation as "safe to spend now", asked at a later point on the
+   * timeline, so it already accounts for everything that comes out after it.
+   */
+  readonly roomToSaveCents: Cents;
   readonly lowest: { readonly cents: Cents; readonly date: string | null } | null;
   readonly allAutoCovered: boolean;
   /** Grouped by the server, so the engine stays the authority on membership. */
@@ -242,7 +226,6 @@ function parseTimelineRow(row: TimelineRowWire): TimelineRow {
 }
 
 export const dashboardKey = ["dashboard"] as const;
-export const timelineKey = ["timeline"] as const;
 export const payPeriodsKey = ["pay-periods"] as const;
 
 export function useDashboard() {
@@ -273,25 +256,18 @@ export function useDashboard() {
   });
 }
 
-export function useTimeline() {
-  return useQuery({
-    queryKey: timelineKey,
-    queryFn: async (): Promise<Timeline> => {
-      const wire = await api.get<TimelineWire>("/api/timeline");
-      return {
-        today: wire.today,
-        horizonEnd: wire.horizonEnd,
-        startBalanceCents: toCents(wire.startBalanceCents),
-        leftThisCycleCents: toCents(wire.leftThisCycleCents),
-        lowest: parseLowest(wire.lowest),
-        safeToSpendNowCents: toCents(wire.safeToSpendNowCents),
-        coverage: parseCoverage(wire.coverage),
-        estimatesCount: wire.estimatesCount,
-        rows: wire.rows.map(parseTimelineRow),
-      };
-    },
-  });
-}
+/*
+ * There is deliberately no `useTimeline` any more.
+ *
+ * The ledger reads `/api/pay-periods`, which now carries every timeline row
+ * grouped into the window that pays for it - the engine publishes the
+ * membership, so nothing is lost between the two. A second hook fetching the
+ * same rows ungrouped would be a second copy of the screen's data with its own
+ * staleness.
+ *
+ * `/api/timeline` itself is still served: the API tests use it as the engine's
+ * HTTP contract, and it is the obvious endpoint for a flat export later.
+ */
 
 interface PayPeriodWire {
   readonly label: string;
@@ -302,6 +278,7 @@ interface PayPeriodWire {
   readonly autoCents: string;
   readonly flexibleCents: string;
   readonly leftCents: string;
+  readonly roomToSaveCents: string;
   readonly lowest: { readonly cents: string; readonly date: string | null } | null;
   readonly allAutoCovered: boolean;
   readonly rows: readonly TimelineRowWire[];
@@ -339,6 +316,7 @@ export function usePayPeriods() {
           autoCents: toCents(period.autoCents),
           flexibleCents: toCents(period.flexibleCents),
           leftCents: toCents(period.leftCents),
+          roomToSaveCents: toCents(period.roomToSaveCents),
           lowest: period.lowest
             ? { cents: toCents(period.lowest.cents), date: period.lowest.date }
             : null,
@@ -362,7 +340,6 @@ export function usePayPeriods() {
 function invalidateMoney(queryClient: ReturnType<typeof useQueryClient>): Promise<void> {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: dashboardKey }),
-    queryClient.invalidateQueries({ queryKey: timelineKey }),
     queryClient.invalidateQueries({ queryKey: payPeriodsKey }),
   ]).then(() => undefined);
 }
@@ -444,6 +421,26 @@ export function useCreateOneOff() {
         idempotencyKey: idempotencyKey ?? newIdempotencyKey(),
       });
     },
+    onSuccess: () => invalidateMoney(queryClient),
+  });
+}
+
+/**
+ * Remove a one-off.
+ *
+ * Only a one-off can go: a generated row belongs to its bill. Marking a row
+ * cleared is a different statement - that it happened - so a mistyped row
+ * needs this.
+ */
+export function useRemoveOneOff() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; version: number; idempotencyKey?: string }) =>
+      api.delete(`/api/occurrences/${input.id}`, {
+        baseVersion: input.version,
+        idempotencyKey: input.idempotencyKey ?? newIdempotencyKey(),
+      }),
     onSuccess: () => invalidateMoney(queryClient),
   });
 }

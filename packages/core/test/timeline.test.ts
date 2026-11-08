@@ -516,3 +516,119 @@ describe("room to save", () => {
     expect(first?.roomToSaveCents).toBe(-100_000n);
   });
 });
+
+describe("every row lands in a window", () => {
+  /**
+   * The hole this closes: the timeline deliberately keeps a dated item that is
+   * past and has not cleared, because the money has not moved yet. It has no
+   * date inside any window, so it used to belong to no window - dropped from
+   * the rows AND from the totals, while still lowering every running balance
+   * and safe-to-spend. An overdue bill disappeared from the pay plan while
+   * still making every figure on it smaller.
+   */
+  const events: TimelineInput[] = [
+    autoBill("overdue", "2026-11-02", -7_500n), // before today, never cleared
+    flexibleBill("undated", null, -4_000n), // anchored to "now"
+    autoBill("soon", "2026-11-10", -2_500n), // inside the partial window
+    paycheque("pay_dax", "2026-11-12", 200_000n, "dax"),
+    autoBill("later", "2026-11-20", -9_000n), // inside the second window
+  ];
+
+  const timeline = computeTimeline({ events, startBalanceCents: 100_000n });
+
+  const periods = computePayPeriods({
+    timeline,
+    paySchedules: [DAX, CAROL],
+    // Not a payday, so there is a partial window from today to Nov 11.
+    today: "2026-11-09",
+    periodCount: 2,
+    anchorScheduleId: "dax",
+  });
+
+  it("accounts for every row exactly once", () => {
+    const grouped = periods.flatMap((period) => period.rowIds);
+
+    expect(new Set(grouped).size).toBe(grouped.length);
+    expect([...grouped].sort()).toEqual([...events.map((event) => event.id)].sort());
+  });
+
+  it("puts an overdue bill and an undated one in the first window", () => {
+    expect(periods[0]?.isCurrentPartial).toBe(true);
+    // In the timeline's own order, which the ledger displays and the running
+    // balance follows: a row anchored to "now" comes before dated ones.
+    expect(periods[0]?.rowIds).toEqual(["undated", "overdue", "soon"]);
+    expect(periods[1]?.rowIds).toEqual(["pay_dax", "later"]);
+  });
+
+  it("counts them in that window's totals, not only in its list", () => {
+    // 7,500 automatic (the overdue bill) + 2,500 automatic (Nov 10) = 10,000;
+    // 4,000 flexible. Both were missing from these figures before.
+    expect(periods[0]?.autoCents).toBe(10_000n);
+    expect(periods[0]?.flexibleCents).toBe(4_000n);
+    // The window opens with what is in the account, and nothing arrives in it.
+    expect(periods[0]?.inCents).toBe(100_000n);
+    expect(periods[0]?.leftCents).toBe(100_000n - 10_000n - 4_000n);
+  });
+
+  it("still accounts for everything when today is itself a payday", () => {
+    // No partial window at all in this case, so "the first window" is a full
+    // one - and it still has to absorb the overdue and undated rows.
+    const onPayday = computePayPeriods({
+      timeline,
+      paySchedules: [DAX, CAROL],
+      today: "2026-11-12",
+      periodCount: 2,
+      anchorScheduleId: "dax",
+    });
+
+    expect(onPayday[0]?.isCurrentPartial).toBe(false);
+    expect(onPayday[0]?.rowIds).toContain("overdue");
+    expect(onPayday[0]?.rowIds).toContain("undated");
+    expect(onPayday.flatMap((period) => period.rowIds)).toHaveLength(events.length);
+  });
+});
+
+describe("the windows cover the horizon", () => {
+  it("adds windows until one reaches the date it is told to cover", () => {
+    const short = payPeriodWindows("2026-11-09", DAX, 3);
+    const long = payPeriodWindows("2026-11-09", DAX, 3, "2027-02-01");
+
+    // The partial window counts towards the minimum, so three means a partial
+    // one plus two full ones - about four weeks, which is less reach than it
+    // sounds and the reason `coverThrough` exists.
+    expect(short).toHaveLength(3);
+    expect(long.length).toBeGreaterThan(short.length);
+    expect(long[long.length - 1]?.end >= "2027-02-01").toBe(true);
+  });
+
+  it("asks for no more than the minimum when that already reaches", () => {
+    const windows = payPeriodWindows("2026-11-09", DAX, 3, "2026-11-20");
+
+    expect(windows).toHaveLength(3);
+  });
+
+  it("will not run away on an absurd horizon", () => {
+    expect(payPeriodWindows("2026-11-09", DAX, 3, "2400-01-01").length).toBeLessThanOrEqual(60);
+  });
+
+  it("keeps a row beyond the default three windows inside one", () => {
+    // Without `coverThrough` this row lands in no window, and the household
+    // can reach this state just by raising the horizon setting.
+    const far = autoBill("far", "2027-01-20", -5_000n);
+    const timeline = computeTimeline({
+      events: [paycheque("pay_dax", "2026-11-12", 200_000n, "dax"), far],
+      startBalanceCents: 50_000n,
+    });
+
+    const covered = computePayPeriods({
+      timeline,
+      paySchedules: [DAX],
+      today: "2026-11-09",
+      periodCount: 3,
+      coverThrough: "2027-01-20",
+      anchorScheduleId: "dax",
+    });
+
+    expect(covered.flatMap((period) => period.rowIds)).toContain("far");
+  });
+});

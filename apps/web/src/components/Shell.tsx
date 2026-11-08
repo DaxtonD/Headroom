@@ -20,9 +20,9 @@ export interface ShellMember extends Person {
 }
 
 const TABS = [
-  { to: "/", label: "Home" },
-  { to: "/upcoming", label: "Upcoming" },
-  { to: "/pay-plan", label: "Pay plan" },
+  // The balance, every event with its running balance, and the per-cheque
+  // subtotals. This was Home, Upcoming and Pay plan until they merged.
+  { to: "/", label: "Ledger" },
   // Months with a third paycheque or a third mortgage payment. Needs only the
   // schedules, so it is accurate far further out than the timeline.
   { to: "/year", label: "Year" },
