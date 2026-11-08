@@ -95,7 +95,25 @@ const ENTITY_TABLES: Record<string, { table: string; idColumn: string }> = {
   pay_schedule: { table: "pay_schedule", idColumn: "id" },
   account: { table: "account", idColumn: "id" },
   user: { table: "user", idColumn: "id" },
+  mortgage: { table: "mortgage", idColumn: "id" },
+  prepayment: { table: "prepayment", idColumn: "id" },
+  // Found by the guard below, not by a failing request: banked hours have had
+  // a version column since they were added and were never registered. There is
+  // no edit route for them yet, so nothing was broken - the first one added
+  // would have been.
+  banked_hours_entry: { table: "banked_hours_entry", idColumn: "id" },
 };
+
+/**
+ * Every versioned entity has to appear above or its first PATCH is a 500.
+ *
+ * Nothing in the type system says so - the key is a plain string - and adding
+ * the mortgage proved it: the routes compiled, the creates worked, and every
+ * edit failed at runtime with "no lockable table registered". `test/guards.
+ * test.ts` now reads the schema and fails if a model carrying a `version`
+ * column is missing from this map, so the next entity cannot repeat it.
+ */
+export const VERSIONED_ENTITIES = Object.freeze({ ...ENTITY_TABLES });
 
 /**
  * Lock a row for the rest of the transaction and read its current version.

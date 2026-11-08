@@ -20,6 +20,7 @@ import { registerBalanceRoutes } from "./routes/balance.js";
 import { registerBudgetRoutes } from "./routes/budget.js";
 import { registerGoalRoutes } from "./routes/goals.js";
 import { registerNetWorthRoutes } from "./routes/netWorth.js";
+import { registerSavingsRoutes } from "./routes/savings.js";
 import { registerEventRoutes } from "./routes/events.js";
 import { registerOccurrenceRoutes } from "./routes/occurrences.js";
 import { registerSetupRoutes } from "./routes/setup.js";
@@ -179,6 +180,7 @@ export async function buildApp({ env, db, changeStream }: BuildAppOptions): Prom
   await app.register(registerBudgetRoutes, { prefix: "/api" });
   await app.register(registerGoalRoutes, { prefix: "/api" });
   await app.register(registerYearRoutes, { prefix: "/api" });
+  await app.register(registerSavingsRoutes, { prefix: "/api" });
   await app.register(registerNetWorthRoutes, { prefix: "/api" });
   await app.register(registerSetupRoutes, { prefix: "/api" });
   await app.register(registerEventRoutes, { prefix: "/api" });

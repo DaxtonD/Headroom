@@ -68,6 +68,19 @@ enum AssetKind {
   liability
 }
 
+/// What an account is for.
+///
+/// Until there was a savings screen the household had exactly one account, and
+/// "the chequing account" meant "the first account row". That was fine with one
+/// row and silently wrong with two: the timeline would have gone on reading
+/// whichever row was created first, so a savings balance could have been
+/// mistaken for the money available to spend. The kind is now stated rather
+/// than inferred from creation order.
+enum AccountKind {
+  chequing
+  savings
+}
+
 /// What a pot of savings is for. Only one pot can sensibly feed the mortgage
 /// payoff projection, but nothing in the schema enforces that: the household
 /// may want to see two mortgage pots side by side while deciding.
@@ -226,9 +239,11 @@ model Session {
 /* -------------------------------------------------------------------------- */
 
 model Account {
-  id          String @id @default(uuid()) @db.Uuid
-  householdId String @db.Uuid
+  id          String      @id @default(uuid()) @db.Uuid
+  householdId String      @db.Uuid
   name        String
+  /// Defaults to chequing, which is what every existing row is.
+  kind        AccountKind @default(chequing)
 
   version     Int       @default(1)
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)

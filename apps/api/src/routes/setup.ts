@@ -55,7 +55,13 @@ const householdPatch = z
   })
   .strict();
 
-const accountCreate = z.object({ name: z.string().trim().min(1).max(60) }).strict();
+const accountCreate = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    /** Defaults to chequing, which is what a household's first account is. */
+    kind: z.enum(["chequing", "savings"]).optional(),
+  })
+  .strict();
 
 const accountPatch = z
   .object({
@@ -77,7 +83,7 @@ function serialiseSchedule(row: PaySchedule & { user?: { id: string; name: strin
 }
 
 function serialiseAccount(row: Account) {
-  return { id: row.id, name: row.name, version: row.version };
+  return { id: row.id, name: row.name, kind: row.kind, version: row.version };
 }
 
 export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
@@ -122,7 +128,9 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     // Manage screen shows this as a checklist rather than leaving someone to
     // wonder why their pay periods look wrong.
     const missing: string[] = [];
-    if (accounts.length === 0) missing.push("account");
+    // A savings account alone is not a set-up household: the timeline needs
+    // somewhere to read the balance that can be spent.
+    if (!accounts.some((account) => account.kind === "chequing")) missing.push("account");
     if (schedules.length === 0) missing.push("pay_schedule");
     if (household.netMonthlyIncomeCents === 0n) missing.push("income");
 
@@ -336,6 +344,8 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
           data: {
             householdId: user.householdId,
             name: parsed.data.name,
+            // Absent means chequing, so an existing client keeps working.
+            ...(parsed.data.kind === undefined ? {} : { kind: parsed.data.kind }),
             updatedById: user.id,
           },
         });

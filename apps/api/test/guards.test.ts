@@ -5,7 +5,9 @@
  * in a route must not be able to rewrite a balance snapshot, erase history, or
  * store an occurrence that the timeline cannot order.
  */
+import { readFileSync } from "node:fs";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { VERSIONED_ENTITIES } from "../src/lib/versioning.js";
 import { createHarness, migrateTestDatabase, seedHousehold, type Harness } from "./helpers/harness.js";
 
 let harness: Harness;
@@ -305,5 +307,61 @@ describe("value guards", () => {
     const reread = await harness.db.prisma.asset.findUniqueOrThrow({ where: { id: asset.id } });
     expect(reread.cents).toBe(huge);
     expect(typeof reread.cents).toBe("bigint");
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Every versioned entity can actually be locked                              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A guard on the concurrency machinery itself.
+ *
+ * `applyVersionedChange` locks a row with `SELECT ... FOR UPDATE`, and it finds
+ * the table through a hand-written map keyed by a plain string. Nothing in the
+ * type system connects the two, so a new versioned model compiles, creates
+ * fine, and then fails on its first edit with "no lockable table registered" -
+ * which is exactly what the mortgage did.
+ *
+ * So this reads the schema instead of trusting anyone to remember: any model
+ * carrying a `version` column is one that gets edited, and must be lockable.
+ */
+describe("the versioned-entity map", () => {
+  const schema = readFileSync(
+    new URL("../prisma/schema.prisma", import.meta.url),
+    "utf8",
+  );
+
+  const versionedTables = [...schema.matchAll(/model\s+\w+\s*\{([\s\S]*?)\n\}/g)]
+    .map((match) => match[1] as string)
+    .filter((block) => /^\s*version\s+Int/m.test(block))
+    .map((block) => /@@map\("([^"]+)"\)/.exec(block)?.[1])
+    .filter((table): table is string => table !== undefined);
+
+  it("finds the versioned models in the schema", () => {
+    // If this ever reads nothing, the regex has stopped matching and the whole
+    // guard would pass silently.
+    expect(versionedTables.length).toBeGreaterThan(8);
+    expect(versionedTables).toContain("mortgage");
+  });
+
+  it("can lock every model that carries a version", () => {
+    const registered = new Set(
+      Object.values(VERSIONED_ENTITIES).map((target) => target.table),
+    );
+    const missing = versionedTables.filter((table) => !registered.has(table));
+
+    expect(missing).toEqual([]);
+  });
+
+  it("registers nothing that is not a real table", () => {
+    const inSchema = new Set(
+      [...schema.matchAll(/@@map\("([^"]+)"\)/g)].map((match) => match[1] as string),
+    );
+    const unknown = Object.values(VERSIONED_ENTITIES)
+      .map((target) => target.table)
+      .filter((table) => !inSchema.has(table));
+
+    expect(unknown).toEqual([]);
   });
 });

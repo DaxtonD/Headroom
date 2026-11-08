@@ -25,6 +25,15 @@ const body = z
   .object({
     // Integer cents, as a string. See lib/wire.ts.
     cents: wireCentsNonNegative,
+    /**
+     * Which account this balance is for. Absent means chequing.
+     *
+     * Savings goes through this same endpoint on purpose: typing in a balance
+     * read off the bank is one act with one set of rules - append-only, server
+     * clock, latest `asOf` wins - and a second endpoint would be that logic
+     * written twice, with one copy eventually drifting.
+     */
+    accountId: z.string().uuid().optional(),
     /** Anything the user ticked as having cleared since the last update. */
     clearedOccurrenceIds: z.array(z.string().uuid()).max(200).optional(),
     note: z.string().trim().max(200).optional(),
@@ -61,15 +70,31 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
       ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
       work: async (tx) => {
         const account = await tx.account.findFirst({
-          where: { householdId: user.householdId, deletedAt: null },
+          where: input.accountId
+            ? { id: input.accountId, householdId: user.householdId, deletedAt: null }
+            : // No id means the one the home screen is about.
+              { householdId: user.householdId, deletedAt: null, kind: "chequing" },
           orderBy: { createdAt: "asc" },
-          select: { id: true },
+          select: { id: true, kind: true },
         });
         if (!account) {
           throw new HttpError(
             409,
             "no_account",
-            "There is no account to record a balance against yet.",
+            input.accountId
+              ? "That account does not exist."
+              : "There is no chequing account to record a balance against yet.",
+          );
+        }
+
+        // Clearing a bill means it left the chequing account. Accepting the
+        // list against savings would mark bills as paid on the strength of a
+        // savings balance, so it is refused rather than quietly ignored.
+        if (account.kind !== "chequing" && (input.clearedOccurrenceIds ?? []).length > 0) {
+          throw new HttpError(
+            400,
+            "invalid_request",
+            "Bills clear out of chequing, so they cannot be ticked off against another account.",
           );
         }
 
@@ -149,6 +174,7 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
           body: {
             snapshot: {
               id: snapshot.id,
+              accountId: account.id,
               cents: snapshot.cents.toString(),
               asOf: asOf.toISOString(),
               enteredById: user.id,

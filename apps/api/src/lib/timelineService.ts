@@ -100,8 +100,11 @@ export async function loadTimelineContext(
       select: { id: true, userId: true, anchorDate: true, defaultCents: true },
       orderBy: { anchorDate: "asc" },
     }),
+    // Chequing by KIND, not by creation order. The savings account is an
+    // Account row too, and "whichever row came first" would have let a savings
+    // balance be read as the money available to spend.
     prisma.account.findFirst({
-      where: { householdId, deletedAt: null },
+      where: { householdId, deletedAt: null, kind: "chequing" },
       select: { id: true },
       orderBy: { createdAt: "asc" },
     }),
