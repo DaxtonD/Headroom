@@ -182,6 +182,14 @@ export interface Timeline {
   readonly rows: readonly TimelineRow[];
 }
 
+/** A cheque a window counts but which is not on the timeline yet. */
+export interface ProjectedPaycheque {
+  readonly scheduleId: string;
+  readonly date: string;
+  readonly cents: Cents;
+  readonly owner: PersonWire | null;
+}
+
 export interface PayPeriod {
   readonly label: string;
   readonly start: string;
@@ -193,6 +201,9 @@ export interface PayPeriod {
   readonly leftCents: Cents;
   readonly lowest: { readonly cents: Cents; readonly date: string | null } | null;
   readonly allAutoCovered: boolean;
+  /** Grouped by the server, so the engine stays the authority on membership. */
+  readonly rows: readonly TimelineRow[];
+  readonly projectedPaycheques: readonly ProjectedPaycheque[];
 }
 
 /** Cents cross the wire as a decimal string, because JSON has no bigint. */
@@ -221,6 +232,14 @@ function parseCoverage(wire: DashboardWire["coverage"]): Coverage {
 /* -------------------------------------------------------------------------- */
 /* Queries                                                                    */
 /* -------------------------------------------------------------------------- */
+
+function parseTimelineRow(row: TimelineRowWire): TimelineRow {
+  return {
+    ...row,
+    cents: toCents(row.cents),
+    runningCents: toCents(row.runningCents),
+  };
+}
 
 export const dashboardKey = ["dashboard"] as const;
 export const timelineKey = ["timeline"] as const;
@@ -268,35 +287,54 @@ export function useTimeline() {
         safeToSpendNowCents: toCents(wire.safeToSpendNowCents),
         coverage: parseCoverage(wire.coverage),
         estimatesCount: wire.estimatesCount,
-        rows: wire.rows.map((row) => ({
-          ...row,
-          cents: toCents(row.cents),
-          runningCents: toCents(row.runningCents),
-        })),
+        rows: wire.rows.map(parseTimelineRow),
       };
     },
   });
 }
 
+interface PayPeriodWire {
+  readonly label: string;
+  readonly start: string;
+  readonly end: string;
+  readonly isCurrentPartial: boolean;
+  readonly inCents: string;
+  readonly autoCents: string;
+  readonly flexibleCents: string;
+  readonly leftCents: string;
+  readonly lowest: { readonly cents: string; readonly date: string | null } | null;
+  readonly allAutoCovered: boolean;
+  readonly rows: readonly TimelineRowWire[];
+  readonly projectedPaycheques: readonly {
+    readonly scheduleId: string;
+    readonly date: string;
+    readonly cents: string;
+    readonly owner: PersonWire | null;
+  }[];
+}
+
 export function usePayPeriods() {
   return useQuery({
     queryKey: payPeriodsKey,
-    queryFn: async (): Promise<{ today: string; periods: readonly PayPeriod[] }> => {
+    queryFn: async (): Promise<{
+      today: string;
+      horizonEnd: string;
+      periods: readonly PayPeriod[];
+    }> => {
       const wire = await api.get<{
         today: string;
-        periods: readonly (Omit<PayPeriod, "inCents" | "autoCents" | "flexibleCents" | "leftCents" | "lowest"> & {
-          inCents: string;
-          autoCents: string;
-          flexibleCents: string;
-          leftCents: string;
-          lowest: { cents: string; date: string | null } | null;
-        })[];
+        horizonEnd: string;
+        periods: readonly PayPeriodWire[];
       }>("/api/pay-periods");
 
       return {
         today: wire.today,
+        horizonEnd: wire.horizonEnd,
         periods: wire.periods.map((period) => ({
-          ...period,
+          label: period.label,
+          start: period.start,
+          end: period.end,
+          isCurrentPartial: period.isCurrentPartial,
           inCents: toCents(period.inCents),
           autoCents: toCents(period.autoCents),
           flexibleCents: toCents(period.flexibleCents),
@@ -304,6 +342,12 @@ export function usePayPeriods() {
           lowest: period.lowest
             ? { cents: toCents(period.lowest.cents), date: period.lowest.date }
             : null,
+          allAutoCovered: period.allAutoCovered,
+          rows: period.rows.map(parseTimelineRow),
+          projectedPaycheques: period.projectedPaycheques.map((cheque) => ({
+            ...cheque,
+            cents: toCents(cheque.cents),
+          })),
         })),
       };
     },

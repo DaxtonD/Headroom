@@ -10,7 +10,43 @@
  */
 import type { FastifyInstance } from "fastify";
 import { HttpError } from "../lib/http.js";
-import { loadOccurrenceDecorations, loadTimelineContext } from "../lib/timelineService.js";
+import {
+  loadOccurrenceDecorations,
+  loadTimelineContext,
+  type OccurrenceDecoration,
+} from "../lib/timelineService.js";
+import type { TimelineRow } from "@headroom/core";
+
+/**
+ * One timeline row, as every screen receives it.
+ *
+ * Shared by the timeline and the pay plan deliberately: two serialisers for
+ * the same row would drift, and then Upcoming and Pay plan would quietly
+ * disagree about the same bill.
+ */
+function serialiseTimelineRow(row: TimelineRow, decoration: OccurrenceDecoration | undefined) {
+  return {
+    id: row.event.id,
+    name: row.event.name,
+    cents: row.event.cents,
+    kind: row.event.kind,
+    placement: row.event.placement,
+    date: row.effectiveDate,
+    // True when this row has its own date, rather than borrowing its anchor
+    // paycheque's. The UI words the two differently.
+    isDated: row.event.placement === "auto",
+    anchorOccurrenceId: row.event.anchorId ?? null,
+    isOneOff: row.event.isOneOff === true,
+    verified: row.event.verified === true,
+    verifiedBy: decoration?.verifiedBy ?? null,
+    verifiedAt: decoration?.verifiedAt?.toISOString() ?? null,
+    owner: decoration?.owner ?? null,
+    requiresCoverage: row.requiresCoverage,
+    runningCents: row.runningCents,
+    version: decoration?.version ?? 1,
+    fromTemplate: decoration?.templateId !== null,
+  };
+}
 
 /** How many upcoming automatic withdrawals Home lists. */
 const HOME_AUTO_COUNT = 4;
@@ -103,43 +139,74 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
       coverage: context.timeline.coverage,
       estimatesCount: context.timeline.estimatesCount,
 
-      rows: rows.map((row) => {
-        const decoration = decorations.get(row.event.id);
-        return {
-          id: row.event.id,
-          name: row.event.name,
-          cents: row.event.cents,
-          kind: row.event.kind,
-          placement: row.event.placement,
-          date: row.effectiveDate,
-          // True when this row has its own date, rather than borrowing its
-          // anchor paycheque's. The UI words the two differently.
-          isDated: row.event.placement === "auto",
-          anchorOccurrenceId: row.event.anchorId ?? null,
-          isOneOff: row.event.isOneOff === true,
-          verified: row.event.verified === true,
-          verifiedBy: decoration?.verifiedBy ?? null,
-          verifiedAt: decoration?.verifiedAt?.toISOString() ?? null,
-          owner: decoration?.owner ?? null,
-          requiresCoverage: row.requiresCoverage,
-          runningCents: row.runningCents,
-          version: decoration?.version ?? 1,
-          fromTemplate: decoration?.templateId !== null,
-        };
-      }),
+      rows: rows.map((row) => serialiseTimelineRow(row, decorations.get(row.event.id))),
     });
   });
 
-  /** Pay plan: the two-week windows. */
-  app.get<{ Querystring: { count?: string } }>("/pay-periods", async (request, reply) => {
+  /**
+   * Pay plan: the two-week windows, each with the rows that fall inside it.
+   *
+   * The rows are grouped here rather than in the browser so that the engine
+   * stays the single authority on which window an item belongs to. Working it
+   * out again client-side would be a second implementation of the same rule,
+   * and the two would eventually disagree.
+   */
+  app.get("/pay-periods", async (request, reply) => {
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
 
     const context = await loadTimelineContext(app.db.prisma, user.householdId);
 
+    const decorations = await loadOccurrenceDecorations(
+      app.db.prisma,
+      context.timeline.rows.map((row) => row.event.id),
+    );
+
+    // Names and amounts for the cheques a window counts but that are not on
+    // the timeline yet, because they fall past the horizon.
+    const scheduleOwners = await app.db.prisma.paySchedule.findMany({
+      where: { deletedAt: null, user: { householdId: user.householdId, deletedAt: null } },
+      select: { id: true, defaultCents: true, user: { select: { id: true, name: true, initial: true } } },
+    });
+    const schedulesById = new Map(scheduleOwners.map((schedule) => [schedule.id, schedule]));
+
     return reply.send({
       today: context.today,
-      periods: context.payPeriods,
+      horizonEnd: context.horizonEnd,
+      periods: context.payPeriods.map((period) => {
+        const rows = context.timeline.rows.filter((row) =>
+          row.effectiveDate === null
+            ? period.isCurrentPartial
+            : row.effectiveDate >= period.start && row.effectiveDate <= period.end,
+        );
+
+        return {
+          label: period.label,
+          start: period.start,
+          end: period.end,
+          isCurrentPartial: period.isCurrentPartial,
+          inCents: period.inCents,
+          autoCents: period.autoCents,
+          flexibleCents: period.flexibleCents,
+          leftCents: period.leftCents,
+          lowest: period.lowest,
+          allAutoCovered: period.allAutoCovered,
+
+          rows: rows.map((row) => serialiseTimelineRow(row, decorations.get(row.event.id))),
+
+          /** Cheques counted in `inCents` that have no occurrence yet. */
+          projectedPaycheques: period.projectedPaychequeIds.map((id) => {
+            const [scheduleId = "", date = ""] = id.split("|");
+            const schedule = schedulesById.get(scheduleId);
+            return {
+              scheduleId,
+              date,
+              cents: schedule?.defaultCents ?? 0n,
+              owner: schedule?.user ?? null,
+            };
+          }),
+        };
+      }),
     });
   });
 }

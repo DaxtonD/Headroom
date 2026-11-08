@@ -10,6 +10,7 @@ import { Navigate, Route, Routes } from "react-router";
 import { Shell } from "./components/Shell.js";
 import { UpdateBalanceSheet } from "./components/UpdateBalanceSheet.js";
 import { Home } from "./pages/Home.js";
+import { PayPlan } from "./pages/PayPlan.js";
 import { Upcoming } from "./pages/Upcoming.js";
 import { useLogout, useSession } from "./lib/session.js";
 import { useLiveUpdates } from "./lib/useLiveUpdates.js";
@@ -66,10 +67,7 @@ export function App(): React.JSX.Element {
       <Routes>
         <Route path="/" element={<Home onUpdateBalance={() => setBalanceSheetOpen(true)} />} />
         <Route path="/upcoming" element={<Upcoming canEdit={canEdit} />} />
-        <Route
-          path="/pay-plan"
-          element={<ComingSoon title="Pay plan" milestone="M3" />}
-        />
+        <Route path="/pay-plan" element={<PayPlan canEdit={canEdit} />} />
         <Route path="/budget" element={<ComingSoon title="Budget" milestone="M4" />} />
         <Route path="/goals" element={<ComingSoon title="Goals" milestone="M4" />} />
         <Route path="*" element={<Navigate to="/" replace />} />

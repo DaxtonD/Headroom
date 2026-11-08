@@ -1,0 +1,269 @@
+.payplan {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-4);
+}
+
+/* ---- Period chips ---- */
+
+.payplan__chips {
+  display: flex;
+  gap: var(--hr-space-2);
+  /* More periods than fit simply scroll, as in the mockups. */
+  overflow-x: auto;
+  padding-bottom: var(--hr-space-1);
+  scrollbar-width: thin;
+}
+
+.payplan__chip {
+  flex: 0 0 auto;
+  min-height: var(--hr-touch-min);
+  padding: 0 var(--hr-space-4);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-pill);
+  background: var(--hr-card);
+  color: var(--hr-text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.payplan__chip--active {
+  background: var(--hr-hero-bg);
+  border-color: var(--hr-hero-bg);
+  color: var(--hr-hero-text);
+}
+
+/* ---- Sections ---- */
+
+.payplan__section {
+  padding: var(--hr-space-4) var(--hr-space-5);
+}
+
+.payplan__section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+}
+
+.payplan__section-title {
+  font-family: var(--hr-font-body);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--hr-text-secondary);
+}
+
+.payplan__section-total {
+  font-weight: 600;
+  font-size: 17px;
+}
+
+.payplan__section-foot {
+  margin-top: var(--hr-space-3);
+  padding-top: var(--hr-space-3);
+  border-top: 1px solid var(--hr-row-divider);
+}
+
+.payplan__note {
+  margin-top: var(--hr-space-1);
+  font-size: 13px;
+  color: var(--hr-text-muted);
+  line-height: 1.45;
+}
+
+/* ---- Rows ---- */
+
+.payplan__rows {
+  list-style: none;
+  margin: var(--hr-space-3) 0 0;
+  padding: 0;
+}
+
+.payplan__row {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-3);
+  flex-wrap: wrap;
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-2) 0;
+  border-top: 1px solid var(--hr-row-divider);
+}
+
+.payplan__row:first-child {
+  border-top: none;
+}
+
+/* A cheque the window counts but which is not placed yet. */
+.payplan__row--projected {
+  opacity: 0.72;
+}
+
+.payplan__row--moving {
+  opacity: 0.5;
+}
+
+.payplan__row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-2);
+  flex-wrap: wrap;
+}
+
+.payplan__row-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.payplan__empty {
+  padding: var(--hr-space-2) 0;
+  font-size: 14px;
+  color: var(--hr-text-muted);
+}
+
+/* ---- Moving a flexible bill ---- */
+
+.payplan__drag {
+  color: var(--hr-estimate-ring);
+  font-size: 16px;
+  cursor: grab;
+  /* Decorative: the move buttons are the real control, and they work on a
+     phone where dragging between periods cannot. */
+  display: none;
+}
+
+.payplan__moves {
+  display: flex;
+  gap: var(--hr-space-1);
+  flex-wrap: wrap;
+  /* Own line on a phone, so the row above stays readable. */
+  flex-basis: 100%;
+}
+
+.payplan__move {
+  min-height: 36px;
+  padding: 0 var(--hr-space-3);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-pill);
+  background: var(--hr-card);
+  color: var(--hr-primary);
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.payplan__move:hover:not(:disabled) {
+  background: var(--hr-green-tint-soft);
+}
+
+.payplan__move:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ---- Drop targets while dragging ---- */
+
+.payplan__drops {
+  position: sticky;
+  bottom: var(--hr-space-3);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-card);
+  background: var(--hr-green-tint);
+  color: var(--hr-positive);
+}
+
+.payplan__drops-label {
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: var(--hr-space-2);
+}
+
+.payplan__drops-row {
+  display: flex;
+  gap: var(--hr-space-2);
+  flex-wrap: wrap;
+}
+
+.payplan__drop {
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border: 2px dashed var(--hr-primary);
+  border-radius: var(--hr-radius-input);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+/* ---- The result card ---- */
+
+.payplan__result {
+  padding: var(--hr-space-5);
+  border-radius: var(--hr-radius-hero);
+  background: var(--hr-hero-bg);
+  color: var(--hr-hero-text);
+  box-shadow: var(--hr-shadow-hero);
+}
+
+.payplan__result-label {
+  color: var(--hr-hero-muted);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.payplan__result-amount {
+  margin: var(--hr-space-1) 0 var(--hr-space-2);
+  font-size: 34px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.payplan__result-note,
+.payplan__result-lowest {
+  color: var(--hr-hero-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.payplan__result-lowest {
+  margin-top: var(--hr-space-2);
+  padding-top: var(--hr-space-2);
+  border-top: 1px solid rgba(244, 247, 245, 0.18);
+}
+
+.payplan__result-lowest strong {
+  color: var(--hr-hero-text);
+}
+
+.payplan__error {
+  padding: var(--hr-space-5);
+}
+
+.payplan__error h2 {
+  font-size: 18px;
+  margin-bottom: var(--hr-space-2);
+}
+
+.payplan__error p {
+  color: var(--hr-text-secondary);
+  font-size: 15px;
+}
+
+/* ---- Desktop: dragging becomes available, moves sit inline ---- */
+
+@media (min-width: 1024px) {
+  .payplan__drag {
+    display: inline;
+  }
+
+  .payplan__row--flexible {
+    cursor: grab;
+  }
+
+  .payplan__moves {
+    flex-basis: auto;
+  }
+}

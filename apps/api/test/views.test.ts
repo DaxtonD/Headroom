@@ -380,6 +380,86 @@ describe("GET /api/pay-periods", () => {
     }
   });
 
+  it("groups the rows into the window each one belongs to", async () => {
+    const { ids } = await buildScenario();
+
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/pay-periods", headers: { cookie } })
+      .then((response) => response.json());
+
+    // Every row appears in exactly one window, and nothing is lost.
+    const placed = body.periods.flatMap((period: { rows: { id: string }[] }) =>
+      period.rows.map((row) => row.id),
+    );
+    expect(new Set(placed).size).toBe(placed.length);
+
+    const timeline = await harness.app
+      .inject({ method: "GET", url: "/api/timeline", headers: { cookie } })
+      .then((response) => response.json());
+
+    for (const row of timeline.rows) {
+      expect(placed, `${row.name} should be in a window`).toContain(row.id);
+    }
+
+    // The bill anchored to "now" belongs to the window that starts today.
+    const partial = body.periods.find((period: { isCurrentPartial: boolean }) => period.isCurrentPartial);
+    if (partial) {
+      expect(partial.rows.map((row: { id: string }) => row.id)).toContain(ids.power.id);
+    }
+  });
+
+  it("names the cheques it counted but has not placed yet", async () => {
+    await buildScenario();
+
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/pay-periods", headers: { cookie } })
+      .then((response) => response.json());
+
+    const withProjection = body.periods.find(
+      (period: { projectedPaycheques: unknown[] }) => period.projectedPaycheques.length > 0,
+    );
+
+    if (withProjection) {
+      const cheque = withProjection.projectedPaycheques[0];
+      // Enough for the UI to label it, rather than an opaque id.
+      expect(cheque.owner?.name).toBeTruthy();
+      expect(cheque.date).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(typeof cheque.cents).toBe("string");
+
+      // And it is counted in what comes in, which is the whole reason it is
+      // reported: otherwise that window's "left over" would be wrong.
+      const placedIn = withProjection.rows
+        .filter((row: { cents: string }) => BigInt(row.cents) > 0n)
+        .reduce((total: bigint, row: { cents: string }) => total + BigInt(row.cents), 0n);
+      expect(BigInt(withProjection.inCents)).toBe(placedIn + BigInt(cheque.cents));
+    }
+  });
+
+  it("serialises a row the same way the timeline does", async () => {
+    await buildScenario();
+
+    const [periods, timeline] = await Promise.all([
+      harness.app
+        .inject({ method: "GET", url: "/api/pay-periods", headers: { cookie } })
+        .then((response) => response.json()),
+      harness.app
+        .inject({ method: "GET", url: "/api/timeline", headers: { cookie } })
+        .then((response) => response.json()),
+    ]);
+
+    const fromTimeline = new Map(
+      timeline.rows.map((row: { id: string }) => [row.id, row]),
+    );
+
+    for (const period of periods.periods) {
+      for (const row of period.rows) {
+        // Two serialisers for the same row would drift, and then Upcoming and
+        // Pay plan would disagree about the same bill.
+        expect(row, row.name).toEqual(fromTimeline.get(row.id));
+      }
+    }
+  });
+
   it("opens the current partial window with what is in the account", async () => {
     await buildScenario();
 
