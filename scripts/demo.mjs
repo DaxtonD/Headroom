@@ -20,6 +20,11 @@
 import { execFileSync, spawnSync } from "node:child_process";
 import { networkInterfaces } from "node:os";
 import { randomBytes } from "node:crypto";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+/** The repo root, so the build works whatever directory this is run from. */
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const CONTAINER = "headroom-demo";
 const IMAGE = "headroom:dev";
@@ -99,6 +104,25 @@ function up(origin) {
       `The database container "${TEST_DB_CONTAINER}" is not there. Start it first:\n  node scripts/testdb.mjs up`,
     );
     process.exit(1);
+  }
+
+  // Build before restarting.
+  //
+  // This script used to go straight to `docker rm` + `docker run` on an image
+  // someone had built by hand at some earlier point. Restarting the demo then
+  // looked like it had picked up the latest code and had not, which cost real
+  // time chasing 404s from routes that existed in the tree but not in the
+  // image. Pass --no-build to skip it when only the environment changed.
+  if (!process.argv.includes("--no-build")) {
+    console.log(`Building ${IMAGE} ...`);
+    const built = spawnSync("docker", ["build", "--tag", IMAGE, "."], {
+      stdio: "inherit",
+      cwd: REPO_ROOT,
+    });
+    if (built.status !== 0) {
+      console.error("The image did not build, so the demo was left as it was.");
+      process.exit(1);
+    }
   }
 
   docker(["rm", "--force", CONTAINER]);
