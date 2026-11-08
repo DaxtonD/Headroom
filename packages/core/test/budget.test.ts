@@ -7,8 +7,6 @@
 import { describe, expect, it } from "vitest";
 import {
   computeBudget,
-  computeGoal,
-  computeGoals,
   computeReimbursements,
   sumBankedHours,
 } from "../src/budget.js";
@@ -84,37 +82,12 @@ describe("computeBudget", () => {
   });
 });
 
-describe("computeGoal", () => {
-  it("reports what is left and how far along it is", () => {
-    const goal = computeGoal({ name: "Saving up", targetCents: 240_000n, savedCents: 180_000n });
-
-    expect(goal.remainingCents).toBe(60_000n);
-    expect(goal.pct).toBe(75);
-  });
-
-  it("handles a goal already met, and one overshot", () => {
-    expect(computeGoal({ name: "Met", targetCents: 100n, savedCents: 100n }).pct).toBe(100);
-
-    const over = computeGoal({ name: "Over", targetCents: 100n, savedCents: 150n });
-    expect(over.pct).toBe(150);
-    expect(over.remainingCents).toBe(-50n);
-  });
-
-  it("handles nothing saved yet", () => {
-    const goal = computeGoal({ name: "New", targetCents: 500_000n, savedCents: 0n });
-    expect(goal.pct).toBe(0);
-    expect(goal.remainingCents).toBe(500_000n);
-  });
-
-  it("maps a list", () => {
-    const goals = computeGoals([
-      { name: "A", targetCents: 100n, savedCents: 50n },
-      { name: "B", targetCents: 200n, savedCents: 50n },
-    ]);
-
-    expect(goals.map((goal) => goal.pct)).toEqual([50, 25]);
-  });
-});
+// Goals moved out of this module. They are earmarks against one real savings
+// account now, with an optional target, and they live in `savings.test.ts`.
+// The one behaviour that changed on the way: `remainingCents` is clamped at
+// zero instead of going negative when a target is overshot, because "met" is
+// what a screen wants to say. How far past is still recoverable from the
+// amount set aside and the target.
 
 describe("computeReimbursements", () => {
   it("sorts each purchase into bought, submitted or paid back", () => {

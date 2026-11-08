@@ -380,7 +380,11 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
           <Row
             key={goal.id}
             name={goal.name}
-            note={`${goal.pct}% of ${formatCents(goal.targetCents)}`}
+            note={
+              goal.targetCents === null || goal.pct === null
+                ? "No target - saving towards it"
+                : `${goal.pct}% of ${formatCents(goal.targetCents)}`
+            }
             amount={goal.savedCents}
             canEdit={canEdit}
             onEdit={() => setEditing({ kind: "goal", goal })}

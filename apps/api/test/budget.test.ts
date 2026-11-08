@@ -288,7 +288,7 @@ describe("GET /api/goals-overview", () => {
     expect(body.goals[0].pct).toBe(75);
   });
 
-  it("refuses a goal with no target", async () => {
+  it("refuses a target of zero, which is different from having none", async () => {
     const response = await harness.app.inject({
       method: "POST",
       url: "/api/goals",
@@ -297,6 +297,103 @@ describe("GET /api/goals-overview", () => {
     });
 
     expect(response.statusCode).toBe(400);
+  });
+
+  it("accepts a goal with no target at all", async () => {
+    // The trip case. Dax, 2026-11-08: "Trips never have a set date or set
+    // cost." Nothing to be a fraction of, so no remaining and no percentage -
+    // and null rather than "0", because they mean different things.
+    const created = await harness.app.inject({
+      method: "POST",
+      url: "/api/goals",
+      headers: headers(),
+      payload: { name: "Trip", savedCents: "438215" },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/goals-overview", headers: { cookie } })
+      .then((response) => response.json());
+
+    const goal = body.goals.find((candidate: { name: string }) => candidate.name === "Trip");
+    expect(goal.targetCents).toBeNull();
+    expect(goal.remainingCents).toBeNull();
+    expect(goal.pct).toBeNull();
+    expect(goal.savedCents).toBe("438215");
+    expect(goal.isMet).toBe(false);
+  });
+
+  it("accepts an explicit null target, so a client can clear one", async () => {
+    const created = await harness.app
+      .inject({
+        method: "POST",
+        url: "/api/goals",
+        headers: headers(),
+        payload: { name: "Open ended", targetCents: null, savedCents: "1000" },
+      })
+      .then((response) => response.json());
+
+    const cleared = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/goals/${created.goal.id}`,
+      headers: { ...headers(), "if-match": `"${String(created.goal.version)}"` },
+      payload: { targetCents: "50000" },
+    });
+    expect(cleared.statusCode).toBe(200);
+    expect(cleared.json().goal.targetCents).toBe("50000");
+
+    const reopened = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/goals/${created.goal.id}`,
+      headers: { ...headers(), "if-match": `"${String(cleared.json().goal.version)}"` },
+      payload: { targetCents: null },
+    });
+    expect(reopened.statusCode).toBe(200);
+    expect(reopened.json().goal.targetCents).toBeNull();
+  });
+
+  it("marks a goal met once it reaches its target, and never goes past 100% of nothing", async () => {
+    const created = await harness.app.inject({
+      method: "POST",
+      url: "/api/goals",
+      headers: headers(),
+      payload: { name: "Overshot", targetCents: "10000", savedCents: "12000" },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/goals-overview", headers: { cookie } })
+      .then((response) => response.json());
+
+    const goal = body.goals.find((candidate: { name: string }) => candidate.name === "Overshot");
+    // Clamped at zero: "met" is what a screen wants to say, and how far past is
+    // still recoverable from the two amounts.
+    expect(goal.remainingCents).toBe("0");
+    expect(goal.isMet).toBe(true);
+    expect(goal.pct).toBe(120);
+  });
+
+  it("carries a purpose, so the savings screen can find the mortgage pot", async () => {
+    const created = await harness.app.inject({
+      method: "POST",
+      url: "/api/goals",
+      headers: headers(),
+      payload: { name: "Lump sum", purpose: "mortgage_lump_sum", savedCents: "0" },
+    });
+
+    expect(created.statusCode).toBe(201);
+    expect(created.json().goal.purpose).toBe("mortgage_lump_sum");
+  });
+
+  it("defaults the purpose to general", async () => {
+    const created = await harness.app.inject({
+      method: "POST",
+      url: "/api/goals",
+      headers: headers(),
+      payload: { name: "Something else", savedCents: "0" },
+    });
+
+    expect(created.json().goal.purpose).toBe("general");
   });
 
   it("tracks a work expense from bought to submitted to paid back", async () => {

@@ -117,13 +117,25 @@ export function useBudget() {
 /* Goals                                                                      */
 /* -------------------------------------------------------------------------- */
 
+export type EarmarkPurpose = "general" | "mortgage_lump_sum";
+
 export interface GoalProgress {
   readonly id: string;
   readonly name: string;
-  readonly targetCents: Cents;
+  /**
+   * Null when nothing is being saved towards in particular.
+   *
+   * A trip has no set cost, so a target is optional, and null is not the same
+   * as zero: with no target there is no progress to show and no bar to draw.
+   * `remainingCents` and `pct` are null in exactly the same cases.
+   */
+  readonly targetCents: Cents | null;
   readonly savedCents: Cents;
-  readonly remainingCents: Cents;
-  readonly pct: number;
+  readonly remainingCents: Cents | null;
+  readonly pct: number | null;
+  readonly isMet: boolean;
+  readonly purpose: EarmarkPurpose;
+  readonly sortIndex: number;
   readonly version: number;
 }
 
@@ -170,9 +182,9 @@ export function useGoalsOverview() {
     queryFn: async (): Promise<GoalsOverview> => {
       const wire = await api.get<{
         goals: (Omit<GoalProgress, "targetCents" | "savedCents" | "remainingCents"> & {
-          targetCents: string;
+          targetCents: string | null;
           savedCents: string;
-          remainingCents: string;
+          remainingCents: string | null;
         })[];
         reimbursements: {
           items: (Omit<Reimbursement, "cents"> & { cents: string })[];
@@ -188,9 +200,9 @@ export function useGoalsOverview() {
       return {
         goals: wire.goals.map((goal) => ({
           ...goal,
-          targetCents: toCents(goal.targetCents),
+          targetCents: goal.targetCents === null ? null : toCents(goal.targetCents),
           savedCents: toCents(goal.savedCents),
-          remainingCents: toCents(goal.remainingCents),
+          remainingCents: goal.remainingCents === null ? null : toCents(goal.remainingCents),
         })),
         reimbursements: {
           items: wire.reimbursements.items.map((item) => ({ ...item, cents: toCents(item.cents) })),

@@ -244,20 +244,10 @@ export interface BudgetResult {
 /* Goals, net worth, retirement                                              */
 /* -------------------------------------------------------------------------- */
 
-export interface GoalInput {
-  readonly name: string;
-  readonly targetCents: Cents;
-  readonly savedCents: Cents;
-}
-
-export interface GoalResult {
-  readonly name: string;
-  readonly targetCents: Cents;
-  readonly savedCents: Cents;
-  readonly remainingCents: Cents;
-  /** Progress to one decimal place, as the sheet shows it. */
-  readonly pct: number;
-}
+// Goals used to be computed here, by `computeGoal`, which required a target.
+// They are earmarks against one real savings account now, and a target is
+// optional because a trip has no set cost. One rule, in `savings.ts`: see
+// `Earmark`, `EarmarkProgress` and `earmarkProgress`.
 
 export interface AssetInput {
   readonly name: string;

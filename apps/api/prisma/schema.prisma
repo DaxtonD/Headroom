@@ -68,6 +68,33 @@ enum AssetKind {
   liability
 }
 
+/// What a pot of savings is for. Only one pot can sensibly feed the mortgage
+/// payoff projection, but nothing in the schema enforces that: the household
+/// may want to see two mortgage pots side by side while deciding.
+enum EarmarkPurpose {
+  general
+  mortgage_lump_sum
+}
+
+/// How a quoted annual mortgage rate becomes a per-period rate.
+///
+/// `simple_division` divides by the number of payments a year, which is what
+/// the household's own spreadsheet does, and the default so the two agree.
+/// `semi_annual` is the Canadian convention a lender actually uses. The
+/// difference is a couple of hundred dollars of interest across the remaining
+/// term and does not move the payoff date by one payment.
+enum RateCompounding {
+  simple_division
+  semi_annual
+}
+
+/// The window a prepayment allowance resets on. Dax confirmed the household's
+/// runs on the calendar year, which is why a lump sum can land in late
+/// December just before the reset.
+enum PrivilegePeriod {
+  calendar_year
+}
+
 enum PayCadence {
   biweekly
 }
@@ -136,6 +163,7 @@ model Household {
   assets             Asset[]
   activities         Activity[]
   bankedHours        BankedHoursEntry[]
+  mortgages          Mortgage[]
   retirementSettings RetirementSettings?
 
   @@map("household")
@@ -211,6 +239,9 @@ model Account {
 
   household Household         @relation(fields: [householdId], references: [id], onDelete: Cascade)
   snapshots BalanceSnapshot[]
+  /// Templates that transfer INTO this account. A savings account is an
+  /// ordinary Account row; nothing distinguishes it but what points at it.
+  transfersIn Template[]      @relation("templateTransferTarget")
 
   @@index([householdId])
   @@map("account")
@@ -252,7 +283,8 @@ model PaySchedule {
   deletedAt   DateTime? @db.Timestamptz(6)
   deletedById String?   @db.Uuid
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  mortgages Mortgage[]
 
   @@index([userId])
   @@map("pay_schedule")
@@ -275,6 +307,21 @@ model Template {
   section      BudgetSection?
   budgetLineId String?        @db.Uuid
 
+  /// Set this and the template stops being a bill: it is a transfer into that
+  /// account.
+  ///
+  /// The savings line was modelled as a bill, which made it look like an
+  /// obligation competing with everything else. Dax, 2026-11-08: "The savings
+  /// of $1300 is a goal we set. She decides when and how much we allocate." So
+  /// `defaultCents` is the household's per-period TARGET, and each occurrence's
+  /// own amount is what was actually decided that period. Target against actual
+  /// then falls out of machinery that already exists, including the
+  /// estimate-versus-verified badge, which reads as proposed versus decided.
+  ///
+  /// On the ledger a transfer behaves exactly like a bill - the money really
+  /// does leave chequing - so nothing about the running balance changes.
+  transferToAccountId String? @db.Uuid
+
   /// The monthly budget figure, when the derived one is not wanted.
   ///
   /// Headroom works out what a recurring bill costs per month from its
@@ -295,10 +342,11 @@ model Template {
   deletedAt   DateTime? @db.Timestamptz(6)
   deletedById String?   @db.Uuid
 
-  household   Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
-  owner       User?        @relation("templateOwner", fields: [ownerUserId], references: [id])
-  budgetLine  BudgetLine?  @relation(fields: [budgetLineId], references: [id])
-  occurrences Occurrence[]
+  household         Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  owner             User?        @relation("templateOwner", fields: [ownerUserId], references: [id])
+  budgetLine        BudgetLine?  @relation(fields: [budgetLineId], references: [id])
+  transferToAccount Account?     @relation("templateTransferTarget", fields: [transferToAccountId], references: [id], onDelete: Restrict)
+  occurrences       Occurrence[]
 
   @@index([householdId, active])
   @@map("template")
@@ -384,12 +432,32 @@ model BudgetLine {
   @@map("budget_line")
 }
 
+/// An earmark: money already in the savings account, labelled with what it is
+/// for. The household has exactly one real savings account, so this is a label
+/// and not a transfer - nothing here moves money.
+///
+/// `savedCents` and the account's own balance snapshots are both facts, neither
+/// derived from the other, so they can disagree. That disagreement is the
+/// useful number (see `computeSavings` in @headroom/core) and is reported
+/// rather than hidden.
 model Goal {
   id          String @id @default(uuid()) @db.Uuid
   householdId String @db.Uuid
   name        String
-  targetCents BigInt
+
+  /// What it is being saved towards, when there is a figure at all.
+  ///
+  /// Null is the normal case for a trip. Dax, 2026-11-08: "Trips never have a
+  /// set date or set cost. We simply save for it and book a good deal when it
+  /// comes about." An app that demands a target makes someone invent one and
+  /// then reports progress against a number nobody believes.
+  targetCents BigInt?
   savedCents  BigInt @default(0)
+
+  /// Lets the savings screen find the pot that feeds the mortgage payoff
+  /// projection without a household setting pointing at a UUID.
+  purpose     EarmarkPurpose @default(general)
+  sortIndex   Int            @default(0)
 
   version     Int       @default(1)
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
@@ -402,6 +470,94 @@ model Goal {
 
   @@index([householdId])
   @@map("goal")
+}
+
+/// The mortgage, as terms rather than as a schedule.
+///
+/// Only the facts are stored. The amortization schedule, the payoff date, the
+/// total interest and what another lump sum would buy are all derived by
+/// `@headroom/core/mortgage` on demand and never persisted - same rule as
+/// running balances.
+///
+/// One row per household in practice; not enforced, because a second mortgage
+/// is a real thing and refusing to store one would be worse than allowing it.
+model Mortgage {
+  id          String @id @default(uuid()) @db.Uuid
+  householdId String @db.Uuid
+
+  /// Balance owing immediately after the payment on `asOf`.
+  balanceCents BigInt
+  /// The date of the payment that produced `balanceCents`.
+  asOf         DateTime @db.Date
+
+  /// The annual rate in whole basis points: 525 is 5.25%. An integer, so no
+  /// float is involved in pricing a period.
+  rateBasisPoints Int
+  /// The regular payment, as a positive magnitude.
+  paymentCents    BigInt
+
+  /// Which pay schedule the payment follows, and by how many days.
+  ///
+  /// The payment comes out a fixed number of days after a payday, so it is
+  /// biweekly like the pay it follows. This offset is the reason a month can
+  /// hold three paycheques but only two mortgage payments.
+  payScheduleId String @db.Uuid
+  offsetDays    Int    @default(1)
+
+  periodsPerYear Int             @default(26)
+  cadenceDays    Int             @default(14)
+  compounding    RateCompounding @default(simple_division)
+
+  /// The prepayment allowance, and the window it resets on.
+  prepaymentCapCents BigInt          @default(0)
+  privilegePeriod    PrivilegePeriod @default(calendar_year)
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  household    Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  paySchedule  PaySchedule  @relation(fields: [payScheduleId], references: [id], onDelete: Restrict)
+  prepayments  Prepayment[]
+
+  @@index([householdId])
+  @@map("mortgage")
+}
+
+/// A lump sum paid against the mortgage, or planned.
+///
+/// Versioned and soft-deletable like the rest, not trigger-enforced
+/// append-only: a figure typed from a bank statement needs correcting
+/// sometimes, and the audit trail lives in `activity`. What matters is that the
+/// total used against the allowance is DERIVED from these rows and never
+/// stored, so the two can never drift.
+model Prepayment {
+  id         String @id @default(uuid()) @db.Uuid
+  mortgageId String @db.Uuid
+
+  paidOn DateTime @db.Date
+  /// Positive magnitude.
+  cents  BigInt
+  note   String?
+
+  /// False for a lump sum that is planned but has not been made yet, which is
+  /// how next year's intention is modelled without claiming it happened.
+  paid Boolean @default(true)
+
+  version     Int       @default(1)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedById String?   @db.Uuid
+  deletedAt   DateTime? @db.Timestamptz(6)
+  deletedById String?   @db.Uuid
+
+  mortgage Mortgage @relation(fields: [mortgageId], references: [id], onDelete: Cascade)
+
+  @@index([mortgageId, paidOn])
+  @@map("prepayment")
 }
 
 /// Work purchases put on the Visa and tracked until reimbursed.

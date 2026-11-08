@@ -13,7 +13,8 @@
  * seed is being checked, which is what makes one suite able to do both.
  */
 import { describe, expect, it } from "vitest";
-import { computeBudget, computeGoal } from "../src/budget.js";
+import { computeBudget } from "../src/budget.js";
+import { earmarkProgress } from "../src/savings.js";
 import { computeHorizonEnd, computePayPeriods } from "../src/payPeriods.js";
 import { computeNetWorth, computeRetirement } from "../src/netWorth.js";
 import { computeTimeline, orderTimeline } from "../src/timeline.js";
@@ -312,14 +313,15 @@ describe.each(seeds.map((named) => [named.label, named] as const))("%s", (_label
     it.each(seed.goals.map((goal, index) => [index, goal] as const))(
       "reproduces goal %i",
       (_index, goal) => {
-        const result = computeGoal({
+        const result = earmarkProgress({
+          id: `goal-${String(_index)}`,
           name: goal.name,
+          setAsideCents: cents(goal.savedCents),
           targetCents: cents(goal.targetCents),
-          savedCents: cents(goal.savedCents),
         });
 
         expect(result.remainingCents).toBe(cents(goal.expected.remainingCents));
-        expect(result.pct).toBe(goal.expected.pct);
+        expect(result.percent).toBe(goal.expected.pct);
       },
     );
   });

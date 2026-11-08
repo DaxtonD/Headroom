@@ -7,7 +7,7 @@
  * conversion (section 14 q11), and are therefore the one quantity in Headroom
  * that is not money.
  */
-import { computeGoals, computeReimbursements, sumBankedHours } from "@headroom/core";
+import { computeReimbursements, earmarkProgress, sumBankedHours } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
@@ -29,16 +29,29 @@ const hoursSchema = z
 const goalCreate = z
   .object({
     name: z.string().trim().min(1, "Give this goal a name.").max(120),
-    targetCents: wireCents.refine((value) => value > 0n, { message: "A goal needs a target above zero." }),
+    /**
+     * Null means "no target": save towards it and stop when it is enough.
+     * Dax, 2026-11-08: trips never have a set date or a set cost. Absent and
+     * explicitly null mean the same thing here, so a client can clear a target
+     * by sending null.
+     */
+    targetCents: wireCents
+      .refine((value) => value > 0n, { message: "A target has to be above zero, or left out entirely." })
+      .nullish(),
     savedCents: wireCents.refine((value) => value >= 0n, { message: "Saved cannot be negative." }).optional(),
+    purpose: z.enum(["general", "mortgage_lump_sum"]).optional(),
+    sortIndex: z.number().int().min(0).max(100_000).optional(),
   })
   .strict();
 
 const goalPatch = z
   .object({
     name: z.string().trim().min(1).max(120).optional(),
-    targetCents: wireCents.optional(),
+    /** Explicitly null clears the target, which is a real edit, not a no-op. */
+    targetCents: wireCents.nullish(),
     savedCents: wireCents.optional(),
+    purpose: z.enum(["general", "mortgage_lump_sum"]).optional(),
+    sortIndex: z.number().int().min(0).max(100_000).optional(),
     baseVersion: z.number().int().min(1).optional(),
   })
   .strict();
@@ -74,8 +87,13 @@ function serialiseGoal(row: Goal) {
   return {
     id: row.id,
     name: row.name,
-    targetCents: row.targetCents.toString(),
+    // Null travels as null, not as "0": a goal with no target and a goal with
+    // a target of nothing are different things, and the client draws a bar for
+    // one and not the other.
+    targetCents: row.targetCents === null ? null : row.targetCents.toString(),
     savedCents: row.savedCents.toString(),
+    purpose: row.purpose,
+    sortIndex: row.sortIndex,
     version: row.version,
   };
 }
@@ -119,12 +137,15 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
       }),
     ]);
 
-    const computedGoals = computeGoals(
-      goals.map((goal) => ({
+    const computedGoals = goals.map((goal) =>
+      earmarkProgress({
+        id: goal.id,
         name: goal.name,
+        setAsideCents: goal.savedCents,
         targetCents: goal.targetCents,
-        savedCents: goal.savedCents,
-      })),
+        purpose: goal.purpose,
+        sortIndex: goal.sortIndex,
+      }),
     );
 
     const summary = computeReimbursements(
@@ -154,8 +175,9 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
     return reply.send({
       goals: goals.map((goal, index) => ({
         ...serialiseGoal(goal),
-        remainingCents: computedGoals[index]?.remainingCents.toString() ?? "0",
-        pct: computedGoals[index]?.pct ?? 0,
+        remainingCents: computedGoals[index]?.remainingCents?.toString() ?? null,
+        pct: computedGoals[index]?.percent ?? null,
+        isMet: computedGoals[index]?.isMet ?? false,
       })),
       reimbursements: {
         items: reimbursements.map(serialiseReimbursement),
@@ -199,8 +221,13 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
           data: {
             householdId: user.householdId,
             name: input.name,
-            targetCents: input.targetCents,
+            // `?? null` rather than passing it through: the schema allows the
+            // field to be absent as well as explicitly null, and both mean
+            // "no target".
+            targetCents: input.targetCents ?? null,
             savedCents: input.savedCents ?? 0n,
+            ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
+            ...(input.sortIndex === undefined ? {} : { sortIndex: input.sortIndex }),
             updatedById: user.id,
           },
         });
@@ -212,7 +239,7 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
           householdId: user.householdId,
           snapshot: {
             name: created.name,
-            targetCents: created.targetCents.toString(),
+            targetCents: created.targetCents?.toString() ?? null,
             savedCents: created.savedCents.toString(),
           },
         });
@@ -284,7 +311,7 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
           snapshot: (row) => ({
             version: row.version,
             name: row.name,
-            targetCents: row.targetCents.toString(),
+            targetCents: row.targetCents?.toString() ?? null,
             savedCents: row.savedCents.toString(),
           }),
         });
@@ -356,7 +383,7 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
           snapshot: (row) => ({
             version: row.version,
             name: row.name,
-            targetCents: row.targetCents.toString(),
+            targetCents: row.targetCents?.toString() ?? null,
             savedCents: row.savedCents.toString(),
           }),
         });

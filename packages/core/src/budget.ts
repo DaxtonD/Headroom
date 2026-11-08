@@ -17,10 +17,7 @@ import type {
   BudgetLineResult,
   BudgetResult,
   BudgetSectionResult,
-  GoalInput,
-  GoalResult,
 } from "./types.js";
-import { percentShareOneDecimal } from "./money.js";
 
 function yearlyFor(line: BudgetLineInput): Cents {
   // An override exists for the rare line whose yearly cost is not just twelve
@@ -65,21 +62,6 @@ export function computeBudget(options: {
     balanceMonthlyCents: options.income.netMonthlyCents - totalMonthlyCents,
     balanceYearlyCents: options.income.netYearlyCents - totalYearlyCents,
   };
-}
-
-/** Trip fund and anything like it: progress to one decimal place. */
-export function computeGoal(goal: GoalInput): GoalResult {
-  return {
-    name: goal.name,
-    targetCents: goal.targetCents,
-    savedCents: goal.savedCents,
-    remainingCents: goal.targetCents - goal.savedCents,
-    pct: percentShareOneDecimal(goal.savedCents, goal.targetCents),
-  };
-}
-
-export function computeGoals(goals: readonly GoalInput[]): GoalResult[] {
-  return goals.map(computeGoal);
 }
 
 /* -------------------------------------------------------------------------- */

@@ -148,3 +148,38 @@
     padding: var(--hr-space-6);
   }
 }
+
+/*
+ * A yes/no answer inside a sheet, for the cases where a field should not exist
+ * at all rather than be left blank - "there is an amount we are aiming for"
+ * being the first of them.
+ *
+ * The 22px box clears the 44px touch target once its label is counted, and the
+ * whole row is the <label>, so the text is part of the hit area.
+ */
+.sheet__checkbox {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--hr-space-3);
+  min-height: var(--hr-touch-min);
+  margin-top: var(--hr-space-4);
+  font-size: 15px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.sheet__checkbox input[type="checkbox"] {
+  width: 22px;
+  height: 22px;
+  flex: 0 0 auto;
+  margin-top: 1px;
+  accent-color: var(--hr-primary);
+}
+
+.sheet__checkbox input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+}
+
+.sheet__checkbox input[type="checkbox"]:disabled + span {
+  opacity: 0.6;
+}

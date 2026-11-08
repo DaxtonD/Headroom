@@ -94,7 +94,7 @@ export function Goals({ canEdit }: { canEdit: boolean }): React.JSX.Element {
               <li className="goals__goal" key={goal.id}>
                 <div className="goals__goal-head">
                   <span className="goals__goal-name">{goal.name}</span>
-                  <span className="goals__goal-pct">{goal.pct}%</span>
+                  {goal.pct !== null ? <span className="goals__goal-pct">{goal.pct}%</span> : null}
                   <button
                     className="goals__edit"
                     type="button"
@@ -106,25 +106,39 @@ export function Goals({ canEdit }: { canEdit: boolean }): React.JSX.Element {
                   </button>
                 </div>
 
-                <div
-                  className="goals__progress"
-                  role="img"
-                  aria-label={`${formatCents(goal.savedCents)} saved of ${formatCents(goal.targetCents)}, ${goal.pct}%`}
-                >
-                  <span
-                    className="goals__progress-fill"
-                    /* Capped so an overshot goal does not overflow the track. */
-                    style={{ width: `${Math.min(100, goal.pct)}%` }}
-                  />
-                </div>
+                {/*
+                  No target means no bar. A trip has no set cost, so there is
+                  nothing to be a fraction of, and a bar against an invented
+                  target would be the fiction this screen is meant to avoid.
+                */}
+                {goal.targetCents !== null && goal.pct !== null ? (
+                  <div
+                    className="goals__progress"
+                    role="img"
+                    aria-label={`${formatCents(goal.savedCents)} saved of ${formatCents(goal.targetCents)}, ${goal.pct}%`}
+                  >
+                    <span
+                      className="goals__progress-fill"
+                      /* Capped so an overshot goal does not overflow the track. */
+                      style={{ width: `${Math.min(100, goal.pct)}%` }}
+                    />
+                  </div>
+                ) : null}
 
                 <p className="goals__goal-note">
-                  <strong className="hr-amount">{formatCents(goal.savedCents)}</strong> of{" "}
-                  <span className="hr-amount">{formatCents(goal.targetCents)}</span>
-                  {goal.remainingCents > 0n ? (
-                    <> · {formatCents(goal.remainingCents)} to go</>
+                  <strong className="hr-amount">{formatCents(goal.savedCents)}</strong>
+                  {goal.targetCents === null ? (
+                    <> set aside</>
                   ) : (
-                    <> · there already</>
+                    <>
+                      {" of "}
+                      <span className="hr-amount">{formatCents(goal.targetCents)}</span>
+                      {goal.remainingCents !== null && goal.remainingCents > 0n ? (
+                        <> · {formatCents(goal.remainingCents)} to go</>
+                      ) : (
+                        <> · there already</>
+                      )}
+                    </>
                   )}
                 </p>
               </li>

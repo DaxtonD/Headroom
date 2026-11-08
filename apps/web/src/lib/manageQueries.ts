@@ -396,7 +396,9 @@ export function useCreateGoal() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { name: string; targetCents: string; savedCents: string }) =>
+    // `targetCents: null` is a real value, not an omission: it means nothing
+    // specific is being saved towards, which is the normal case for a trip.
+    mutationFn: (input: { name: string; targetCents: string | null; savedCents: string }) =>
       api.post("/api/goals", input, { idempotencyKey: newIdempotencyKey() }),
     onSuccess: () => invalidateEverything(queryClient),
   });
@@ -409,7 +411,7 @@ export function usePatchGoal() {
     mutationFn: (input: {
       id: string;
       version: number;
-      changes: { name?: string; targetCents?: string; savedCents?: string };
+      changes: { name?: string; targetCents?: string | null; savedCents?: string };
     }) =>
       api.patch(`/api/goals/${input.id}`, input.changes, {
         baseVersion: input.version,
