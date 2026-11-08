@@ -21,3 +21,6 @@ export * from "./budget.js";
 export * from "./netWorth.js";
 export * from "./recurrence.js";
 export * from "./monthlyEquivalent.js";
+export * from "./chequeCalendar.js";
+export * from "./mortgage.js";
+export * from "./savings.js";

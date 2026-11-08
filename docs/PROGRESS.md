@@ -23,8 +23,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
 - Date: 2026-11-08
 - **Nothing is pushed.** Every commit, and the tags `m0` through `m4`, are local only, awaiting Dax's OK.
 - Done: the handoff, then M0 through M4, then the Manage screen and the expense model, then a
-  second pass making every section of Manage editable.
-- **499 tests green**: 232 engine, 197 API against a real Postgres, 70 web wiring checks. Lint,
+  second pass making every section of Manage editable, then the biweekly/monthly engine work.
+- **557 tests green**: 290 engine, 197 API against a real Postgres, 70 web wiring checks. Lint,
   typecheck and `pnpm build` clean.
 
 ### Where each milestone stands
@@ -133,6 +133,99 @@ Remove with `docker rm -f headroom-demo` and `node scripts/testdb.mjs down`.
   matching the engine - not by eye. Worth a careful look before building more on their patterns.
 - CI has never run, because nothing is pushed.
 
+## The biweekly/monthly mismatch (2026-11-08, after a long discussion with Dax)
+
+Dax stopped the build to explain how Carol actually uses the spreadsheet, and the gap was
+conceptual, not cosmetic. His words:
+
+> "our pay periods are biweekly but most of our bills are monthly. so, sometimes I get 3
+> paychecks per month and sometimes carol does. also, our mortgage is biweekly, not monthly.
+> ... the data is too spread out for Carol. she can't easily see everything."
+
+And the purpose of the whole app, which was not written down anywhere:
+
+> "we are actively trying to save as much as possible to pay off our mortgage early with annual
+> lump sum payments." / "This app is trying to do 2 things: 1. make Carol feel at home using the
+> app instead of the spreadsheet. 2. allow me to understand what the heck she's doing."
+
+### What was wrong
+
+1. **The third cheque was computed away, not surfaced.** The spec said in three places - twice in
+   engine comments - that a month with a third cheque "needs no special handling". True of the
+   arithmetic, false of the decision: the running balance absorbs it silently, which is exactly
+   why nobody can see it coming. Finding those months is Carol's entire monthly ritual.
+2. **Worse, the mortgage is `relative_to_pay` (the day after a payday).** That one-day offset
+   makes third-cheque months and third-mortgage-payment months drift apart, so a windfall month
+   can sit directly beside a squeeze month for no reason anyone would guess from a calendar.
+   Verified against the real schedules, and reproduced in a committed test with synthetic anchors.
+3. **Savings was modelled as a bill.** Dax: "The savings of $1300 is a goal we set. She decides
+   when and how much we allocate." So it is the residual, not an obligation - and the lump sum it
+   feeds was nowhere in the app at all.
+4. **Targets were mandatory.** `Goal.targetCents` is non-null and Goals draws a bar against it.
+   Dax: "Trips never have a set date or set cost." An app that demands a target makes someone
+   invent one and then reports progress against a number nobody believes.
+5. **Six tabs for one sheet.** Home, Upcoming and Pay plan are three renderings of a single
+   object; the view Carol lives in - one running ledger grouped under each cheque - was not quite
+   any of them.
+
+### Agreed plan (Dax approved the order)
+
+Engine -> M5 (PWA) -> M6 backups -> deploy -> he and Carol set everything up.
+
+Backups deliberately moved **ahead** of the setup pass: having them hand-enter every bill, date
+and balance into a database with no verified restore is the one ordering worth avoiding. Dax also
+confirmed the redesign comes before the setup pass, so the data is entered once against the final
+shape.
+
+### Done so far: the engine
+
+- `packages/core/src/chequeCalendar.ts` - per-month counts for anything biweekly, flagging months
+  that differ from the usual two and what the difference is worth. Needs no amounts or
+  verification, only the schedules, so it stays honest a year out.
+- `packages/core/src/mortgage.ts` - integer-cent amortization, lump sums, payoff date, "what one
+  more lump sum buys", and the calendar-year prepayment allowance. **No floats:** interest is
+  `balance x basisPoints / (10_000 x periodsPerYear)` through `mulDivRoundHalfUp`. Checked against
+  Dax's own workbook; agrees to one cent after a dozen payments.
+- `packages/core/src/savings.ts` - one real account, several earmarks, optional targets, and the
+  number no spreadsheet gives you: **unallocated** = balance - earmarks, surfaced rather than
+  clamped when a plan does not fit.
+- `roomToSaveCents` on every pay period - the same computation as "safe to spend now", asked at a
+  later point on the timeline. This is what turns a third cheque from "absorbed" into a decision.
+
+557 tests green (290 core, 70 web, 197 API), lint and typecheck clean.
+
+### Bugs caught while building it
+
+- **A lump sum was credited a fortnight early.** The prepayment window compared forward to the end
+  of the period instead of back to the payment date, so a lump sum dated the 1st was applied with
+  the payment on the previous 19th. Caught only because the expected values were computed
+  independently first rather than read back out of the implementation.
+- **`roomToSave` held future periods to today's balance.** A "now"-anchored row was treated as
+  still ahead for every later window, and today's balance capped a period that has not started.
+  Three cases are now explicit, with the reasoning in the code.
+- **Four real figures went into committed source in one sitting** - a basis-point example, a
+  "reject a fractional rate" case, the real annual prepayment cap and the real prepayment history.
+  Each was chosen simply because it was the number already in mind. See the next section.
+
+## Guard: `pnpm check:figures` (2026-11-08)
+
+Writing the mortgage engine put four real household figures into committed files inside one
+sitting, and a fifth (the real refund row) turned out to have been sitting in
+`apps/api/test/wire.test.ts` since an earlier session. All five are now invented values.
+
+`scripts/scan_for_real_figures.py` reads the **git-ignored seed** for what to look for - hard-coding
+the figures would put them in a committed file and defeat the point - and scans every tracked file.
+
+Known limits, deliberately chosen:
+
+- It only flags **distinctive** amounts, meaning those with odd cents. Scanning for round numbers
+  gave 140 hits across the tree, effectively all coincidence (a `sortIndex` capped at `100_000`,
+  test values of `200000`, a documented amount that is the codebase's own cautionary tale). A
+  gate with a 140-line allowlist is a gate nobody reads. So a **round** real figure will not be
+  caught, and the rule still needs care.
+- It **skips entirely in CI**, which has no seed by design. Its only real home is Dax's machine.
+- Not installed as a git hook: that would change local git config, which is Dax's call. Offered.
+
 ## Verified by hand, not only by tests
 
 The built image was run against an empty database and checked end to end:
@@ -217,6 +310,17 @@ CLAUDE.md describes an autonomous weekend build. That changed: Dax is available 
 ## Decisions made without asking
 
 - 2026-11-07 (planning): Name is Headroom. Stack per HANDOFF section 10. Defaults for open questions per HANDOFF section 14.
+- 2026-11-08: **Ledger and year view are two separate screens**, not one long scroll. Asked twice
+  and not answered, so taken as the default per CLAUDE.md. A 14-month ledger would be mostly
+  estimates and would bury the near-term tight week. Say the word to merge them.
+- 2026-11-08: **The golden fixture stays frozen** at the figures captured 2026-11-07, rather than
+  re-captured from the copy Dax attached on 2026-11-08. Three cells had moved (the balance, two
+  verification marks, and the bottom line that follows from them); the tests pin the old value and
+  nothing depends on the new one.
+- 2026-11-08: **The mortgage rate divisor follows Dax's spreadsheet** (annual rate / payments per
+  year) rather than the Canadian semi-annual convention, so the app and the document he reads
+  agree. The difference is a couple of hundred dollars of interest across the remaining term and
+  does not move the payoff date by one payment. The lender's convention is available as a setting.
 
 ## Decisions made WITH Dax (2026-11-07)
 

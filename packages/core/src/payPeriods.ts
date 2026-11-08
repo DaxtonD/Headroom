@@ -153,6 +153,8 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       return withinWindow(row.effectiveDate, window.start, window.end);
     });
 
+    const roomToSaveCents = roomToSaveFrom(timeline, window, cushionCents);
+
     let inCents = 0n;
     let autoCents = 0n;
     let flexibleCents = 0n;
@@ -199,8 +201,66 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       lowest,
       allAutoCovered: autoRows.every((row) => row.runningCents >= cushionCents),
       projectedPaychequeIds,
+      roomToSaveCents,
     } satisfies PayPeriod;
   });
+}
+
+/**
+ * The lowest the balance gets from `start` onwards, minus the cushion.
+ *
+ * Moving money out of chequing lowers every balance after it, so the most that
+ * can safely leave during a period is the floor of the whole remaining
+ * timeline, not just the floor inside that period. This deliberately looks
+ * past the window's own end.
+ *
+ * Note the contrast with {@link lowestInWindow}, which stops at the window
+ * edge because it is answering a different question: "how tight does this
+ * fortnight get", not "what can leave without breaking something later".
+ */
+function roomToSaveFrom(
+  timeline: PayPeriodOptions["timeline"],
+  window: WindowSpec,
+  cushionCents: Cents,
+): Cents {
+  const rows = timeline.rows;
+
+  // The first row this window or a later one owns. A row anchored to "now" has
+  // no date and belongs to the current partial window, so for any window after
+  // that one it is already in the past.
+  let startIndex = rows.findIndex((row) =>
+    row.effectiveDate === null
+      ? window.isCurrentPartial
+      : compareDates(row.effectiveDate, window.start) >= 0,
+  );
+  if (startIndex === -1) startIndex = rows.length;
+
+  // Nothing ahead: the balance carried into the window is all the room there
+  // is, because no later event can lower it.
+  if (startIndex >= rows.length) {
+    const entering =
+      startIndex === 0
+        ? timeline.startBalanceCents
+        : (rows[startIndex - 1] as TimelineRow).runningCents;
+    return entering - cushionCents;
+  }
+
+  let floor = (rows[startIndex] as TimelineRow).runningCents;
+  for (let index = startIndex + 1; index < rows.length; index += 1) {
+    const running = (rows[index] as TimelineRow).runningCents;
+    if (running < floor) floor = running;
+  }
+
+  // The current window is the only one that starts right now, so it is the
+  // only one bounded by what is in the account today. A later window is
+  // bounded by its own events instead: by the time anyone acts inside it, its
+  // paycheque has already landed, and holding it to today's balance would
+  // understate the room enough to make the figure useless.
+  if (window.isCurrentPartial && timeline.startBalanceCents < floor) {
+    floor = timeline.startBalanceCents;
+  }
+
+  return floor - cushionCents;
 }
 
 /**

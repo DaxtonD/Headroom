@@ -224,12 +224,12 @@ describe("a one-off added by hand", () => {
       method: "POST",
       url: "/api/occurrences",
       headers: { cookie, "idempotency-key": randomUUID() },
-      payload: { name: "Refund", cents: parseCents("52.70").toString(), kind: "deposit" },
+      payload: { name: "Refund", cents: parseCents("47.35").toString(), kind: "deposit" },
     });
 
     expect(created.statusCode).toBe(201);
-    expect(created.json().occurrence.cents).toBe("5270");
-    expect(formatCents(BigInt(created.json().occurrence.cents))).toBe("$52.70");
+    expect(created.json().occurrence.cents).toBe("4735");
+    expect(formatCents(BigInt(created.json().occurrence.cents))).toBe("$47.35");
   });
 });
 

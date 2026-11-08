@@ -62,6 +62,10 @@ Keep this list current as you build.
 - `node scripts/testdb.mjs up | down`: throwaway Postgres for tests, never the real database.
 - `python3 seed/check_seed.py [path]`: verify a seed file's expected values. With no path it checks the local real seed and skips cleanly when absent.
 - `python3 seed/make_synthetic_fixture.py`: regenerate the committed synthetic fixture.
+- `pnpm check:figures`: fail if a real household figure has reached a tracked file. Reads the
+  git-ignored seed for what to look for, so it only works on Dax's machine and skips cleanly
+  elsewhere (CI has no seed by design). Catches distinctive amounts - the ones with odd cents -
+  not round ones, so it is a safety net and not a substitute for the rule.
 - `docker compose up -d --build`: run against the Postgres Dax already has.
 - `docker compose --profile with-db up -d --build`: run with a bundled Postgres.
 - `docker compose exec app node apps/api/dist/cli.js create-user | list-users | reset-password`.

@@ -25,6 +25,7 @@
     "db:studio": "pnpm -F @headroom/api db:studio",
     "check:seed": "python3 seed/check_seed.py",
     "check:fixture": "python3 seed/check_seed.py packages/core/test/fixtures/household-synthetic.json",
+    "check:figures": "python3 scripts/scan_for_real_figures.py",
     "testdb:up": "node scripts/testdb.mjs up",
     "testdb:down": "node scripts/testdb.mjs down"
   },

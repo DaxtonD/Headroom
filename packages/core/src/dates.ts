@@ -169,7 +169,13 @@ export function isWeekend(value: PlainDate): boolean {
 /**
  * Biweekly paydays: every 14 days from an anchor, in both directions
  * (HANDOFF section 5 rule 1). Pay is **every two weeks**, not twice a month,
- * so a month can hold three cheques and that needs no special handling.
+ * so a month can hold three cheques.
+ *
+ * The running balance absorbs a third cheque on its own, so no total here
+ * needs to know about one. That is not the same as a third cheque being
+ * uninteresting: deciding what to do with it is the household's whole monthly
+ * ritual, and `chequeCalendar.ts` exists to surface it rather than let correct
+ * arithmetic hide it.
  */
 export function isPaydayOn(anchorDate: PlainDate, candidate: PlainDate): boolean {
   const offset = daysBetween(anchorDate, candidate);
@@ -280,4 +286,22 @@ export function formatDateShort(value: PlainDate): string {
 export function formatDayAndMonth(value: PlainDate): string {
   const { month, day } = parseDate(value);
   return `${MONTHS_SHORT[month - 1]} ${day}`;
+}
+
+/**
+ * `Nov 2026`, for the year view, which lists whole months rather than days.
+ *
+ * Takes the year and month directly because its caller is iterating months,
+ * not holding a date inside each one.
+ */
+export function formatMonthAndYear(year: number, month: number): string {
+  if (!Number.isInteger(month) || month < 1 || month > 12) {
+    throw new RangeError(`month must be 1-12; received ${String(month)}.`);
+  }
+  return `${MONTHS_SHORT[month - 1]} ${String(year)}`;
+}
+
+/** Step to the next calendar month, rolling the year over at December. */
+export function nextMonth(year: number, month: number): { year: number; month: number } {
+  return month === 12 ? { year: year + 1, month: 1 } : { year, month: month + 1 };
 }

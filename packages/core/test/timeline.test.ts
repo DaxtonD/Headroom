@@ -421,3 +421,98 @@ describe("the horizon", () => {
     ).toThrow(RangeError);
   });
 });
+
+describe("room to save", () => {
+  // $500 in the account, a flexible bill not yet placed on a payday, then two
+  // cheques and an automatic withdrawal.
+  //
+  // Running balances:
+  //   flex    (anchored to "now")   38,000
+  //   dax     2026-11-12           238,000
+  //   carol   2026-11-19           418,000
+  //   auto    2026-11-22           388,000
+  const timeline = computeTimeline({
+    events: [
+      flexibleBill("flex", null, -12_000n),
+      paycheque("pay_dax", "2026-11-12", 200_000n, "dax"),
+      paycheque("pay_carol", "2026-11-19", 180_000n, "carol"),
+      autoBill("auto", "2026-11-22", -30_000n),
+    ],
+    startBalanceCents: 50_000n,
+  });
+
+  function periods(cushionCents = 0n) {
+    return computePayPeriods({
+      timeline,
+      paySchedules: [DAX, CAROL],
+      today: "2026-11-07",
+      periodCount: 2,
+      anchorScheduleId: "dax",
+      cushionCents,
+    });
+  }
+
+  it("is the floor of everything still ahead, not of the period alone", () => {
+    // The lowest point in the current window is 38,000, after the flexible bill.
+    expect(periods()[0]?.roomToSaveCents).toBe(38_000n);
+  });
+
+  it("agrees with safe-to-spend for the window that starts now", () => {
+    // Both answer the same question - what can leave without breaking
+    // something later - so they must never disagree.
+    expect(periods()[0]?.roomToSaveCents).toBe(timeline.safeToSpendNowCents);
+  });
+
+  it("does not hold a later window to today's balance", () => {
+    // By the time anyone acts in the Nov 12-25 window, Dax's cheque has
+    // landed, so the room is 238,000 and not the 38,000 available today.
+    const [, second] = periods();
+
+    expect(second?.start).toBe("2026-11-12");
+    expect(second?.roomToSaveCents).toBe(238_000n);
+  });
+
+  it("is reduced by the cushion, one for one", () => {
+    const [first, second] = periods(20_000n);
+
+    expect(first?.roomToSaveCents).toBe(18_000n);
+    expect(second?.roomToSaveCents).toBe(218_000n);
+  });
+
+  it("falls back to the balance carried in when nothing is left ahead", () => {
+    const quiet = computeTimeline({
+      events: [flexibleBill("flex", null, -12_000n)],
+      startBalanceCents: 50_000n,
+    });
+
+    const [, second] = computePayPeriods({
+      timeline: quiet,
+      paySchedules: [DAX, CAROL],
+      today: "2026-11-07",
+      periodCount: 2,
+      anchorScheduleId: "dax",
+    });
+
+    // Nothing is scheduled in or after Nov 12-25, so the room is whatever the
+    // account holds once the flexible bill has gone.
+    expect(second?.roomToSaveCents).toBe(38_000n);
+  });
+
+  it("reports a shortfall rather than a room of zero", () => {
+    const tight = computeTimeline({
+      events: [autoBill("big_bill", "2026-11-13", -150_000n)],
+      startBalanceCents: 50_000n,
+    });
+
+    const [first] = computePayPeriods({
+      timeline: tight,
+      paySchedules: [DAX, CAROL],
+      today: "2026-11-07",
+      periodCount: 1,
+      anchorScheduleId: "dax",
+    });
+
+    // Already short: the number says by how much instead of clamping to zero.
+    expect(first?.roomToSaveCents).toBe(-100_000n);
+  });
+});

@@ -143,6 +143,24 @@ export interface PayPeriod {
   readonly allAutoCovered: boolean;
   /** Cheques counted here that are projected rather than already placed. */
   readonly projectedPaychequeIds: readonly string[];
+  /**
+   * How much more could be moved into savings during this period without any
+   * later automatic withdrawal going short.
+   *
+   * This is the same question as "safe to spend now", asked at a later point
+   * on the timeline: money taken out here lowers every balance after it, so
+   * the limit is the lowest point from this period forward, minus the cushion.
+   * It looks all the way to the horizon, not just to the end of the period,
+   * because a squeeze three weeks out is still caused by saving today.
+   *
+   * Savings already placed in this period are part of the running balance, so
+   * this is room *on top of* what is planned - which is what makes a third
+   * paycheque actionable rather than merely absorbed.
+   *
+   * Negative means this period is already short; the UI shows the shortfall
+   * rather than a room of zero.
+   */
+  readonly roomToSaveCents: Cents;
 }
 
 export interface PayPeriodOptions {
