@@ -23,7 +23,9 @@ Claude Code updates this file at the end of every milestone and every work sessi
 ## Last session
 
 - Date: 2026-11-08
-- **Nothing is pushed.** Every commit, and the tags `m0` through `m4`, are local only, awaiting Dax's OK.
+- **Pushed on 2026-11-09**, on Dax's OK: `main` and the tags `m0`-`m4` are on
+  `github.com/DaxtonD/Headroom`, which he made **public**. The repository had been empty until
+  then, so nothing was rewritten out from under anyone.
 - Done: the handoff, then M0 through M4, then the Manage screen and the expense model, then a
   second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
   engine, schema and migration, the savings and mortgage API, the Year screen, the Savings screen,
@@ -50,14 +52,24 @@ Claude Code updates this file at the end of every milestone and every work sessi
 
 1. Read this file, then `CLAUDE.md`, then `docs/HANDOFF.md` (local only, git-ignored).
 2. `pnpm install` and `node scripts/testdb.mjs up`, then `pnpm test`.
-3. The redesign is finished, so **M5 next**: PWA and polish. `vite-plugin-pwa` is a dependency but is not wired up, so
+3. **The image.** `ghcr.io/daxtond/headroom:latest` is published by the `publish` job in
+   `.github/workflows/ci.yml` on every push to `main`, gated on lint, typecheck, the full suite on
+   both Node versions, and the image smoke test. Check the **package's** visibility after the
+   first publish: it is separate from the repository's, and Unraid's Docker Manager cannot pull a
+   private package without registry credentials.
+4. **Dax is setting up the real household** through Unraid's Docker Manager, entering the
+   environment variables by hand so no real value is in a file. `docs/DEPLOY.md` has the runbook.
+   Only three variables have no default: `APP_ORIGIN`, `DATABASE_URL`, `SESSION_SECRET`.
+5. The redesign is finished, so **M5 next**: PWA and polish. `vite-plugin-pwa` is a dependency but is not wired up, so
    there is no manifest, no icons and no service worker. Needs: the installable manifest and
    icons, the read-only offline cache behind the "Offline, as of ..." banner that
    `useLiveUpdates` already drives, the App Badging API for the count of unverified bills, an
    "Update balance" manifest shortcut, desktop layouts, and the accessibility pass
    (44px targets, 4.5:1 contrast).
-4. Then M6: backup sidecar with a tested restore, `import-seed` for the real figures, the
-   GHCR image, and finishing `docs/DEPLOY.md`.
+6. Then M6: backup sidecar with a tested restore, `import-seed` for the real figures, and
+   finishing `docs/DEPLOY.md`. The GHCR image is done early, since Dax needed something to pull;
+   `scripts/backup.mjs` covers dump/verify/restore by hand, so M6's remaining job there is the
+   scheduled sidecar.
 
 **Constraint on `import-seed`, found 2026-11-08 while answering a question from Dax.** It must
 create **templates** and then run generation - never insert occurrences directly. Most of the demo
@@ -425,6 +437,31 @@ Dax in the running app rather than being caught here, which is the one that matt
    round - typed, sent, stored, read back, formatted - through the same engine functions the
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
+
+## Git history and attribution (2026-11-09)
+
+Dax asked for **no attribution lines in any commit** - no `Co-Authored-By`, no "Generated with
+Claude Code" - and said so in the same message that approved the first push.
+
+All 37 commits were rewritten to strip them **before** pushing, because afterwards it would have
+needed a force-push, which the rules here forbid. One pass with `git filter-branch --msg-filter`
+also normalised CRLF out of the message bodies and removed the blank lines the stripping left
+behind.
+
+What was checked afterwards, rather than assumed:
+
+- the commit count is unchanged at 37;
+- `HEAD^{tree}` is byte-identical to before the rewrite, so no file content moved;
+- every tag still resolves to the same tree it did before;
+- no raw commit object contains a carriage return or an attribution line.
+
+A `git bundle` of the pre-rewrite history is in this session's scratchpad. It is the only copy:
+the local backup branch and `refs/original/*` were cleaned up after the push succeeded. If the
+history ever needs auditing against the original, that bundle is it - and it will not outlive the
+scratchpad, which is the trade-off of keeping it out of the repository.
+
+**Going forward: commit messages end at the last line of prose.** This is recorded in Claude's
+memory for the project, so it survives a new session.
 
 ## Working agreements with Dax (this build is NOT autonomous)
 
