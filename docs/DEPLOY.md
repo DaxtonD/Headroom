@@ -131,11 +131,21 @@ does not exist, or Unraid cannot reach that host. The first pull is around
 
 From Unraid's terminal:
 
+There is **no sign-up on the login screen**, by design: this is a household app
+on a public HTTPS address, and a self-service account form there would be a way
+in for anyone who finds it. Accounts are made from the server instead.
+
+From Unraid's terminal:
+
 ```bash
-docker exec -it headroom node apps/api/dist/cli.js create-user
-docker exec -it headroom node apps/api/dist/cli.js create-user
-docker exec -it headroom node apps/api/dist/cli.js list-users
+docker exec -it Headroom node apps/api/dist/cli.js create-user
+docker exec -it Headroom node apps/api/dist/cli.js create-user
+docker exec -it Headroom node apps/api/dist/cli.js list-users
 ```
+
+**The capital H matters.** Docker container names are case-sensitive, and the
+template names the container `Headroom`. If you renamed it in the GUI, or you
+are not sure, `docker ps --format '{{.Names}}'` will say.
 
 The first creates the household; the second joins it. The password is prompted
 and never echoed. (`--password-stdin` reads it from a pipe instead, for a

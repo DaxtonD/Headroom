@@ -61,3 +61,13 @@
     padding: var(--hr-space-7) var(--hr-space-6) var(--hr-space-6);
   }
 }
+
+/* The command in the footnote should read as a command, not as prose. */
+.login__footnote code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--hr-neutral-bg);
+  color: var(--hr-neutral-fg);
+  font-size: 13px;
+  white-space: nowrap;
+}

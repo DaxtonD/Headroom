@@ -98,8 +98,16 @@ export function Login(): React.JSX.Element {
           </button>
         </form>
 
+        {/*
+          There is no sign-up here on purpose, so this has to say where an
+          account comes from instead - someone standing at this screen with no
+          way in and no explanation is a dead end, and the command is not
+          guessable.
+        */}
         <p className="login__footnote">
-          Accounts are set up on the server. If you cannot get in, ask Dax to reset your password.
+          There is no sign-up: accounts are created on the server, with{" "}
+          <code>cli.js create-user</code>. Whoever runs the server can add one or reset a
+          password.
         </p>
       </div>
     </main>
