@@ -1,9 +1,8 @@
 # Headroom
 
-A household budget web app / PWA for Dax and Carol, built to replace Carol's budget spreadsheet. Shows the chequing balance, how much is safe to spend before the next bill, every upcoming paycheque and bill with a running balance, two-week pay periods, the monthly budget, goals, net worth and the retirement outlook.
+A household budget web app / PWA for our family, built to replace a complex budget spreadsheet. Shows the chequing balance, how much is safe to spend before the next bill, every upcoming paycheque and bill with a running balance, two-week pay periods, the monthly budget, goals, net worth and the retirement outlook.
 
-Status: **M0 scaffold in progress.** See [docs/PROGRESS.md](docs/PROGRESS.md) for where things stand, every decision made, and the open questions for Carol.
-
+Status: **M0 scaffold in progress.** See [docs/PROGRESS.md](docs/PROGRESS.md) for where things stand, every decision made, and the open questions.
 ## No financial data in this repository
 
 By decision on 2026-11-07, **no real household financial data is committed to git**. These paths are git-ignored and exist only on local machines (they ship in `headroom-handoff.zip`):
