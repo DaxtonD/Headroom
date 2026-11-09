@@ -26,7 +26,7 @@ const HASH_OPTIONS = {
 } as const;
 
 /** The shortest password we will store. Deliberately a floor, not a policy. */
-export const MIN_PASSWORD_LENGTH = 12;
+export const MIN_PASSWORD_LENGTH = 8;
 
 export class WeakPasswordError extends Error {
   constructor(message: string) {
