@@ -143,10 +143,11 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             */}
             {data.missing.includes("income_on_ledger") ? (
               <li>
-                <strong>Your pay is not on the ledger.</strong> Paydays set the dates everything
-                hangs off, but they do not put money on the timeline - so the running balance only
-                ever goes down and the coverage warning fires. Add each person&rsquo;s pay under
-                <em> Money coming in</em> below and it appears straight away.
+                <strong>A payday has no paycheque on the ledger.</strong> Paydays set the dates
+                everything hangs off; the paycheque is what puts the money on the timeline. Without
+                it the running balance only ever goes down and the coverage warning fires. Adding a
+                payday creates its paycheque, so this means one was archived - restore it under
+                <em> Money coming in</em> below.
               </li>
             ) : null}
             {data.missing.includes("pay_schedule") ? (
@@ -222,7 +223,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       <Section
         title="Money coming in"
         count={incoming.length}
-        note="Paycheques come from the paydays below. Anything else that arrives — a refund, a transfer in — goes here."
+        note="Each payday below brings its paycheque here automatically; change the amount there and future cheques follow. Anything else that arrives — a refund, a benefit, a transfer in — is added here."
         empty="Nothing but paycheques."
         isEmpty={incoming.length === 0}
         actions={
@@ -450,7 +451,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       <Section
         title="Paydays"
         count={data.paySchedules.length}
-        note="Pay is every two weeks. Give one real payday and Headroom works out the rest. Everything on the ledger depends on these."
+        note="Pay is every two weeks. Give one real payday and Headroom works out the rest, and puts the paycheque itself on the ledger. Everything else on the ledger hangs off these dates."
         empty="No paydays yet. Most of the app needs these."
         isEmpty={data.paySchedules.length === 0}
         actions={

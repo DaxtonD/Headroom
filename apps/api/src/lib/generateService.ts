@@ -74,6 +74,12 @@ export interface GenerationResult {
   readonly created: number;
   /** Already there, so left untouched along with any edits made to them. */
   readonly existing: number;
+  /**
+   * Paycheque templates created for paydays that had none. Normally zero;
+   * non-zero on the run that heals a household set up before paydays brought
+   * their cheque with them.
+   */
+  readonly paychequeTemplatesCreated: number;
   readonly skipped: readonly { readonly templateId: string; readonly reason: string }[];
 }
 
@@ -115,6 +121,257 @@ export async function regenerateQuietly(
   }
 }
 
+/**
+ * A payday is not just a date. It is money arriving.
+ *
+ * Headroom stores the two separately: a `pay_schedule` says when someone is
+ * paid, and a `paycheque` template is what actually puts a row on the ledger.
+ * Everything downstream reads the second one - the running balance, the
+ * lowest point, safe-to-spend, coverage, and the anchor a flexible bill hangs
+ * from.
+ *
+ * So a household that entered its paydays and its bills, and nothing else,
+ * got a ledger of pure outgoings: a balance that only ever fell, every
+ * automatic withdrawal reported as uncovered, and a safe-to-spend figure
+ * thousands of dollars negative. Every number on the screen was a correct
+ * reading of the data, and all of them were wrong about the household. Worse,
+ * the pay-period totals DID count the pay (they project unplaced cheques from
+ * the schedule), so the same screen showed "$4,647.43 in" above a running
+ * balance that never rose.
+ *
+ * The screen already promised the right behaviour - "Paycheques come from the
+ * paydays below" - so this makes the promise true rather than changing it.
+ *
+ * Binding the template to the schedule by id, instead of copying its anchor
+ * date, keeps the dates in one place: correct a payday and the cheques follow.
+ *
+ * Idempotent, and deliberately unfiltered by `active` and `deletedAt`:
+ * archiving or removing a paycheque is a decision, and a household that has
+ * made it must not have the template reappear on the next write.
+ */
+export async function ensurePaychequeTemplates(
+  tx: Prisma.TransactionClient,
+  householdId: string,
+): Promise<string[]> {
+  const schedules = await tx.paySchedule.findMany({
+    where: { deletedAt: null, user: { householdId, deletedAt: null } },
+    select: {
+      id: true,
+      userId: true,
+      anchorDate: true,
+      defaultCents: true,
+      user: { select: { name: true } },
+    },
+    orderBy: { anchorDate: "asc" },
+  });
+  if (schedules.length === 0) return [];
+
+  const paycheques = await tx.template.findMany({
+    where: { householdId, kind: "paycheque", scheduleType: "biweekly" },
+    select: { ownerUserId: true, scheduleJson: true },
+  });
+
+  /**
+   * Which paydays already have a cheque, and which are too unclear to touch.
+   *
+   * Creating a second cheque for a payday that already has one would double
+   * the household's income - a far worse failure than leaving a payday
+   * without one, which at least shows up as a balance that never rises. So
+   * every way a template might already be someone's pay counts as a claim,
+   * and anything ambiguous blocks creation instead of guessing.
+   */
+  const claimed = new Set<string>();
+  const blocked = new Set<string>();
+  const byOwner = new Map(schedules.map((schedule) => [schedule.userId, schedule.id]));
+  const unattributed: Date[] = [];
+
+  for (const template of paycheques) {
+    const parsed = scheduleSchema.safeParse(template.scheduleJson);
+    if (!parsed.success || parsed.data.type !== "biweekly") continue;
+
+    // 1. It names the payday it follows. Everything this function creates.
+    if (parsed.data.payScheduleId !== undefined) {
+      claimed.add(parsed.data.payScheduleId);
+      continue;
+    }
+
+    // 2. It is somebody's, and a person has at most one payday.
+    const owned = template.ownerUserId === null ? undefined : byOwner.get(template.ownerUserId);
+    if (owned !== undefined) {
+      claimed.add(owned);
+      continue;
+    }
+
+    // 3. Nobody's, with fortnightly dates of its own. The old setup advice
+    //    produced exactly this: "add your pay under Money coming in", with no
+    //    owner and an anchor copied from the payday.
+    if (parsed.data.anchorDate !== undefined) {
+      unattributed.push(new Date(`${parsed.data.anchorDate}T00:00:00.000Z`));
+    }
+  }
+
+  const FORTNIGHT_MS = 14 * 24 * 60 * 60 * 1000;
+  for (const anchor of unattributed) {
+    // Two fortnightly series are the same series exactly when their anchors
+    // are a whole number of fortnights apart.
+    const aligned = schedules.filter(
+      (schedule) => (anchor.getTime() - schedule.anchorDate.getTime()) % FORTNIGHT_MS === 0,
+    );
+
+    if (aligned.length === 1) {
+      // Unmistakably that payday's cheque, entered by hand.
+      claimed.add((aligned[0] as { id: string }).id);
+    } else if (aligned.length > 1) {
+      // Two people paid on the same day, and no way to tell whose this is.
+      for (const schedule of aligned) blocked.add(schedule.id);
+    }
+    // Aligned with none: some other fortnightly income. Blocks nothing.
+  }
+
+  const created: string[] = [];
+  for (const schedule of schedules) {
+    if (claimed.has(schedule.id) || blocked.has(schedule.id)) continue;
+
+    const template = await tx.template.create({
+      data: {
+        householdId,
+        kind: "paycheque",
+        name: paychequeNameFor(schedule.user.name),
+        defaultCents: schedule.defaultCents,
+        ownerUserId: schedule.userId,
+        // A paycheque lands on a date the employer chose, like any other
+        // dated item. It is not something that can be moved to a later cheque.
+        withdrawal: "auto",
+        scheduleType: "biweekly",
+        scheduleJson: { type: "biweekly", payScheduleId: schedule.id },
+        section: "income",
+      },
+      select: { id: true },
+    });
+    created.push(template.id);
+  }
+
+  return created;
+}
+
+/**
+ * Keep the pay amount in one place.
+ *
+ * The amount lives on the pay schedule, because that is where it is entered
+ * and where anyone would go to change it after a raise. The bound template
+ * carries a copy, since that is what generation reads - so correcting the
+ * schedule has to carry through, or future cheques would quietly keep the old
+ * figure while the pay-period totals showed the new one.
+ *
+ * Only the template DEFAULT moves. Cheques already on the ledger keep what
+ * they say: one of them may have been edited for overtime or banked hours,
+ * and none of them may be rewritten by a change made later.
+ *
+ * Returns the template it touched, so the caller can announce the change.
+ */
+export async function syncPaychequeDefault(
+  tx: Prisma.TransactionClient,
+  householdId: string,
+  payScheduleId: string,
+  defaultCents: bigint,
+  userId: string,
+): Promise<{ id: string; version: number } | null> {
+  const candidates = await tx.template.findMany({
+    where: {
+      householdId,
+      kind: "paycheque",
+      scheduleType: "biweekly",
+      deletedAt: null,
+    },
+    select: { id: true, version: true, defaultCents: true, scheduleJson: true },
+  });
+
+  for (const candidate of candidates) {
+    const parsed = scheduleSchema.safeParse(candidate.scheduleJson);
+    if (!parsed.success || parsed.data.type !== "biweekly") continue;
+    if (parsed.data.payScheduleId !== payScheduleId) continue;
+    if (candidate.defaultCents === defaultCents) return null;
+
+    return await tx.template.update({
+      where: { id: candidate.id },
+      data: {
+        defaultCents,
+        version: candidate.version + 1,
+        updatedById: userId,
+        updatedAt: new Date(),
+      },
+      select: { id: true, version: true },
+    });
+  }
+
+  return null;
+}
+
+/** "Alex's pay", and "Chris' pay" for a name already ending in s. */
+function paychequeNameFor(owner: string): string {
+  const name = owner.trim();
+  if (name.length === 0) return "Pay";
+  return `${name}${name.endsWith("s") || name.endsWith("S") ? "'" : "'s"} pay`;
+}
+
+/**
+ * Bring every household up to date.
+ *
+ * Generation otherwise only runs after a write, and two things need it when
+ * nobody is writing:
+ *
+ *  - **Time passes.** The horizon is "through the day before the Nth upcoming
+ *    paycheque", so it rolls forward every day. A household that changed
+ *    nothing for a fortnight would watch its ledger run out rather than
+ *    extend, and the figures would quietly describe a shorter and shorter
+ *    stretch of the future.
+ *  - **An upgrade adds something that should exist.** Paydays now bring their
+ *    paycheque; a household set up before that needs the templates created
+ *    without having to go and edit something first, which it would have no
+ *    reason to think would help.
+ *
+ * Each household is its own transaction so one bad schedule cannot stop the
+ * rest, and failures are logged rather than thrown: a sweep is maintenance,
+ * and it must never take the server down.
+ */
+export async function generateForAllHouseholds(
+  prisma: PrismaClient,
+  log: {
+    info: (object: unknown, message?: string) => void;
+    warn: (object: unknown, message?: string) => void;
+  },
+  now: Date = new Date(),
+): Promise<{ households: number; created: number; paychequeTemplatesCreated: number }> {
+  const households = await prisma.household.findMany({ select: { id: true } });
+
+  let created = 0;
+  let paychequeTemplatesCreated = 0;
+
+  for (const household of households) {
+    try {
+      const result = await prisma.$transaction((tx) =>
+        generateForHousehold(tx, household.id, now),
+      );
+      created += result.created;
+      paychequeTemplatesCreated += result.paychequeTemplatesCreated;
+    } catch (error) {
+      log.warn(
+        { err: error, householdId: household.id },
+        "could not bring a household up to date during the periodic sweep",
+      );
+    }
+  }
+
+  if (created > 0 || paychequeTemplatesCreated > 0) {
+    log.info(
+      { households: households.length, created, paychequeTemplatesCreated },
+      "periodic generation sweep added upcoming items",
+    );
+  }
+
+  return { households: households.length, created, paychequeTemplatesCreated };
+}
+
 export async function generateForHousehold(
   tx: Prisma.TransactionClient,
   householdId: string,
@@ -124,6 +381,10 @@ export async function generateForHousehold(
   // succeed thanks to the unique constraint, but one would waste work and log
   // confusing errors.
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`headroom:generate:${householdId}`}))`;
+
+  // Before anything else, because the cheques these create are what the rest
+  // of the run anchors flexible items to.
+  const paychequeTemplatesCreated = (await ensurePaychequeTemplates(tx, householdId)).length;
 
   const household = await tx.household.findUniqueOrThrow({
     where: { id: householdId },
@@ -192,7 +453,15 @@ export async function generateForHousehold(
   }
 
   if (templates.length === 0) {
-    return { from: window.from, to: window.to, considered: 0, created: 0, existing: 0, skipped };
+    return {
+      from: window.from,
+      to: window.to,
+      considered: 0,
+      created: 0,
+      existing: 0,
+      paychequeTemplatesCreated,
+      skipped,
+    };
   }
 
   const generated = generateOccurrences({
@@ -256,6 +525,7 @@ export async function generateForHousehold(
     considered: generated.length,
     created,
     existing,
+    paychequeTemplatesCreated,
     skipped,
   };
 }

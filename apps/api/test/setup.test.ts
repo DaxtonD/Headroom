@@ -134,9 +134,28 @@ describe("pay schedules", () => {
       .then((response) => response.json());
 
     expect(after.periods.length).toBeGreaterThan(0);
-    // Each window holds one cheque from each person, so each counts two.
+
+    /**
+     * Each window holds one cheque from each person, and both are now REAL
+     * rows rather than projections.
+     *
+     * This assertion used to read `projectedPaycheques.length === 2`, and
+     * that was the bug in miniature: a projected cheque counts towards the
+     * window's "coming in" total but is not on the timeline, so it never
+     * reaches the running balance. Adding a payday now creates the paycheque
+     * that puts it there, which empties the projection list.
+     *
+     * `projectedPaycheques` still has a job - a window reaching past the
+     * horizon, where no occurrence has been generated yet - so it is checked
+     * as empty rather than removed.
+     */
     const full = after.periods.find((period: { isCurrentPartial: boolean }) => !period.isCurrentPartial);
-    expect(full.projectedPaycheques.length).toBe(2);
+    expect(full.projectedPaycheques).toEqual([]);
+    expect(
+      (full.rows as { kind: string }[]).filter((row) => row.kind === "paycheque"),
+    ).toHaveLength(2);
+    // And the window's income is the two cheques, not zero.
+    expect(BigInt(full.inCents as string)).toBe(355_000n);
   });
 
   it("allows only one schedule per person", async () => {

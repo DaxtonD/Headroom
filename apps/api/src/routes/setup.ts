@@ -11,13 +11,21 @@ import { isPlainDate } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
-import { regenerateQuietly } from "../lib/generateService.js";
+import { regenerateQuietly, syncPaychequeDefault } from "../lib/generateService.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
 import { wireCents } from "../lib/wire.js";
 import { fromPlainDate, toPlainDate } from "../lib/timelineService.js";
 import type { Account, PaySchedule } from "../generated/prisma/client.js";
+
+/**
+ * Just enough of a schedule to see which payday a paycheque template follows.
+ * The full union is validated in `generateService`.
+ */
+const biweeklySchedule = z
+  .object({ payScheduleId: z.string().min(1).optional() })
+  .passthrough();
 
 const plainDate = z
   .string()
@@ -93,7 +101,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
 
-    const [household, schedules, accounts, members, incomeTemplates] = await Promise.all([
+    const [household, schedules, accounts, members, paychequeTemplates] = await Promise.all([
       app.db.prisma.household.findUniqueOrThrow({
         where: { id: user.householdId },
         select: {
@@ -123,14 +131,16 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         select: { id: true, name: true, initial: true, colorFg: true, colorBg: true },
         orderBy: { name: "asc" },
       }),
-      // Is any income going to reach the ledger at all?
-      app.db.prisma.template.count({
+      // Which paydays actually put a cheque on the ledger.
+      app.db.prisma.template.findMany({
         where: {
           householdId: user.householdId,
           deletedAt: null,
           active: true,
-          kind: { in: ["paycheque", "deposit"] },
+          kind: "paycheque",
+          scheduleType: "biweekly",
         },
+        select: { scheduleJson: true },
       }),
     ]);
 
@@ -144,20 +154,33 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     if (schedules.length === 0) missing.push("pay_schedule");
     if (household.netMonthlyIncomeCents === 0n) missing.push("income");
     /**
-     * Paydays entered, but no income that reaches the ledger.
+     * A payday whose cheque is not reaching the ledger.
      *
      * A pay schedule gives the DATES everything hangs off, and an amount used
-     * for the pay-period totals - but nothing on the timeline. Only a template
-     * generates an actual paycheque row. Entering paydays and stopping
-     * therefore produces a ledger of nothing but bills, a running balance that
-     * never goes up, and a coverage warning saying there is not enough money
-     * for any of it. All of which is true of the data, and none of which is
-     * true of the household.
+     * for the pay-period totals - but nothing on the timeline. Only a
+     * paycheque template puts an actual row there, and the running balance,
+     * the lowest point, safe-to-spend and coverage all read that row. Without
+     * it the ledger is pure outgoings: a balance that only falls and every
+     * automatic withdrawal reported as uncovered.
      *
-     * Reported separately from `pay_schedule` so the fix named is the right
-     * one: add the pay under "Money coming in", not another payday.
+     * Adding a payday now creates its paycheque, so this should only ever
+     * fire for one that was archived on purpose and then forgotten.
+     *
+     * Asked per schedule, not as "is there any income at all". It used to be
+     * the latter, and a single unrelated deposit - a child benefit - was
+     * enough to answer yes while neither person's pay was on the ledger. The
+     * checklist stayed silent through exactly the setup it existed to catch.
      */
-    if (schedules.length > 0 && incomeTemplates === 0) missing.push("income_on_ledger");
+    const payrolled = new Set<string>();
+    for (const template of paychequeTemplates) {
+      const parsed = biweeklySchedule.safeParse(template.scheduleJson);
+      if (parsed.success && parsed.data.payScheduleId !== undefined) {
+        payrolled.add(parsed.data.payScheduleId);
+      }
+    }
+    if (schedules.some((schedule) => !payrolled.has(schedule.id))) {
+      missing.push("income_on_ledger");
+    }
 
     return reply.send({
       household: {
@@ -339,6 +362,28 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
           version: applied.row.version,
           by: user.id,
         });
+
+        // A raise is entered here, on the payday, which is the only place the
+        // amount is visible. The paycheque template that actually puts money
+        // on the ledger has to follow it.
+        if ("defaultCents" in changes) {
+          const synced = await syncPaychequeDefault(
+            tx,
+            user.householdId,
+            applied.row.id,
+            applied.row.defaultCents,
+            user.id,
+          );
+          if (synced) {
+            await publishChange(tx, {
+              householdId: user.householdId,
+              entity: "template",
+              id: synced.id,
+              version: synced.version,
+              by: user.id,
+            });
+          }
+        }
 
         return {
           statusCode: 200,

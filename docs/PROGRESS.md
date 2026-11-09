@@ -438,6 +438,69 @@ Dax in the running app rather than being caught here, which is the one that matt
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
 
+## Bug 13: a payday was not money (2026-11-09, found in production)
+
+The worst one so far, and the only one that made the app actively lie. Dax had entered every
+real figure and the home screen said **safe to spend: a large negative number**, with a
+coverage banner claiming there was not enough for the mortgage.
+
+### What was wrong
+
+A `pay_schedule` stored *when* someone is paid. A `paycheque` **template** is what actually
+puts a row on the timeline. Nothing created the second from the first, and nothing said so
+clearly, so a household could enter its paydays and all of its bills and get a ledger of pure
+outgoings: a running balance that only ever fell, every automatic withdrawal reported as
+uncovered, and flexible bills silently skipped by generation because there was no paycheque
+to anchor them to.
+
+The giveaway was on the same screen. The pay-period summary reported a full fortnight of pay
+coming in, directly above a running balance that never rose once, because `computePayPeriods` projects unplaced
+cheques from the schedule and `computeTimeline` only ever sees occurrences. Two engines, one
+screen, opposite answers about whether the pay existed.
+
+The UI had already promised the right behaviour - *"Paycheques come from the paydays below"* -
+while the checklist beside it said to add the pay by hand. Both could not be true.
+
+### The fix
+
+A payday now brings its cheque: `ensurePaychequeTemplates` creates a `paycheque` template
+bound to the schedule by **id**, so the dates stay in one place and correcting a payday moves
+the cheques with it. It runs at the top of every generation pass, which makes it self-healing
+for a household set up before the change.
+
+- **Changing the pay amount carries through** to the template default, but never rewrites a
+  cheque already on the ledger - one of those may have been edited for overtime.
+- **It cannot double a household's income**, which would be worse than the bug: a cheque is
+  claimed by `payScheduleId`, then by owner, then by fortnightly date alignment; anything
+  ambiguous blocks creation and the checklist says so. Four tests cover the ways a household
+  that followed the old advice could already have a hand-made paycheque.
+- **Archiving is respected.** The lookup deliberately ignores `active` and `deletedAt`, so a
+  cheque turned off on purpose stays off.
+
+### The checklist was asking the wrong question
+
+`income_on_ledger` asked *"is there any income template at all"*. A single unrelated benefit
+deposit answered yes while neither person's pay was on the ledger - so the check stayed silent
+through exactly the setup it existed to catch. It now asks per payday.
+
+### A second, latent bug found on the way
+
+**Generation only ever ran after a write.** The horizon is "through the day before the Nth
+upcoming paycheque", so it moves forward every day: a household that edited nothing for a
+fortnight would have watched its ledger shorten rather than extend. It also meant this fix
+would not have reached Dax's data until he happened to edit something.
+
+`generateForAllHouseholds` now runs once at startup and every `GENERATION_SWEEP_HOURS`
+(default 6, new in `.env.example` and the Unraid template). Each household is its own
+transaction, and a failure is logged rather than thrown - one bad schedule must not stop the
+sweep or the server.
+
+### Still to do
+
+There is no test that every variable in `env.ts` appears in `.env.example` and
+`unraid/Headroom.xml`. Keeping the three in step is currently done by hand, and this change
+needed it in all three.
+
 ## Git history and attribution (2026-11-09)
 
 Dax asked for **no attribution lines in any commit** - no `Co-Authored-By`, no "Generated with

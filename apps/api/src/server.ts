@@ -8,6 +8,7 @@
 import { buildApp } from "./app.js";
 import { purgeExpiredSessions } from "./auth/session.js";
 import { createDatabase } from "./db.js";
+import { generateForAllHouseholds } from "./lib/generateService.js";
 import { ChangeStream } from "./lib/changeStream.js";
 import { purgeIdempotencyKeys } from "./lib/idempotency.js";
 import { EnvValidationError, getEnv } from "./env.js";
@@ -67,6 +68,28 @@ async function main(): Promise<void> {
   }, IDEMPOTENCY_PURGE_INTERVAL_MS);
   keyPurgeTimer.unref();
 
+  /**
+   * Keep every household's upcoming items filled in.
+   *
+   * Generation otherwise only happens after a write. The horizon moves
+   * forward every day, so a quiet fortnight would shorten the ledger rather
+   * than extend it - and an upgrade that adds something every household
+   * should have (paydays bringing their paycheque) would not reach anyone
+   * until they next edited something.
+   *
+   * Runs once at startup for that second reason, then on the interval.
+   */
+  const sweep = (): void => {
+    generateForAllHouseholds(db.prisma, {
+      info: (object, message) => app.log.info(object as object, message),
+      warn: (object, message) => app.log.warn(object as object, message),
+    }).catch((error: unknown) => app.log.error({ err: error }, "generation sweep failed"));
+  };
+
+  const generationTimer = setInterval(sweep, env.GENERATION_SWEEP_HOURS * 60 * 60 * 1000);
+  generationTimer.unref();
+  sweep();
+
   let shuttingDown = false;
   const shutdown = async (signal: string): Promise<void> => {
     if (shuttingDown) return;
@@ -75,6 +98,7 @@ async function main(): Promise<void> {
 
     clearInterval(sessionPurgeTimer);
     clearInterval(keyPurgeTimer);
+    clearInterval(generationTimer);
     try {
       await changeStream.stop();
       await app.close();

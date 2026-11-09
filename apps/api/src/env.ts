@@ -149,6 +149,16 @@ const envSchema = z.object({
   IDEMPOTENCY_KEY_TTL_HOURS: intInRange(1, 24 * 90, 48),
   SSE_HEARTBEAT_SECONDS: intInRange(1, 600, 25),
 
+  /**
+   * How often to extend every household's upcoming items.
+   *
+   * The horizon rolls forward daily, so a household that writes nothing would
+   * otherwise watch its ledger shorten day by day. Six hours is frequent
+   * enough that nobody sees it and cheap enough to be invisible: the run
+   * creates nothing when there is nothing to create.
+   */
+  GENERATION_SWEEP_HOURS: intInRange(1, 24 * 7, 6),
+
   /** Optional Web Push (M5). Either all three are set, or none are. */
   VAPID_PUBLIC_KEY: z.string().optional(),
   VAPID_PRIVATE_KEY: z.string().optional(),

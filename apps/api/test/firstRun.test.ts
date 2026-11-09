@@ -160,33 +160,26 @@ describe("the whole first-run path, in order", () => {
     });
     expect(income.statusCode).toBe(200);
 
-    /* ---- One thing still missing, and it is the right one ---- */
-    // The account, the paydays and the income figures are in, and the
-    // checklist is still not satisfied: nothing yet puts money on the ledger.
-    const partway = await get("/api/setup").then((response) => response.json());
-    expect(partway.missing).toEqual(["income_on_ledger"]);
-
-    /* ---- 4. The pay, as income on the ledger ---- */
-    // Not optional, and not implied by the paydays above: a pay schedule sets
-    // the dates and puts nothing on the timeline. Leaving this out is what
-    // produced a ledger of nothing but bills in a real setup.
-    const pay = await post("/api/templates", {
-      name: "Pay",
-      kind: "paycheque",
-      defaultCents: "212500",
-      withdrawal: "auto",
-      // Its own anchor, matching the payday entered above.
-      schedule: { type: "biweekly", anchorDate: "2026-11-05" },
-      section: "income",
-    });
-    // Asserted, because an unchecked 400 here is how the gap stayed invisible:
-    // the template silently did not exist and the ledger silently had no
-    // income in it.
-    expect(pay.statusCode, JSON.stringify(pay.json())).toBe(201);
-
-    /* ---- Now nothing is missing ---- */
+    /* ---- 4. The pay is already on the ledger ---- */
+    /**
+     * There used to be a step here, and leaving it out was the whole problem.
+     *
+     * The paydays above set the dates; a separate paycheque template was what
+     * actually put money on the timeline, and nothing said so. A real setup
+     * stopped after the paydays and got a ledger of nothing but bills. So the
+     * payday now brings its cheque, and this step is gone.
+     */
     const ready = await get("/api/setup").then((response) => response.json());
     expect(ready.missing).toEqual([]);
+
+    const cheques = await harness.db.prisma.template.findMany({
+      where: { householdId, kind: "paycheque", deletedAt: null },
+      select: { defaultCents: true },
+    });
+    expect(cheques).toHaveLength(2);
+    expect(new Set(cheques.map((row) => row.defaultCents))).toEqual(
+      new Set([212_500n, 177_500n]),
+    );
 
     /* ---- 5. An expense, biweekly on its own dates ---- */
     const mortgage = await post("/api/templates", {
@@ -297,12 +290,16 @@ describe("the whole first-run path, in order", () => {
     expect(budget.variable.lines.length).toBeGreaterThan(0);
   });
 
-  it("says so when paydays are set but no income reaches the ledger", async () => {
+  it("cannot be left with paydays entered and no income on the ledger", async () => {
     /**
-     * The state a real setup actually landed in, and the one that produced a
-     * wrong answer: paydays entered, bills entered, generated - and a ledger
-     * of nothing but bills, every one of them reported as uncovered, because a
-     * pay schedule sets DATES and never puts money on the timeline.
+     * The state a real setup landed in, and the one that produced a confident
+     * wrong answer: paydays entered, bills entered - and a ledger of nothing
+     * but bills, every one reported as uncovered, because a pay schedule set
+     * DATES and never put money on the timeline.
+     *
+     * This test used to reproduce that state and check the checklist
+     * complained about it. The state is now unreachable over the API, so it
+     * checks that instead: the same steps, and nothing to complain about.
      */
     await post("/api/accounts", { name: "Chequing", kind: "chequing" });
     await post("/api/pay-schedules", {
@@ -318,40 +315,37 @@ describe("the whole first-run path, in order", () => {
       schedule: { type: "monthly", day: 17 },
       section: "fixed",
     });
-    await post("/api/templates/generate", {});
-    // Less in the account than the bill, so the shortfall is real and not an
-    // artefact of a generous opening balance.
+    // Less in the account than the bill, so being covered has to come from
+    // the pay arriving and not from a generous opening balance.
     await post("/api/balance", { cents: "2000" });
+
+    const setup = await get("/api/setup").then((response) => response.json());
+    expect(setup.missing).not.toContain("income_on_ledger");
+
+    const dashboard = await get("/api/dashboard").then((response) => response.json());
+    expect(dashboard.coverage.allCovered).toBe(true);
+    // The figure that was thousands negative in the report.
+    expect(BigInt(dashboard.safeToSpendNowCents as string)).toBeGreaterThan(0n);
+  });
+
+  it("still says so if the paycheque is archived afterwards", async () => {
+    // The one way back into the broken state, and the checklist has to name
+    // it - otherwise archiving a cheque silently breaks every figure.
+    await post("/api/accounts", { name: "Chequing", kind: "chequing" });
+    await post("/api/pay-schedules", {
+      userId: daxId,
+      anchorDate: "2026-11-12",
+      defaultCents: "212500",
+    });
+    await harness.db.prisma.template.updateMany({
+      where: { householdId, kind: "paycheque" },
+      data: { active: false },
+    });
 
     const setup = await get("/api/setup").then((response) => response.json());
     expect(setup.missing).toContain("income_on_ledger");
     // And not the wrong diagnosis: a payday DOES exist.
     expect(setup.missing).not.toContain("pay_schedule");
-
-    // The symptom it explains.
-    const dashboard = await get("/api/dashboard").then((response) => response.json());
-    expect(dashboard.coverage.allCovered).toBe(false);
-
-    // Adding the pay as income is what fixes it.
-    expect(
-      (
-        await post("/api/templates", {
-          name: "Pay",
-          kind: "paycheque",
-          defaultCents: "212500",
-          withdrawal: "auto",
-          schedule: { type: "biweekly", anchorDate: "2026-11-12" },
-          section: "income",
-        })
-      ).statusCode,
-    ).toBe(201);
-    await post("/api/templates/generate", {});
-
-    const after = await get("/api/setup").then((response) => response.json());
-    expect(after.missing).not.toContain("income_on_ledger");
-
-    const fixed = await get("/api/dashboard").then((response) => response.json());
-    expect(fixed.coverage.allCovered).toBe(true);
   });
 
   it("puts an arriving paycheque before the bills that follow it", async () => {

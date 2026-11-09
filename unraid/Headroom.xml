@@ -165,6 +165,17 @@
     Required="false"
     Mask="false"/>
 
+  <Config
+    Name="GENERATION_SWEEP_HOURS"
+    Target="GENERATION_SWEEP_HOURS"
+    Default="6"
+    Mode=""
+    Description="Optional, defaults to 6. How often the server extends every household&apos;s upcoming items. The ledger runs to a horizon that moves forward every day, so this keeps it filled during a week when nobody edits anything. It also runs once each time the container starts, and creates nothing when nothing is due."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+
   <!-- ============ Optional: Web Push, not yet implemented ============ -->
 
   <Config
