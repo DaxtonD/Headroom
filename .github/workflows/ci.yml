@@ -20,7 +20,7 @@ permissions:
 jobs:
   check:
     name: lint, typecheck, test (Node ${{ matrix.node }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     strategy:
       fail-fast: false
@@ -51,13 +51,13 @@ jobs:
       TEST_DATABASE_URL: postgresql://postgres:headroom-test@127.0.0.1:55432/headroom_test?schema=public
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9.15.0
+      # The version comes from `packageManager` in package.json, which is the
+      # one place it should live. Passing it here as well is now an error.
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: ${{ matrix.node }}
           cache: pnpm
@@ -91,16 +91,16 @@ jobs:
 
   docker:
     name: docker image builds
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Build the image
         # Must keep working from a plain clone with no registry login
         # (HANDOFF section 11).
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: false
@@ -132,7 +132,7 @@ jobs:
 
   publish:
     name: publish to GHCR
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     # Only after lint, typecheck, the tests on both Node versions, and the
     # image smoke test. The household runs whatever this pushes, so an
@@ -150,12 +150,12 @@ jobs:
       packages: write
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v4
 
       - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -163,7 +163,7 @@ jobs:
 
       - name: Work out the tags
         id: meta
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           # Lower-case on purpose: GHCR rejects a mixed-case path, and the
           # owner is spelled DaxtonD.
@@ -174,7 +174,7 @@ jobs:
             type=sha,format=long
 
       - name: Build and push
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
