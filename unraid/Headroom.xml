@@ -29,7 +29,7 @@
   <Category>Productivity:</Category>
   <WebUI/>
   <TemplateURL>https://raw.githubusercontent.com/DaxtonD/Headroom/main/unraid/Headroom.xml</TemplateURL>
-  <Icon/>
+  <Icon>https://raw.githubusercontent.com/DaxtonD/Headroom/main/assets/Headroom.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>
