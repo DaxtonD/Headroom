@@ -463,6 +463,23 @@ scratchpad, which is the trade-off of keeping it out of the repository.
 **Going forward: commit messages end at the last line of prose.** This is recorded in Claude's
 memory for the project, so it survives a new session.
 
+## Names, now the repository is public (2026-11-09)
+
+The owner removed both household members' first names from the README himself, then: "I just
+wanted names out of the readme. Moving forward we can stop using names. Eventually we will remove
+them all from comments."
+
+So:
+
+- **New code, comments, docs, test data and commit messages use no first names** - "the
+  household", "one person", "the other", or a role word.
+- **Existing mentions stay for now.** About 600 across ~50 files, heaviest in this file and in the
+  test suites, where the names are also test-user data. Removing them is agreed future work, not
+  urgent, and the fixtures feed the golden tests so it needs a full run rather than a blind
+  find-and-replace.
+- **The pushed commit messages keep them.** Changing those would need a force-push, which the
+  rules here forbid.
+
 ## Working agreements with Dax (this build is NOT autonomous)
 
 CLAUDE.md describes an autonomous weekend build. That changed: Dax is available and answering questions.
