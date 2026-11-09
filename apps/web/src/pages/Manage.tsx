@@ -25,7 +25,7 @@ import {
 import { useState } from "react";
 import { Link } from "react-router";
 import { AssetForm } from "../components/AssetForm.js";
-import { Amount, InitialBubble } from "../components/Badges.js";
+import { Amount, Chip, InitialBubble } from "../components/Badges.js";
 import { BillForm } from "../components/BillForm.js";
 import { CategoryForm } from "../components/CategoryForm.js";
 import { GoalForm } from "../components/GoalForm.js";
@@ -152,7 +152,8 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
           <ul>
             {data.missing.includes("account") ? (
               <li>
-                A chequing account to track. <AddAccount />
+                <strong>A chequing account.</strong> The ledger reads its balance, so nothing works
+                until there is one. Add it under Accounts below.
               </li>
             ) : null}
             {data.missing.includes("pay_schedule") ? (
@@ -693,6 +694,16 @@ function ordinal(day: number): string {
 /* The chequing account                                                       */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * The accounts.
+ *
+ * This section could only RENAME one, and nothing else in the app could create
+ * one either - not the Manage checklist that says "account" is missing, and not
+ * `create-user`, which makes the household and the people and no account. So a
+ * brand new household reached "No account yet." with no way forward: the
+ * balance endpoint refuses with 409, and the ledger stays empty. Found while
+ * walking the from-scratch path before Dax entered the household's real data.
+ */
 function AccountsSection({
   accounts,
   canEdit,
@@ -701,9 +712,34 @@ function AccountsSection({
   canEdit: boolean;
 }): React.JSX.Element {
   const patch = usePatchAccount();
+  const create = useCreateAccount();
   const [renaming, setRenaming] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [adding, setAdding] = useState<"chequing" | "savings" | null>(null);
+  const [newName, setNewName] = useState("");
+
+  const hasChequing = accounts.some((account) => account.kind === "chequing");
+
+  const add = async (): Promise<void> => {
+    if (adding === null) return;
+    setError(null);
+
+    const trimmed = newName.trim();
+    if (trimmed === "") {
+      setError("Give the account a name.");
+      return;
+    }
+
+    try {
+      await create.mutateAsync({ name: trimmed, kind: adding });
+      setAdding(null);
+      setNewName("");
+    } catch (caught) {
+      if (caught instanceof OfflineError || caught instanceof ApiError) setError(caught.message);
+      else setError("Could not add it.");
+    }
+  };
 
   const save = async (account: AccountEntry): Promise<void> => {
     setError(null);
@@ -727,12 +763,20 @@ function AccountsSection({
   return (
     <section className="hr-card manage__section">
       <header className="manage__section-head">
-        <h2 className="manage__section-title">The account</h2>
+        <h2 className="manage__section-title">Accounts</h2>
         <span className="manage__count">{accounts.length}</span>
       </header>
       <p className="manage__note">
-        The chequing account the balance belongs to. Its name is the label on the Home screen.
+        The chequing account is the one the ledger reads: its balance is what is safe to spend.
+        A savings account is separate, and its balance never counts as spendable.
       </p>
+
+      {!hasChequing ? (
+        <p className="hr-alert manage__inline-alert" role="alert">
+          There is no chequing account yet, so the ledger has nowhere to read a balance. Add one
+          and everything else starts working.
+        </p>
+      ) : null}
 
       {error ? (
         <p className="hr-alert manage__inline-alert" role="alert">
@@ -781,7 +825,17 @@ function AccountsSection({
               ) : (
                 <>
                   <span className="manage__row-main">
-                    <span className="manage__row-name">{account.name}</span>
+                    <span className="manage__row-head">
+                      <span className="manage__row-name">{account.name}</span>
+                      {/*
+                        Said on the row, because with two accounts the
+                        difference between them is the whole point: one is
+                        spendable and one is not.
+                      */}
+                      <Chip tone={account.kind === "chequing" ? "payday" : "neutral"}>
+                        {account.kind === "chequing" ? "Chequing" : "Savings"}
+                      </Chip>
+                    </span>
                   </span>
                   <span className="manage__row-buttons">
                     <button
@@ -804,34 +858,78 @@ function AccountsSection({
         </ul>
       )}
 
-      {accounts.length === 0 ? (
-        <div className="manage__actions">
-          <AddAccount />
+      {/*
+        Gated on whether a CHEQUING account exists, not on whether any account
+        does. The old condition was `accounts.length === 0`, so adding the
+        savings account first made the chequing one - the only account the
+        ledger can read - impossible to create from the app at all.
+      */}
+      {adding !== null ? (
+        <div className="manage__add">
+          <label className="hr-label" htmlFor="account-new-name">
+            Name for the {adding === "chequing" ? "chequing" : "savings"} account
+          </label>
+          <div className="manage__add-row">
+            <input
+              className="hr-input"
+              id="account-new-name"
+              type="text"
+              value={newName}
+              onChange={(event) => setNewName(event.target.value)}
+              placeholder={adding === "chequing" ? "Chequing" : "Savings"}
+              disabled={create.isPending}
+              maxLength={60}
+            />
+            <button
+              className="manage__small"
+              type="button"
+              disabled={create.isPending}
+              onClick={() => void add()}
+            >
+              {create.isPending ? "Adding…" : "Add"}
+            </button>
+            <button
+              className="manage__small"
+              type="button"
+              disabled={create.isPending}
+              onClick={() => {
+                setAdding(null);
+                setError(null);
+              }}
+            >
+              Cancel
+            </button>
+          </div>
         </div>
-      ) : null}
+      ) : (
+        <div className="manage__actions">
+          {!hasChequing ? (
+            <button
+              className="manage__small"
+              type="button"
+              disabled={!canEdit}
+              onClick={() => {
+                setAdding("chequing");
+                setNewName("Chequing");
+              }}
+            >
+              Add a chequing account
+            </button>
+          ) : null}
+          <button
+            className="manage__small"
+            type="button"
+            disabled={!canEdit}
+            onClick={() => {
+              setAdding("savings");
+              setNewName("Savings");
+            }}
+          >
+            Add a savings account
+          </button>
+        </div>
+      )}
     </section>
-  );
-}
-
-function AddAccount(): React.JSX.Element {
-  const create = useCreateAccount();
-  const [error, setError] = useState<string | null>(null);
-
-  return (
-    <>
-      <button
-        className="manage__small"
-        type="button"
-        disabled={create.isPending}
-        onClick={() => {
-          setError(null);
-          create.mutateAsync({ name: "Chequing" }).catch(() => setError("Could not add it."));
-        }}
-      >
-        {create.isPending ? "Adding…" : "Add a chequing account"}
-      </button>
-      {error ? <span className="manage__field-hint">{error}</span> : null}
-    </>
   );
 }
 

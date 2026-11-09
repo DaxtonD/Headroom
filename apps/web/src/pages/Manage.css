@@ -288,3 +288,19 @@
     flex: 0 0 auto;
   }
 }
+
+.manage__add {
+  margin-top: var(--hr-space-3);
+}
+
+.manage__add-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hr-space-2);
+  margin-top: var(--hr-space-2);
+}
+
+.manage__add-row .hr-input {
+  flex: 1 1 12rem;
+}

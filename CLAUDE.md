@@ -66,6 +66,11 @@ Keep this list current as you build.
   git-ignored seed for what to look for, so it only works on Dax's machine and skips cleanly
   elsewhere (CI has no seed by design). Catches distinctive amounts - the ones with odd cents -
   not round ones, so it is a safety net and not a substitute for the rule.
+- `node scripts/backup.mjs dump | verify <file> | list | restore <file> --yes`: back up the
+  database and prove the dump restores. `verify` restores into a throwaway database and counts
+  what came back, so "I have a dump" and "I can get my data back" are the same claim. Runs
+  `pg_dump` in a container, so nothing has to be installed. Dumps go in `backups/`, which is
+  git-ignored because they contain the household's real figures.
 - `docker compose up -d --build`: run against the Postgres Dax already has.
 - `docker compose --profile with-db up -d --build`: run with a bundled Postgres.
 - `docker compose exec app node apps/api/dist/cli.js create-user | list-users | reset-password`.
