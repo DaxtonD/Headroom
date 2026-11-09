@@ -74,7 +74,15 @@ Docker Manager cannot pull one without registry credentials. Either:
 
 ### 3. Add the container (on Unraid)
 
-Repository: `ghcr.io/daxtond/headroom:latest`.
+There is a ready-made template at **`unraid/Headroom.xml`** in this repository.
+Drop it in `/boot/config/plugins/dockerMan/templates-user/` and it appears
+under *Add Container* with every variable described, the three required ones
+marked, and the secrets masked. It was checked against the app's own
+environment schema and then used to start a container, so the names and
+defaults in it are known to match the code rather than merely to look right.
+
+To do it by hand instead, the repository is
+`ghcr.io/daxtond/headroom:latest`.
 
 | Setting | Value |
 |---|---|

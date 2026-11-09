@@ -171,7 +171,14 @@ export class EnvValidationError extends Error {
         "",
         ...problems.map((problem) => `  - ${problem}`),
         "",
-        "Copy .env.example to .env and fill in the marked values.",
+        // Said both ways on purpose. The message used to name only `.env`,
+        // which is no help at all when the container was configured through a
+        // GUI that has no such file - the reader is then told to edit
+        // something that does not exist.
+        "If you run this with docker compose: copy .env.example to .env and fill in the marked values.",
+        "If you configured the container by hand (Unraid's Docker Manager, `docker run`, a GUI):",
+        "set the variables above on the container itself. Only three have no default:",
+        "APP_ORIGIN, DATABASE_URL and SESSION_SECRET.",
       ].join("\n"),
     );
     this.name = "EnvValidationError";

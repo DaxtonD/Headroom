@@ -1,0 +1,202 @@
+<?xml version="1.0"?>
+<Container version="2">
+  <Name>Headroom</Name>
+  <Repository>ghcr.io/daxtond/headroom:latest</Repository>
+  <Registry>https://github.com/DaxtonD/Headroom/pkgs/container/headroom</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/DaxtonD/Headroom/issues</Support>
+  <Project>https://github.com/DaxtonD/Headroom</Project>
+  <Overview>
+    A household budget web app and PWA. Shows the chequing balance, how much is safe to spend before the next bill, every upcoming paycheque and bill with a running balance, two-week pay periods, the monthly budget, savings and the mortgage payoff outlook.&#13;
+    &#13;
+    THREE VARIABLES ARE REQUIRED and the container will refuse to start without them: APP_ORIGIN, DATABASE_URL and SESSION_SECRET. Everything else has a sensible default.&#13;
+    &#13;
+    BEFORE FIRST START, create the database on your PostgreSQL 17 server:&#13;
+    CREATE DATABASE headroom;&#13;
+    The container creates its own tables on every start, but it does not create the database.&#13;
+    &#13;
+    NO APPDATA PATH IS NEEDED. Everything lives in PostgreSQL, so there is no volume to map and nothing to back up on the Unraid side. Back up the database instead: scripts/backup.mjs in the repository does a dump and proves it restores.&#13;
+    &#13;
+    NO WEBUI LINK ON PURPOSE. The session cookie is HTTPS-only, so opening the app at http://server-ip:port shows the interface and then silently fails to sign you in. Open it at the HTTPS address you put in APP_ORIGIN, through a reverse proxy. docs/DEPLOY.md has the Nginx Proxy Manager settings, including the two headers Server-Sent Events needs.&#13;
+    &#13;
+    AFTER FIRST START, create the two accounts from the Unraid terminal:&#13;
+    docker exec -it Headroom node apps/api/dist/cli.js create-user&#13;
+    Run it twice. The first account also creates the household; the second joins it.
+  </Overview>
+  <Category>Productivity:</Category>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/DaxtonD/Headroom/main/unraid/Headroom.xml</TemplateURL>
+  <Icon/>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DateInstalled/>
+  <DonateText/>
+  <DonateLink/>
+  <Requires>A PostgreSQL 17 server reachable from this container, and an empty database on it.</Requires>
+
+  <!-- ===================== Required ===================== -->
+
+  <Config
+    Name="WebUI Port"
+    Target="3000"
+    Default="8484"
+    Mode="tcp"
+    Description="Host port the reverse proxy forwards to. The container always listens on 3000."
+    Type="Port"
+    Display="always"
+    Required="true"
+    Mask="false"/>
+
+  <Config
+    Name="APP_ORIGIN"
+    Target="APP_ORIGIN"
+    Default=""
+    Mode=""
+    Description="REQUIRED. The exact address you open the app at, including https:// and no trailing slash, e.g. https://headroom.example.com. Cookies and CORS are checked against it, so a mismatch shows up as a login that appears to work and then forgets you."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="false"/>
+
+  <Config
+    Name="DATABASE_URL"
+    Target="DATABASE_URL"
+    Default=""
+    Mode=""
+    Description="REQUIRED. Connection string for your PostgreSQL 17 server, e.g. postgresql://headroom:PASSWORD@192.168.1.50:5432/headroom?schema=public . The user needs rights to create tables, types and triggers. Create the database itself first; the container does not."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="true"/>
+
+  <Config
+    Name="SESSION_SECRET"
+    Target="SESSION_SECRET"
+    Default=""
+    Mode=""
+    Description="REQUIRED. At least 32 characters, used to sign the session cookie. Generate one with: openssl rand -hex 32 . Changing it signs everyone out."
+    Type="Variable"
+    Display="always"
+    Required="true"
+    Mask="true"/>
+
+  <!-- ================ Optional, worth checking ================ -->
+
+  <Config
+    Name="TZ"
+    Target="TZ"
+    Default="America/Regina"
+    Mode=""
+    Description="Optional. The server clock decides every date the app stores, so this should be the household's own timezone. America/Regina has no daylight saving."
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false"/>
+
+  <Config
+    Name="COOKIE_SECURE"
+    Target="COOKIE_SECURE"
+    Default="true"
+    Mode=""
+    Description="Optional, defaults to true. Leave it true: the session cookie then travels only over HTTPS. Setting it false is for plain-http development and should never be used with real data."
+    Type="Variable"
+    Display="always"
+    Required="false"
+    Mask="false"/>
+
+  <!-- ===================== Optional, advanced ===================== -->
+
+  <Config
+    Name="LOG_LEVEL"
+    Target="LOG_LEVEL"
+    Default="info"
+    Mode=""
+    Description="Optional, defaults to info. One of fatal, error, warn, info, debug, trace, silent. Use debug while something is wrong."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+
+  <Config
+    Name="SESSION_TTL_DAYS"
+    Target="SESSION_TTL_DAYS"
+    Default="90"
+    Mode=""
+    Description="Optional, defaults to 90. How long a sign-in lasts. Long on purpose, because the app is opened many times a day. 1 to 400."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+
+  <Config
+    Name="LOGIN_RATE_LIMIT"
+    Target="LOGIN_RATE_LIMIT"
+    Default="10"
+    Mode=""
+    Description="Optional, defaults to 10. FAILED sign-in attempts allowed per address per 15 minutes. Successful sign-ins are not limited."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+
+  <Config
+    Name="IDEMPOTENCY_KEY_TTL_HOURS"
+    Target="IDEMPOTENCY_KEY_TTL_HOURS"
+    Default="48"
+    Mode=""
+    Description="Optional, defaults to 48. How long the server remembers a write's idempotency key, so a retry from a phone on a weak connection cannot apply the same change twice."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+
+  <Config
+    Name="SSE_HEARTBEAT_SECONDS"
+    Target="SSE_HEARTBEAT_SECONDS"
+    Default="25"
+    Mode=""
+    Description="Optional, defaults to 25. Keep-alive interval for the live-update stream that refreshes the other phone. Lower it if a proxy closes idle connections sooner than this."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+
+  <!-- ============ Optional: Web Push, not yet implemented ============ -->
+
+  <Config
+    Name="VAPID_PUBLIC_KEY"
+    Target="VAPID_PUBLIC_KEY"
+    Default=""
+    Mode=""
+    Description="Optional and not used yet; push notifications are a later milestone. Generate all three VAPID values together with: npx web-push generate-vapid-keys . Either set all three or leave all three empty."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+
+  <Config
+    Name="VAPID_PRIVATE_KEY"
+    Target="VAPID_PRIVATE_KEY"
+    Default=""
+    Mode=""
+    Description="Optional and not used yet. The private half of the VAPID pair above."
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="true"/>
+
+  <Config
+    Name="VAPID_SUBJECT"
+    Target="VAPID_SUBJECT"
+    Default=""
+    Mode=""
+    Description="Optional and not used yet. A contact address for the push service, e.g. mailto:admin@example.com"
+    Type="Variable"
+    Display="advanced"
+    Required="false"
+    Mask="false"/>
+</Container>

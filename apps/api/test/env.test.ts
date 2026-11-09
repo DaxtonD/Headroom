@@ -205,7 +205,18 @@ describe("parseEnv", () => {
       expect(error).toBeInstanceOf(EnvValidationError);
       const problems = (error as EnvValidationError).problems;
       expect(problems.length).toBeGreaterThanOrEqual(3);
-      expect((error as Error).message).toContain("Copy .env.example to .env");
+
+      // The message has to serve both ways of running this. Naming only
+      // `.env` sent anyone who configured the container through a GUI off to
+      // edit a file that does not exist on that machine.
+      const message = (error as Error).message;
+      expect(message).toContain("copy .env.example to .env");
+      expect(message).toContain("configured the container by hand");
+      // And it names the three that have no default, since that is the whole
+      // question someone staring at this is trying to answer.
+      for (const name of ["APP_ORIGIN", "DATABASE_URL", "SESSION_SECRET"]) {
+        expect(message).toContain(name);
+      }
     }
   });
 });
