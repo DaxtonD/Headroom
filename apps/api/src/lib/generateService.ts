@@ -26,7 +26,7 @@ import {
   type TemplateSpec,
 } from "@headroom/core";
 import { z } from "zod";
-import type { Prisma } from "../generated/prisma/client.js";
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import { fromPlainDate, todayInZone, toPlainDate } from "./timelineService.js";
 
 /**
@@ -82,6 +82,39 @@ export interface GenerationResult {
  *
  * Idempotent by construction: running it again creates nothing new.
  */
+/**
+ * Bring the occurrences up to date after a change, without being able to undo
+ * that change.
+ *
+ * Deliberately its own transaction, run after the caller's has committed. Two
+ * reasons:
+ *
+ *  - A failure here must not roll back the edit the person actually made. One
+ *    template with an unreadable schedule would otherwise block every later
+ *    edit in the household.
+ *  - An error inside a Postgres transaction aborts it, so a `try/catch` around
+ *    generation *inside* the caller's transaction could not recover anyway.
+ *
+ * Failures are logged and swallowed. The ledger is then merely stale, which
+ * the next write or the explicit endpoint puts right - rather than the app
+ * refusing to save anything.
+ */
+export async function regenerateQuietly(
+  prisma: PrismaClient,
+  householdId: string,
+  log: { warn: (object: unknown, message?: string) => void },
+): Promise<GenerationResult | null> {
+  try {
+    return await prisma.$transaction((tx) => generateForHousehold(tx, householdId));
+  } catch (error) {
+    log.warn(
+      { err: error, householdId },
+      "could not bring upcoming items up to date after a change; the ledger may be stale",
+    );
+    return null;
+  }
+}
+
 export async function generateForHousehold(
   tx: Prisma.TransactionClient,
   householdId: string,

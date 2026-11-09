@@ -179,7 +179,9 @@ Each step unlocks the next. On **Manage**:
    here as an expense *and* under Savings as terms: the first puts it on the
    ledger, the second drives the payoff projection.
 6. **Budget-only categories** for spending with no due date: groceries, gas.
-7. **Bring upcoming up to date**, which creates the dated items from steps 4 and 5.
+
+Nothing to press afterwards: saving any of these creates the dated items it
+calls for straight away.
 
 Then **Ledger → Update balance**, and on **Savings**: add a savings account,
 enter its balance, add earmarks, then the mortgage terms and any lump sums.

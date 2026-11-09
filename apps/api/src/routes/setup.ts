@@ -11,6 +11,7 @@ import { isPlainDate } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
+import { regenerateQuietly } from "../lib/generateService.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
@@ -253,6 +254,12 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       },
     });
 
+
+    // Automatic, because a button for this was a step that could be forgotten
+    // and whose absence looked like a bug: an expense was added and the ledger
+    // did not show it. Runs after the write has committed, so it cannot undo
+    // it.
+    await regenerateQuietly(app.db.prisma, user.householdId, app.log);
     return reply.status(result.statusCode).send(result.body);
   });
 
@@ -340,6 +347,12 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       },
     });
 
+
+    // Automatic, because a button for this was a step that could be forgotten
+    // and whose absence looked like a bug: an expense was added and the ledger
+    // did not show it. Runs after the write has committed, so it cannot undo
+    // it.
+    await regenerateQuietly(app.db.prisma, user.householdId, app.log);
     return reply.status(result.statusCode).send(result.body);
   });
 
@@ -550,6 +563,12 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       },
     });
 
+
+    // Automatic, because a button for this was a step that could be forgotten
+    // and whose absence looked like a bug: an expense was added and the ledger
+    // did not show it. Runs after the write has committed, so it cannot undo
+    // it.
+    await regenerateQuietly(app.db.prisma, user.householdId, app.log);
     return reply.status(result.statusCode).send(result.body);
   });
 }

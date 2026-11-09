@@ -280,19 +280,16 @@ export function usePatchBill() {
  * touches an occurrence that already exists, so no edit or verification is
  * undone.
  */
-export function useGenerate() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: () =>
-      api.post<{ generation: { created: number; existing: number } }>(
-        "/api/templates/generate",
-        {},
-        { idempotencyKey: newIdempotencyKey() },
-      ),
-    onSuccess: () => invalidateEverything(queryClient),
-  });
-}
+/*
+ * There is deliberately no `useGenerate` any more.
+ *
+ * Generation used to be a button on Manage. The server now runs it after every
+ * write that changes which occurrences should exist - a template, a payday, the
+ * horizon or the weekend rule - so there is nothing for a person to remember.
+ *
+ * `POST /api/templates/generate` is still served: the API tests drive it
+ * directly, and it stays useful as a manual nudge from the command line.
+ */
 
 export function useCreatePaySchedule() {
   const queryClient = useQueryClient();

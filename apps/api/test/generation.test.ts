@@ -66,6 +66,174 @@ function generate() {
   });
 }
 
+describe("generation happens on its own", () => {
+  /**
+   * There was a "Bring upcoming up to date" button for this. It was a step
+   * that could be forgotten, and forgetting it looked exactly like a bug: an
+   * expense entered, and a ledger that did not show it.
+   *
+   * So every write that changes WHICH occurrences should exist, or WHEN, now
+   * generates afterwards. These tests never call the generate endpoint.
+   */
+  async function timelineNames() {
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/timeline", headers: { cookie } })
+      .then((response) => response.json());
+    return (body.rows as { name: string }[]).map((row) => row.name);
+  }
+
+  it("puts a new expense on the ledger with no second step", async () => {
+    await seedSchedules();
+
+    const created = await harness.app.inject({
+      method: "POST",
+      url: "/api/templates",
+      headers: { cookie, "idempotency-key": randomUUID() },
+      payload: {
+        name: "Dentist plan",
+        kind: "bill",
+        defaultCents: "4500",
+        withdrawal: "auto",
+        schedule: { type: "monthly", day: 15 },
+        section: "fixed",
+      },
+    });
+    expect(created.statusCode).toBe(201);
+
+    expect(await timelineNames()).toContain("Dentist plan");
+  });
+
+  it("follows an edit, so a renamed expense is not left behind", async () => {
+    await seedSchedules();
+    const created = await harness.app.inject({
+      method: "POST",
+      url: "/api/templates",
+      headers: { cookie, "idempotency-key": randomUUID() },
+      payload: {
+        name: "Streaming",
+        kind: "bill",
+        defaultCents: "1800",
+        withdrawal: "auto",
+        schedule: { type: "monthly", day: 9 },
+      },
+    });
+    const template = created.json().template;
+
+    // Archiving stops it generating; the occurrences already made stay, which
+    // is the existing rule and not what this checks.
+    const archived = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/templates/${template.id as string}`,
+      headers: {
+        cookie,
+        "idempotency-key": randomUUID(),
+        "if-match": `"${String(template.version)}"`,
+      },
+      payload: { active: false },
+    });
+    expect(archived.statusCode).toBe(200);
+
+    // And unarchiving brings it back without a button.
+    const back = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/templates/${template.id as string}`,
+      headers: {
+        cookie,
+        "idempotency-key": randomUUID(),
+        "if-match": `"${String((archived.json().template as { version: number }).version)}"`,
+      },
+      payload: { active: true },
+    });
+    expect(back.statusCode).toBe(200);
+
+    expect(await timelineNames()).toContain("Streaming");
+  });
+
+  it("follows a change to the horizon, which decides how far ahead to generate", async () => {
+    // The other trigger worth having: generation runs to the horizon, and the
+    // horizon is an editable household setting. Widening it has to produce the
+    // further-out occurrences without anyone pressing anything.
+    await seedSchedules();
+    await harness.app.inject({
+      method: "POST",
+      url: "/api/templates",
+      headers: { cookie, "idempotency-key": randomUUID() },
+      payload: {
+        name: "Monthly thing",
+        kind: "bill",
+        defaultCents: "3300",
+        withdrawal: "auto",
+        schedule: { type: "monthly", day: 12 },
+      },
+    });
+
+    const before = await harness.db.prisma.occurrence.count({
+      where: { name: "Monthly thing", deletedAt: null },
+    });
+    expect(before).toBeGreaterThan(0);
+
+    const household = await harness.db.prisma.household.findUniqueOrThrow({
+      where: { id: householdId },
+      select: { version: true },
+    });
+
+    const widened = await harness.app.inject({
+      method: "PATCH",
+      url: "/api/settings/household",
+      headers: {
+        cookie,
+        "idempotency-key": randomUUID(),
+        "if-match": `"${String(household.version)}"`,
+      },
+      // Far enough ahead that more months certainly fall inside it.
+      payload: { horizonPaychequeCount: 24 },
+    });
+    expect(widened.statusCode, JSON.stringify(widened.json())).toBe(200);
+
+    const after = await harness.db.prisma.occurrence.count({
+      where: { name: "Monthly thing", deletedAt: null },
+    });
+    expect(after).toBeGreaterThan(before);
+  });
+
+  it("does not duplicate anything when several writes land in a row", async () => {
+    await seedSchedules();
+
+    for (const day of [3, 11, 21]) {
+      await harness.app.inject({
+        method: "POST",
+        url: "/api/templates",
+        headers: { cookie, "idempotency-key": randomUUID() },
+        payload: {
+          name: `Bill ${String(day)}`,
+          kind: "bill",
+          defaultCents: "1000",
+          withdrawal: "auto",
+          schedule: { type: "monthly", day },
+        },
+      });
+    }
+
+    // Asked of the database, not the timeline: the timeline stops at the
+    // horizon while generation runs two weeks past it, so a bill dated beyond
+    // the horizon is correctly absent from one and present in the other.
+    for (const day of [3, 11, 21]) {
+      const name = `Bill ${String(day)}`;
+      const rows = await harness.db.prisma.occurrence.findMany({
+        where: { name, deletedAt: null },
+        select: { date: true, templateId: true },
+      });
+
+      expect(rows.length, `${name} should have been generated`).toBeGreaterThan(0);
+      // Each write re-ran generation for the templates created before it. The
+      // (templateId, periodKey) constraint is what keeps that idempotent, and
+      // one date appearing twice is how a failure would look.
+      const dates = rows.map((row) => row.date?.toISOString());
+      expect(new Set(dates).size, `${name} was generated twice`).toBe(rows.length);
+    }
+  });
+});
+
 describe("a biweekly expense", () => {
   /**
    * There was no way to say this at all. The only fortnightly option in the

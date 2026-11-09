@@ -35,7 +35,6 @@ import {
   useBills,
   useCategories,
   useCreateAccount,
-  useGenerate,
   usePatchAccount,
   usePatchBill,
   usePatchHousehold,
@@ -66,7 +65,6 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const goals = useGoalsOverview();
   const netWorth = useNetWorth();
 
-  const generate = useGenerate();
   const patchBill = usePatchBill();
 
   const [editing, setEditing] = useState<Editing>(null);
@@ -122,23 +120,6 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
     }
   };
 
-  const bringUpToDate = async (): Promise<void> => {
-    setError(null);
-    setNotice(null);
-    try {
-      const result = (await generate.mutateAsync()) as { generation: { created: number } };
-      const created = result.generation.created;
-      setNotice(
-        created === 0
-          ? "Already up to date; nothing new to add."
-          : `Added ${created} upcoming item${created === 1 ? "" : "s"}. Nothing already there was changed.`,
-      );
-    } catch (caught) {
-      if (caught instanceof OfflineError || caught instanceof ApiError) setError(caught.message);
-      else setError("Could not bring things up to date.");
-    }
-  };
-
   return (
     <div className="manage">
       <h1 className="manage__title">Manage</h1>
@@ -165,7 +146,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
                 <strong>Your pay is not on the ledger.</strong> Paydays set the dates everything
                 hangs off, but they do not put money on the timeline - so the running balance only
                 ever goes down and the coverage warning fires. Add each person&rsquo;s pay under
-                <em> Money coming in</em> below, then use <em>Bring upcoming up to date</em>.
+                <em> Money coming in</em> below and it appears straight away.
               </li>
             ) : null}
             {data.missing.includes("pay_schedule") ? (
@@ -196,29 +177,23 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       <Section
         title="Expenses"
         count={expenses.length}
-        note="Entered once. Each one appears on the ledger with its due date and on Budget with its monthly cost."
+        note="Entered once. Each one appears on the ledger with its due date, and on Budget with its monthly cost, as soon as you save it."
         empty="No expenses yet."
         isEmpty={expenses.length === 0}
         actions={
-          <>
-            <button
-              className="hr-button"
-              type="button"
-              disabled={!canEdit}
-              onClick={() => setEditing({ kind: "bill", bill: null, adding: "bill" })}
-            >
-              Add an expense
-            </button>
-            <button
-              className="hr-button hr-button--secondary"
-              type="button"
-              disabled={!canEdit || generate.isPending}
-              onClick={() => void bringUpToDate()}
-              title="Creates any upcoming items the expenses call for. Never changes anything already there."
-            >
-              {generate.isPending ? "Working…" : "Bring upcoming up to date"}
-            </button>
-          </>
+          // There was a "Bring upcoming up to date" button beside this one.
+          // The server now does it after every change that affects what should
+          // exist, so the button was a step that could be forgotten and whose
+          // absence looked exactly like a bug: an expense added, and the ledger
+          // not showing it.
+          <button
+            className="hr-button"
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setEditing({ kind: "bill", bill: null, adding: "bill" })}
+          >
+            Add an expense
+          </button>
         }
       >
         {expenses.map((bill) => (

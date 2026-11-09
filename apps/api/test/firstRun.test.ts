@@ -223,10 +223,18 @@ describe("the whole first-run path, in order", () => {
       ).statusCode,
     ).toBe(201);
 
-    /* ---- 7. Bring the upcoming items into being ---- */
+    /* ---- 7. The upcoming items already exist ---- */
+    // There is no step here any more. Each template write generated its own
+    // occurrences, so the explicit endpoint has nothing left to create - which
+    // is the whole point of removing the button that used to call it.
+    const timelineNow = await get("/api/timeline").then((response) => response.json());
+    expect(
+      (timelineNow.rows as { name: string }[]).map((row) => row.name),
+    ).toContain("Mortgage");
+
     const generated = await post("/api/templates/generate", {});
     expect(generated.statusCode).toBe(200);
-    expect(generated.json().generation.created).toBeGreaterThan(0);
+    expect(generated.json().generation.created).toBe(0);
 
     /* ---- 8. The balance, which now has somewhere to go ---- */
     const balance = await post("/api/balance", { cents: "147300" });
