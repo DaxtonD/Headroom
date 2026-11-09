@@ -23,6 +23,21 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
   const titleId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
+/**
+ * Did this click's press begin on the backdrop itself?
+ *
+ * A `click` is dispatched on the nearest common ancestor of where the pointer
+ * went down and where it came up. Select some text in the sheet, drag past its
+ * edge and release, and that ancestor is the backdrop - so a plain
+ * `onClick={onClose}` threw the form away mid-selection, losing whatever had
+ * been typed. `stopPropagation` on the sheet cannot help: the sheet is not in
+ * that event's path at all.
+ *
+ * So the press has to have started on the backdrop too. A deliberate click
+ * outside still closes; a selection that merely ends outside does not.
+ */
+  const pressedBackdrop = useRef(false);
+
   const [amountText, setAmountText] = useState("");
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
@@ -86,7 +101,19 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
   };
 
   return (
-    <div className="sheet-backdrop" onClick={onClose} role="presentation">
+    <div
+      className="sheet-backdrop"
+      onPointerDown={(event) => {
+        pressedBackdrop.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        const fromBackdrop =
+          pressedBackdrop.current && event.target === event.currentTarget;
+        pressedBackdrop.current = false;
+        if (fromBackdrop) onClose();
+      }}
+      role="presentation"
+    >
       <div
         className="sheet"
         role="dialog"

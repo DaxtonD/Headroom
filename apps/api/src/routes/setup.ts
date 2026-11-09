@@ -92,7 +92,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
 
-    const [household, schedules, accounts, members] = await Promise.all([
+    const [household, schedules, accounts, members, incomeTemplates] = await Promise.all([
       app.db.prisma.household.findUniqueOrThrow({
         where: { id: user.householdId },
         select: {
@@ -122,6 +122,15 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         select: { id: true, name: true, initial: true, colorFg: true, colorBg: true },
         orderBy: { name: "asc" },
       }),
+      // Is any income going to reach the ledger at all?
+      app.db.prisma.template.count({
+        where: {
+          householdId: user.householdId,
+          deletedAt: null,
+          active: true,
+          kind: { in: ["paycheque", "deposit"] },
+        },
+      }),
     ]);
 
     // What still has to be filled in before the app can work properly. The
@@ -133,6 +142,21 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     if (!accounts.some((account) => account.kind === "chequing")) missing.push("account");
     if (schedules.length === 0) missing.push("pay_schedule");
     if (household.netMonthlyIncomeCents === 0n) missing.push("income");
+    /**
+     * Paydays entered, but no income that reaches the ledger.
+     *
+     * A pay schedule gives the DATES everything hangs off, and an amount used
+     * for the pay-period totals - but nothing on the timeline. Only a template
+     * generates an actual paycheque row. Entering paydays and stopping
+     * therefore produces a ledger of nothing but bills, a running balance that
+     * never goes up, and a coverage warning saying there is not enough money
+     * for any of it. All of which is true of the data, and none of which is
+     * true of the household.
+     *
+     * Reported separately from `pay_schedule` so the fix named is the right
+     * one: add the pay under "Money coming in", not another payday.
+     */
+    if (schedules.length > 0 && incomeTemplates === 0) missing.push("income_on_ledger");
 
     return reply.send({
       household: {

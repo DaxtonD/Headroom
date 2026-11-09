@@ -165,13 +165,21 @@ Each step unlocks the next. On **Manage**:
 2. **Paydays**, one per person. Any real payday; the rest are worked out from
    it. Everything dated depends on these.
 3. **Income**, the stated monthly and yearly figures. They need not agree with
-   each other.
-4. **Expenses.** Monthly on a date, monthly on the last day, every two weeks on
+   each other. These are for the Budget screen only.
+4. **Money coming in** - each person's pay. **This step is easy to skip and
+   everything looks broken without it.** The paydays in step 2 set the dates
+   that everything else hangs off; they put nothing on the ledger. Only an
+   entry here does. Miss it and you get a ledger of nothing but bills, a
+   running balance that only ever falls, and a coverage warning claiming there
+   is not enough money for any of it - all true of the data, none of it true of
+   the household. The Manage checklist now says so if you have paydays and no
+   income.
+5. **Expenses.** Monthly on a date, monthly on the last day, every two weeks on
    its own dates, a few days after a payday, or flexible. The mortgage goes
    here as an expense *and* under Savings as terms: the first puts it on the
    ledger, the second drives the payoff projection.
-5. **Budget-only categories** for spending with no due date: groceries, gas.
-6. **Bring upcoming up to date**, which creates the dated items from step 4.
+6. **Budget-only categories** for spending with no due date: groceries, gas.
+7. **Bring upcoming up to date**, which creates the dated items from steps 4 and 5.
 
 Then **Ledger → Update balance**, and on **Savings**: add a savings account,
 enter its balance, add earmarks, then the mortgage terms and any lump sums.

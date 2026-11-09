@@ -160,11 +160,35 @@ describe("the whole first-run path, in order", () => {
     });
     expect(income.statusCode).toBe(200);
 
-    /* ---- Nothing is missing any more ---- */
+    /* ---- One thing still missing, and it is the right one ---- */
+    // The account, the paydays and the income figures are in, and the
+    // checklist is still not satisfied: nothing yet puts money on the ledger.
+    const partway = await get("/api/setup").then((response) => response.json());
+    expect(partway.missing).toEqual(["income_on_ledger"]);
+
+    /* ---- 4. The pay, as income on the ledger ---- */
+    // Not optional, and not implied by the paydays above: a pay schedule sets
+    // the dates and puts nothing on the timeline. Leaving this out is what
+    // produced a ledger of nothing but bills in a real setup.
+    const pay = await post("/api/templates", {
+      name: "Pay",
+      kind: "paycheque",
+      defaultCents: "212500",
+      withdrawal: "auto",
+      // Its own anchor, matching the payday entered above.
+      schedule: { type: "biweekly", anchorDate: "2026-11-05" },
+      section: "income",
+    });
+    // Asserted, because an unchecked 400 here is how the gap stayed invisible:
+    // the template silently did not exist and the ledger silently had no
+    // income in it.
+    expect(pay.statusCode, JSON.stringify(pay.json())).toBe(201);
+
+    /* ---- Now nothing is missing ---- */
     const ready = await get("/api/setup").then((response) => response.json());
     expect(ready.missing).toEqual([]);
 
-    /* ---- 4. An expense, biweekly on its own dates ---- */
+    /* ---- 5. An expense, biweekly on its own dates ---- */
     const mortgage = await post("/api/templates", {
       name: "Mortgage",
       kind: "bill",
@@ -175,7 +199,7 @@ describe("the whole first-run path, in order", () => {
     });
     expect(mortgage.statusCode).toBe(201);
 
-    /* ---- 5. A monthly one, and a budget-only category ---- */
+    /* ---- 6. A monthly one, and a budget-only category ---- */
     expect(
       (
         await post("/api/templates", {
@@ -199,16 +223,16 @@ describe("the whole first-run path, in order", () => {
       ).statusCode,
     ).toBe(201);
 
-    /* ---- 6. Bring the upcoming items into being ---- */
+    /* ---- 7. Bring the upcoming items into being ---- */
     const generated = await post("/api/templates/generate", {});
     expect(generated.statusCode).toBe(200);
     expect(generated.json().generation.created).toBeGreaterThan(0);
 
-    /* ---- 7. The balance, which now has somewhere to go ---- */
+    /* ---- 8. The balance, which now has somewhere to go ---- */
     const balance = await post("/api/balance", { cents: "147300" });
     expect(balance.statusCode).toBe(201);
 
-    /* ---- 8. The ledger works ---- */
+    /* ---- 9. The ledger works ---- */
     const dashboard = await get("/api/dashboard").then((response) => response.json());
     expect(dashboard.balance.cents).toBe("147300");
     expect(dashboard.nextAutoWithdrawals.length).toBeGreaterThan(0);
@@ -225,7 +249,7 @@ describe("the whole first-run path, in order", () => {
       expect(grouped, `${row.name} should be in a window`).toContain(row.id);
     }
 
-    /* ---- 9. Savings: its own account, a balance, an earmark ---- */
+    /* ---- 10. Savings: its own account, a balance, an earmark ---- */
     const savings = await post("/api/accounts", { name: "Savings", kind: "savings" });
     // The bug this file was written for: this used to be the point of no
     // return, because the chequing account could only be added while there
@@ -239,7 +263,7 @@ describe("the whole first-run path, in order", () => {
 
     expect((await post("/api/goals", { name: "Trip", savedCents: "300000" })).statusCode).toBe(201);
 
-    /* ---- 10. The mortgage terms, for the payoff projection ---- */
+    /* ---- 11. The mortgage terms, for the payoff projection ---- */
     const terms = await post("/api/mortgage", {
       balanceCents: "17250000",
       asOf: "2026-11-06",
@@ -250,7 +274,7 @@ describe("the whole first-run path, in order", () => {
     });
     expect(terms.statusCode).toBe(201);
 
-    /* ---- 11. And every screen now has something to say ---- */
+    /* ---- 12. And every screen now has something to say ---- */
     const savingsScreen = await get("/api/savings").then((response) => response.json());
     expect(savingsScreen.balanceCents).toBe("438215");
     expect(savingsScreen.unallocatedCents).toBe("138215");
@@ -263,6 +287,119 @@ describe("the whole first-run path, in order", () => {
     const budget = await get("/api/budget").then((response) => response.json());
     expect(budget.fixed.lines.length).toBeGreaterThan(0);
     expect(budget.variable.lines.length).toBeGreaterThan(0);
+  });
+
+  it("says so when paydays are set but no income reaches the ledger", async () => {
+    /**
+     * The state a real setup actually landed in, and the one that produced a
+     * wrong answer: paydays entered, bills entered, generated - and a ledger
+     * of nothing but bills, every one of them reported as uncovered, because a
+     * pay schedule sets DATES and never puts money on the timeline.
+     */
+    await post("/api/accounts", { name: "Chequing", kind: "chequing" });
+    await post("/api/pay-schedules", {
+      userId: daxId,
+      anchorDate: "2026-11-12",
+      defaultCents: "212500",
+    });
+    await post("/api/templates", {
+      name: "Hydro",
+      kind: "bill",
+      defaultCents: "9800",
+      withdrawal: "auto",
+      schedule: { type: "monthly", day: 17 },
+      section: "fixed",
+    });
+    await post("/api/templates/generate", {});
+    // Less in the account than the bill, so the shortfall is real and not an
+    // artefact of a generous opening balance.
+    await post("/api/balance", { cents: "2000" });
+
+    const setup = await get("/api/setup").then((response) => response.json());
+    expect(setup.missing).toContain("income_on_ledger");
+    // And not the wrong diagnosis: a payday DOES exist.
+    expect(setup.missing).not.toContain("pay_schedule");
+
+    // The symptom it explains.
+    const dashboard = await get("/api/dashboard").then((response) => response.json());
+    expect(dashboard.coverage.allCovered).toBe(false);
+
+    // Adding the pay as income is what fixes it.
+    expect(
+      (
+        await post("/api/templates", {
+          name: "Pay",
+          kind: "paycheque",
+          defaultCents: "212500",
+          withdrawal: "auto",
+          schedule: { type: "biweekly", anchorDate: "2026-11-12" },
+          section: "income",
+        })
+      ).statusCode,
+    ).toBe(201);
+    await post("/api/templates/generate", {});
+
+    const after = await get("/api/setup").then((response) => response.json());
+    expect(after.missing).not.toContain("income_on_ledger");
+
+    const fixed = await get("/api/dashboard").then((response) => response.json());
+    expect(fixed.coverage.allCovered).toBe(true);
+  });
+
+  it("puts an arriving paycheque before the bills that follow it", async () => {
+    // The order the ledger reads. A deposit on the 12th belongs above bills
+    // dated the 13th onwards, and the running balance has to count it.
+    await post("/api/accounts", { name: "Chequing", kind: "chequing" });
+    await post("/api/pay-schedules", {
+      userId: daxId,
+      anchorDate: "2026-11-12",
+      defaultCents: "212500",
+    });
+    await post("/api/templates", {
+      name: "Pay",
+      kind: "paycheque",
+      defaultCents: "212500",
+      withdrawal: "auto",
+      schedule: { type: "biweekly", anchorDate: "2026-11-12" },
+      section: "income",
+    });
+    for (const [name, day] of [
+      ["Hydro", 13],
+      ["Phone", 17],
+      ["Water", 18],
+      ["Internet", 19],
+    ] as const) {
+      await post("/api/templates", {
+        name,
+        kind: "bill",
+        defaultCents: "9800",
+        withdrawal: "auto",
+        schedule: { type: "monthly", day },
+        section: "fixed",
+      });
+    }
+    await post("/api/templates/generate", {});
+    await post("/api/balance", { cents: "20000" });
+
+    const timeline = await get("/api/timeline").then((response) => response.json());
+    const dated = (timeline.rows as { name: string; date: string | null }[]).filter(
+      (row) => row.date !== null,
+    );
+
+    // Dates ascend, whatever the names are.
+    for (let index = 1; index < dated.length; index += 1) {
+      expect(
+        (dated[index]!.date as string) >= (dated[index - 1]!.date as string),
+        `${dated[index]!.name} should not come before ${dated[index - 1]!.name}`,
+      ).toBe(true);
+    }
+
+    // And the pay is above at least one of the bills that follow it.
+    const payAt = dated.findIndex((row) => row.name === "Pay");
+    const hydroAt = dated.findIndex((row) => row.name === "Hydro");
+    if (payAt !== -1 && hydroAt !== -1) {
+      expect(payAt).toBeLessThan(hydroAt);
+    }
   });
 
   it("can add the chequing account after the savings one", async () => {

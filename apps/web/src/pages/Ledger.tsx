@@ -23,7 +23,7 @@
  *    what turns a third paycheque from "silently absorbed" into a decision.
  */
 import { formatCents, formatDateShort } from "@headroom/core";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Amount, Chip, CoveragePill } from "../components/Badges.js";
 import { OccurrenceRow, type MoveTarget } from "../components/OccurrenceRow.js";
 import { OneOffForm } from "../components/OneOffForm.js";
@@ -33,6 +33,7 @@ import {
   usePayPeriods,
   useRemoveOneOff,
   type PayPeriod,
+  type TimelineRow,
 } from "../lib/queries.js";
 import "./Ledger.css";
 
@@ -251,6 +252,44 @@ function PeriodGroup({
   onSave: React.ComponentProps<typeof OccurrenceRow>["onSave"];
   onRemove: NonNullable<React.ComponentProps<typeof OccurrenceRow>["onRemove"]>;
 }): React.JSX.Element {
+  /**
+   * The window's rows and its expected cheques, in one list, in date order.
+   *
+   * An expected cheque is one the window counts but that has no occurrence yet
+   * - it falls past the horizon, or nothing has generated it. It carries no
+   * running balance, because the timeline deliberately stops at the horizon,
+   * so it sits between the dated rows without claiming a balance of its own.
+   *
+   * Undated rows keep their position at the front: they are anchored to "now",
+   * which is where the timeline puts them.
+   */
+  const entries = useMemo(() => {
+    type Entry =
+      | { kind: "row"; row: TimelineRow; at: string | null }
+      | { kind: "cheque"; cheque: PayPeriod["projectedPaycheques"][number]; at: string };
+
+    const merged: Entry[] = [
+      ...period.rows.map((row) => ({ kind: "row" as const, row, at: row.date })),
+      ...period.projectedPaycheques.map((cheque) => ({
+        kind: "cheque" as const,
+        cheque,
+        at: cheque.date,
+      })),
+    ];
+
+    // A stable sort on the date alone: within a day, and for undated rows, the
+    // engine's order is already correct and must not be disturbed.
+    return merged
+      .map((entry, index) => ({ entry, index }))
+      .sort((a, b) => {
+        if (a.entry.at === b.entry.at) return a.index - b.index;
+        if (a.entry.at === null) return -1;
+        if (b.entry.at === null) return 1;
+        return a.entry.at < b.entry.at ? -1 : 1;
+      })
+      .map(({ entry }) => entry);
+  }, [period.rows, period.projectedPaycheques]);
+
   return (
     <>
       <header className="ledger__period-head">
@@ -272,36 +311,41 @@ function PeriodGroup({
         the verification badge, the amount editor, verify, mark-as-paid, the
         move buttons and the conflict handling - and a flatter row here would
         have quietly dropped every one of those.
+
+        Expected cheques are interleaved by date, not appended. Appending them
+        put a deposit on the 12th below bills dated the 13th to the 19th, which
+        reads as "every bill comes out before any money arrives" - the opposite
+        of what the dates say, and alarming when the running balance beside the
+        bills has not counted the cheque either.
       */}
       <ul className="ledger__rows">
-        {period.rows.map((row) => (
-          <OccurrenceRow
-            key={row.id}
-            row={row}
-            expanded={expandedId === row.id}
-            onToggle={() => onToggle(row.id)}
-            canEdit={canEdit}
-            moveTargets={moveTargets}
-            onSave={onSave}
-            onRemove={onRemove}
-          />
-        ))}
+        {entries.map((entry) =>
+          entry.kind === "row" ? (
+            <OccurrenceRow
+              key={entry.row.id}
+              row={entry.row}
+              expanded={expandedId === entry.row.id}
+              onToggle={() => onToggle(entry.row.id)}
+              canEdit={canEdit}
+              moveTargets={moveTargets}
+              onSave={onSave}
+              onRemove={onRemove}
+            />
+          ) : (
+            <li
+              className="ledger__projected"
+              key={`${entry.cheque.scheduleId}|${entry.cheque.date}`}
+            >
+              <span className="ledger__projected-name">
+                {entry.cheque.owner ? `${entry.cheque.owner.name}'s pay` : "Expected pay"}
+                <Chip tone="neutral">Expected · {formatDateShort(entry.cheque.date)}</Chip>
+              </span>
+              <Amount cents={entry.cheque.cents} signed />
+            </li>
+          ),
+        )}
 
-        {/* Cheques this window counts but that fall past the horizon. */}
-        {period.projectedPaycheques.map((cheque) => (
-          <li
-            className="ledger__projected"
-            key={`${cheque.scheduleId}|${cheque.date}`}
-          >
-            <span className="ledger__projected-name">
-              {cheque.owner ? `${cheque.owner.name}'s pay` : "Expected pay"}
-              <Chip tone="neutral">Expected · {formatDateShort(cheque.date)}</Chip>
-            </span>
-            <Amount cents={cheque.cents} signed />
-          </li>
-        ))}
-
-        {period.rows.length === 0 && period.projectedPaycheques.length === 0 ? (
+        {entries.length === 0 ? (
           <li className="ledger__empty">Nothing in this period.</li>
         ) : null}
       </ul>

@@ -17,6 +17,7 @@ docs/HANDOFF.md
 design/
 reference/
 headroom-handoff.zip
+CLAUDE.MD
 
 # Dependencies and build output
 node_modules/

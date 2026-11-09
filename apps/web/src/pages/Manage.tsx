@@ -156,6 +156,18 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
                 until there is one. Add it under Accounts below.
               </li>
             ) : null}
+            {/*
+              The one that caused a real wrong answer in production: paydays
+              entered, no income on the ledger, so every bill looked uncovered.
+            */}
+            {data.missing.includes("income_on_ledger") ? (
+              <li>
+                <strong>Your pay is not on the ledger.</strong> Paydays set the dates everything
+                hangs off, but they do not put money on the timeline - so the running balance only
+                ever goes down and the coverage warning fires. Add each person&rsquo;s pay under
+                <em> Money coming in</em> below, then use <em>Bring upcoming up to date</em>.
+              </li>
+            ) : null}
             {data.missing.includes("pay_schedule") ? (
               <li>
                 <strong>Paydays.</strong> Without these, pay periods and the horizon cannot be
