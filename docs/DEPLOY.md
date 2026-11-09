@@ -1,15 +1,142 @@
 # Deploying Headroom
 
-> **Status: started early, for the development HTTPS setup.** The full
-> zero-to-running Unraid guide is M6 and is not written yet. What is here has
-> been used and works.
+> **Status: the first-run path is written and walked; the rest of the Unraid
+> guide is M6.** Everything here has been run, except the two steps marked
+> **on Unraid**, which touch a machine this checkout cannot reach.
 
 ## Contents
 
+- [First run with real data, on Unraid](#first-run-with-real-data-on-unraid)
 - [Development over HTTPS, through Nginx Proxy Manager](#development-over-https-through-nginx-proxy-manager)
 - [The two settings that must agree](#the-two-settings-that-must-agree)
 - [Server-Sent Events through a proxy](#server-sent-events-through-a-proxy)
 - [Before trusting it with real money](#before-trusting-it-with-real-money)
+
+---
+
+## First run with real data, on Unraid
+
+Written for the evening the household's actual figures go in. Every step has
+been run except the two marked **on Unraid**, which touch a machine this
+checkout cannot reach.
+
+Verified before this was written: `test/firstRun.test.ts` walks the whole path
+below over HTTP against an empty database, so the order here is known to work
+and not merely plausible.
+
+### 0. Prove the backup first, not afterwards
+
+Entering a household's finances takes an evening. Do this before typing
+anything, on the machine that has the repo, Node and Docker:
+
+```bash
+# DATABASE_URL must be reachable from a container on this machine.
+node scripts/backup.mjs dump
+node scripts/backup.mjs verify "backups/headroom-<the file it just wrote>.dump"
+```
+
+`verify` restores the dump into a throwaway database, counts the rows and drops
+it again. Until it has printed "Verified", there is no backup — only a file.
+Dumps land in `backups/`, which is git-ignored because they hold the real
+figures.
+
+### 1. Create the database (on Unraid)
+
+`prisma migrate deploy` creates tables, never the database itself, so the
+container will sit and wait if it does not exist:
+
+```sql
+CREATE DATABASE headroom;
+```
+
+The user in `DATABASE_URL` needs rights to create tables, types and triggers in
+it.
+
+### 2. Get the code there (on Unraid)
+
+The `app` service builds from this repo (`build:` in `docker-compose.yml`), so
+the Unraid box needs the source. A published GHCR image is M6; until then it is
+a `git clone`, or a copy of the working tree onto the appdata share.
+
+### 3. Fill in `.env`
+
+```bash
+cp .env.example .env
+```
+
+Five values matter, and the rest of the file can stay as it ships:
+
+| Value | What to put |
+|---|---|
+| `APP_ORIGIN` | The exact HTTPS address you open the app at, e.g. `https://headroom.example.com`. Cookies and CORS are checked against it. |
+| `DATABASE_URL` | Your Postgres, e.g. `postgresql://headroom:PASSWORD@192.168.1.50:5432/headroom?schema=public` |
+| `SESSION_SECRET` | `openssl rand -hex 32` |
+| `COOKIE_SECURE` | `true`, since you are on HTTPS |
+| `APP_BIND_ADDRESS` | `127.0.0.1` if the proxy runs on the same box, otherwise the Tailscale or LAN address. Never `0.0.0.0` for real data. |
+
+`POSTGRES_DB`, `POSTGRES_USER` and `POSTGRES_PASSWORD` are **ignored** when
+`DATABASE_URL` points at a server you already run. They are only for
+`--profile with-db`.
+
+The app refuses to start on a missing value or a leftover `change-me`, so a
+half-filled file fails loudly rather than running insecurely.
+
+### 4. Start it
+
+```bash
+docker compose up -d --build
+docker compose logs -f app
+```
+
+The log should read: waiting for the database, then `All migrations have been
+successfully applied`, then `Headroom is listening`. If it waits for the
+database forever, `DATABASE_URL` is wrong or the database does not exist.
+
+### 5. Create the two accounts
+
+```bash
+docker compose exec app node apps/api/dist/cli.js create-user
+docker compose exec app node apps/api/dist/cli.js create-user
+docker compose exec app node apps/api/dist/cli.js list-users
+```
+
+The first one creates the household; the second joins it. The password is
+prompted and not echoed.
+
+### 6. Point the proxy at it
+
+See the Nginx Proxy Manager section below, including the two settings that must
+agree and the Server-Sent Events headers. Then open `APP_ORIGIN` and sign in.
+
+### 7. Enter the data, in this order
+
+The order matters only in that each step unlocks the next. **Manage**:
+
+1. **Accounts → Add a chequing account.** Nothing works before this: it is
+   where the balance lives. The checklist at the top says so.
+2. **Paydays**, one per person. Any real payday; every other one is worked out
+   from it. Everything dated depends on these.
+3. **Income**, Carol's stated monthly and yearly figures. They need not agree
+   with each other.
+4. **Expenses.** Monthly, on the last day, every two weeks on its own dates, a
+   few days after a payday, or flexible. A mortgage goes here as an expense
+   *and* under Savings as terms — the first puts it on the ledger, the second
+   drives the payoff projection.
+5. **Budget-only categories** for spending with no due date: groceries, gas.
+6. **Bring upcoming up to date**, which creates the dated items from 4.
+
+Then **Ledger → Update balance**, and **Savings**: add a savings account, enter
+its balance, add earmarks, add the mortgage terms and any lump sums.
+
+### 8. Back it up again
+
+```bash
+node scripts/backup.mjs dump
+node scripts/backup.mjs verify "backups/<the new file>.dump"
+```
+
+Now the evening's typing exists in two places. `restore <file> --yes` puts it
+back; it prints what it would overwrite and refuses without `--yes`.
 
 ---
 
