@@ -3,6 +3,9 @@ name: CI
 on:
   push:
     branches: [main]
+    # Milestone tags publish an image of their own, so they have to run the
+    # checks as well: a tagged image nobody tested is worse than no tag.
+    tags: ["m*", "v*"]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -126,3 +129,74 @@ jobs:
             echo "The error message should name the missing variable" >&2
             exit 1
           }
+
+  publish:
+    name: publish to GHCR
+    runs-on: ubuntu-latest
+
+    # Only after lint, typecheck, the tests on both Node versions, and the
+    # image smoke test. The household runs whatever this pushes, so an
+    # untested image must never become `latest`.
+    needs: [check, docker]
+
+    # Never from a pull request: a fork has no write token, and a PR should not
+    # be able to replace the image the household pulls.
+    if: github.event_name != 'pull_request'
+
+    permissions:
+      contents: read
+      # The only extra permission needed. No PAT is involved: the
+      # workflow-scoped GITHUB_TOKEN can write this repository's packages.
+      packages: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Work out the tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          # Lower-case on purpose: GHCR rejects a mixed-case path, and the
+          # owner is spelled DaxtonD.
+          images: ghcr.io/daxtond/headroom
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=tag
+            type=sha,format=long
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          # Unraid is x86, and a second architecture would double the build
+          # for nothing. Add linux/arm64 here if that ever changes.
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # Shares the cache the `docker` job above already filled, so this
+          # does not rebuild from scratch.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Say what to pull
+        run: |
+          {
+            echo "### Published"
+            echo '```'
+            echo "${{ steps.meta.outputs.tags }}"
+            echo '```'
+            echo "In Unraid's Docker Manager, pull:"
+            echo '```'
+            echo "ghcr.io/daxtond/headroom:latest"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"

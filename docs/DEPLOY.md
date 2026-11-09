@@ -52,7 +52,27 @@ The user in `DATABASE_URL` needs rights to create tables, types and triggers.
 The tables themselves are made for you: the entrypoint migrates on every start,
 so a first run against an empty database is expected and correct.
 
-### 2. Add the container (on Unraid)
+### 2. Where the image comes from
+
+`ghcr.io/daxtond/headroom:latest` is published by the `publish` job in
+`.github/workflows/ci.yml`, on every push to `main` and on every `m*` tag. It
+runs only after lint, typecheck, the tests on both Node versions and the image
+smoke test have passed, so `latest` is never an untested image.
+
+No personal access token is involved: the workflow signs in to GHCR with the
+built-in `GITHUB_TOKEN` and the job's `packages: write` permission.
+
+**The package's visibility is separate from the repository's.** The first
+publish from a private repository creates a **private** package, and Unraid's
+Docker Manager cannot pull one without registry credentials. Either:
+
+- make the package public (GitHub → your profile → Packages → headroom →
+  Package settings → Change visibility), which is safe here because no real
+  figure is in the repository or the image; or
+- leave it private and give Unraid a GHCR username and token in the Docker
+  Manager's registry settings.
+
+### 3. Add the container (on Unraid)
 
 Repository: `ghcr.io/daxtond/headroom:latest`.
 
@@ -85,7 +105,7 @@ The app refuses to start on a missing value, or on one still reading
 `.env` is only used by `docker compose`. Typing the values into the Docker
 Manager instead keeps them out of any file in this repo, which is the point.
 
-### 3. Watch it come up
+### 4. Watch it come up
 
 In the container's log:
 
@@ -99,7 +119,7 @@ If it waits for the database forever, `DATABASE_URL` is wrong, the database
 does not exist, or Unraid cannot reach that host. The first pull is around
 1.3 GB, nearly all of it Prisma's query engine.
 
-### 4. Create the two accounts
+### 5. Create the two accounts
 
 From Unraid's terminal:
 
@@ -113,12 +133,12 @@ The first creates the household; the second joins it. The password is prompted
 and never echoed. (`--password-stdin` reads it from a pipe instead, for a
 script.)
 
-### 5. Point the proxy at it
+### 6. Point the proxy at it
 
 See the Nginx Proxy Manager section below, including the two settings that must
 agree and the Server-Sent Events headers. Then open `APP_ORIGIN` and sign in.
 
-### 6. Enter the data, in this order
+### 7. Enter the data, in this order
 
 Each step unlocks the next. On **Manage**:
 
@@ -138,7 +158,7 @@ Each step unlocks the next. On **Manage**:
 Then **Ledger → Update balance**, and on **Savings**: add a savings account,
 enter its balance, add earmarks, then the mortgage terms and any lump sums.
 
-### 7. Back it up again
+### 8. Back it up again
 
 ```bash
 node scripts/backup.mjs dump
