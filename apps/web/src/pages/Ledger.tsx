@@ -170,6 +170,35 @@ export function Ledger({
         </p>
       ) : null}
 
+      {/*
+        What has already landed.
+
+        Marking a row received or paid takes it out of the running balance -
+        it has to, or the money would be counted twice, once in the balance
+        and once as still coming (HANDOFF section 6.1). But the row used to
+        vanish from the screen along with it, which is the opposite of what a
+        ledger is for: Dax marked a cheque received and reasonably concluded
+        something had broken.
+
+        So it stays, in its own band directly under the balance that now
+        includes it, reading in the order things happened: what landed, then
+        what is in the account, then what is coming. No running balance on
+        these lines, because the figure above has already counted them.
+      */}
+      {(cleared.data?.items.length ?? 0) > 0 ? (
+        <AlreadyInBalance
+          items={cleared.data?.items ?? []}
+          canEdit={canEdit}
+          onUndo={(item) =>
+            patch.mutateAsync({
+              id: item.id,
+              baseVersion: item.version,
+              changes: { cleared: false },
+            })
+          }
+        />
+      ) : null}
+
       {/* ---- The scroll ---- */}
       {payPeriods.isPending ? (
         <p className="ledger__loading" aria-busy="true">
@@ -216,30 +245,6 @@ export function Ledger({
         </button>
       </div>
 
-      {/*
-        The way back from "Mark as received" and "Mark as paid".
-
-        Marking a row takes it off the ledger and folds the money into the
-        balance, which is right - but it left an accidental tap with nowhere to
-        go, because this is the only screen that lists rows and the row was no
-        longer on it. The list stops at the last balance entry: anything
-        cleared before that is already inside the figure read off the bank, so
-        putting the row back would count it twice the other way round.
-      */}
-      {(cleared.data?.items.length ?? 0) > 0 ? (
-        <RecentlyCleared
-          items={cleared.data?.items ?? []}
-          canEdit={canEdit}
-          onUndo={(item) =>
-            patch.mutateAsync({
-              id: item.id,
-              baseVersion: item.version,
-              changes: { cleared: false },
-            })
-          }
-        />
-      ) : null}
-
       {/* ---- The bottom line ---- */}
       <section className="ledger__footer">
         <p className="ledger__footer-label">Left for gas, groceries &amp; everyday</p>
@@ -258,13 +263,19 @@ export function Ledger({
 }
 
 /**
- * What has been marked received or paid, and how to take it back.
+ * What has already landed: marked received or paid, and in the balance now.
  *
- * Collapsed by default: it is a correction, not something to read every day.
- * Each row says what it was and who marked it, because on the other phone the
- * question is "did you already pay this?".
+ * Shown rather than collapsed, because the thing it is fixing is a row
+ * disappearing. Each line says what it was, when, and who marked it - on the
+ * other phone the question is "did you already pay this?" - and carries an
+ * Undo, which is the only way back: a cleared row is off the timeline, and the
+ * timeline is what the rest of this screen lists.
+ *
+ * Only back to the last balance entry. Anything cleared before that is inside
+ * the figure somebody read off the bank, so putting the row back would
+ * subtract it a second time; that needs a fresh balance, not an undo.
  */
-function RecentlyCleared({
+function AlreadyInBalance({
   items,
   canEdit,
   onUndo,
@@ -273,68 +284,56 @@ function RecentlyCleared({
   canEdit: boolean;
   onUndo: (item: ClearedItem) => Promise<unknown>;
 }): React.JSX.Element {
-  const [open, setOpen] = useState(false);
   const [working, setWorking] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   return (
-    <section className="ledger__cleared">
-      <button
-        className="ledger__cleared-toggle"
-        type="button"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        <span>
-          {items.length} marked {items.some((item) => item.cents > 0n) ? "received or paid" : "paid"}{" "}
-          since the balance was updated
-        </span>
-        <span aria-hidden="true">{open ? "\u2212" : "+"}</span>
-      </button>
+    <section className="ledger__cleared" aria-labelledby="ledger-cleared-title">
+      <div className="ledger__cleared-head">
+        <h2 className="ledger__cleared-title" id="ledger-cleared-title">
+          Already in your balance
+        </h2>
+        <p className="ledger__cleared-note">
+          Marked since you last updated the balance, so the figure above counts them and the list
+          below does not.
+        </p>
+      </div>
 
-      {open ? (
-        <>
-          <p className="ledger__cleared-note">
-            These are already counted in the balance above, so they have left the list. Undo puts
-            one back.
-          </p>
-
-          {error ? (
-            <p className="hr-alert ledger__cleared-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <ul className="ledger__cleared-list">
-            {items.map((item) => (
-              <li className="ledger__cleared-item" key={item.id}>
-                <span className="ledger__cleared-main">
-                  <span className="ledger__cleared-name">{item.name}</span>
-                  <span className="ledger__cleared-meta">
-                    {item.date ? formatDateShort(item.date) : "no date"}
-                    {item.clearedBy ? ` \u00b7 marked by ${item.clearedBy.name}` : ""}
-                  </span>
-                </span>
-                <Amount cents={item.cents} signed />
-                <button
-                  className="hr-button hr-button--secondary ledger__cleared-undo"
-                  type="button"
-                  disabled={!canEdit || working !== null}
-                  onClick={() => {
-                    setWorking(item.id);
-                    setError(null);
-                    void onUndo(item)
-                      .catch(() => setError(`Could not undo ${item.name}. Please try again.`))
-                      .finally(() => setWorking(null));
-                  }}
-                >
-                  {working === item.id ? "Undoing\u2026" : "Undo"}
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
+      {error ? (
+        <p className="hr-alert ledger__cleared-error" role="alert">
+          {error}
+        </p>
       ) : null}
+
+      <ul className="ledger__cleared-list">
+        {items.map((item) => (
+          <li className="ledger__cleared-item" key={item.id}>
+            <span className="ledger__cleared-main">
+              <span className="ledger__cleared-name">{item.name}</span>
+              <span className="ledger__cleared-meta">
+                {item.cents > 0n ? "Received" : "Paid"}
+                {item.date ? ` \u00b7 ${formatDateShort(item.date)}` : ""}
+                {item.clearedBy ? ` \u00b7 marked by ${item.clearedBy.name}` : ""}
+              </span>
+            </span>
+            <Amount cents={item.cents} signed />
+            <button
+              className="hr-button hr-button--secondary ledger__cleared-undo"
+              type="button"
+              disabled={!canEdit || working !== null}
+              onClick={() => {
+                setWorking(item.id);
+                setError(null);
+                void onUndo(item)
+                  .catch(() => setError(`Could not undo ${item.name}. Please try again.`))
+                  .finally(() => setWorking(null));
+              }}
+            >
+              {working === item.id ? "Undoing\u2026" : "Undo"}
+            </button>
+          </li>
+        ))}
+      </ul>
     </section>
   );
 }

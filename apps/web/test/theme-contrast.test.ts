@@ -130,8 +130,18 @@ const TEXT_ON: readonly { readonly text: string; readonly on: readonly string[] 
     text: "--hr-text-muted",
     on: ["--hr-ground", "--hr-card", "--hr-payday-row", "--hr-green-tint-soft"],
   },
-  // Amounts, which are the whole point of the screen.
-  { text: "--hr-positive", on: ["--hr-ground", "--hr-card", "--hr-payday-row", "--hr-green-tint"] },
+  // Amounts, which are the whole point of the screen. The soft tint is the
+  // "already in your balance" band, where money in and money out both appear.
+  {
+    text: "--hr-positive",
+    on: [
+      "--hr-ground",
+      "--hr-card",
+      "--hr-payday-row",
+      "--hr-green-tint",
+      "--hr-green-tint-soft",
+    ],
+  },
   { text: "--hr-negative", on: ["--hr-ground", "--hr-card"] },
   // Links and the active tab.
   { text: "--hr-primary", on: ["--hr-ground", "--hr-card", "--hr-green-tint-soft"] },

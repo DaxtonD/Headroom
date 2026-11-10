@@ -328,33 +328,23 @@
   margin-top: var(--hr-space-4);
   border: 1px solid var(--hr-card-border);
   border-radius: var(--hr-radius-card);
-  background: var(--hr-card);
+  /* Tinted rather than white: it reads as settled, not as another list of
+     things to do. */
+  background: var(--hr-green-tint-soft);
   overflow: hidden;
 }
 
-.ledger__cleared-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--hr-space-3);
-  width: 100%;
-  min-height: var(--hr-touch-min);
-  padding: var(--hr-space-3) var(--hr-space-4);
-  border: none;
-  background: none;
-  color: var(--hr-text-secondary);
-  font-size: 0.875rem;
-  font-weight: 600;
-  text-align: left;
-  cursor: pointer;
+.ledger__cleared-head {
+  padding: var(--hr-space-4) var(--hr-space-4) var(--hr-space-3);
 }
 
-.ledger__cleared-toggle:hover {
-  color: var(--hr-ink);
+.ledger__cleared-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
 }
 
 .ledger__cleared-note {
-  padding: 0 var(--hr-space-4) var(--hr-space-3);
+  margin-top: 2px;
   font-size: 0.8125rem;
   color: var(--hr-text-muted);
   line-height: 1.45;

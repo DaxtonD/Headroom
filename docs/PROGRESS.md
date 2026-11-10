@@ -734,6 +734,26 @@ The whole sequence, over HTTP against a real Postgres: pay on the ledger, marked
 (balance rises, row leaves, no ghost, undo offered), undone (balance back, row back, editable),
 then archived (row goes, no ghost, checklist says the payday has no pay).
 
+### Follow-up: a cleared row should not vanish (same day, Dax's question)
+
+He asked whether marking a payday received should remove it from the ledger completely. It
+should leave the running balance - that is the arithmetic, and section 6.1 says so - but it
+should not leave the screen, which is what the implementation did by rendering only timeline
+rows. A ledger whose lines silently disappear works against the one thing the app is for.
+
+So the undo list became a band called **"Already in your balance"**, directly under the balance
+that now includes it and above everything still to come: what landed, then what is in the
+account, then what is coming. Shown rather than collapsed, since the problem being fixed is a
+row disappearing. No running balance on those lines, because the figure above has counted them.
+
+Offered as three options (band at the top, each row left in place and dimmed, or leave it as it
+was) and he picked the band. The "in place and dimmed" version was the more ledger-like of the
+two but reads as though a settled row is still to come, sitting below a balance that already
+counted it.
+
+The band's tint is a new surface for amounts, so the contrast test now checks the green
+positive figure on it as well, in all five themes.
+
 ### Known gaps
 
 - **A payday cannot be deleted.** There is no `DELETE /api/pay-schedules/:id`, only POST and
