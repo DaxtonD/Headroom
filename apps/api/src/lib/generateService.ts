@@ -1,27 +1,39 @@
 /**
  * Materialising templates into occurrences (HANDOFF section 6.5).
  *
- * Two rules shape this:
+ * Three rules shape this:
  *
- *  1. **Generating never overwrites an edit.** If an occurrence for a
- *     template's period already exists, it is left exactly as it is. Carol
- *     typing the real power bill, or moving it to a later payday, must survive
- *     the next generation run. That is why the write is an upsert whose update
- *     branch is empty.
- *  2. **Generating twice is safe, even at the same instant.** The whole run
+ *  1. **Generating never overwrites what a person did.** An amount typed in, a
+ *     verification, a move, a renaming: none of it is ever undone by a later
+ *     run. `customisedAt`, `verifiedAt` and `clearedAt` are what "a person did
+ *     this" means, and a row carrying any of the three is left alone for good.
+ *  2. **Everything else follows its template.** A row nobody has touched is
+ *     pure derivation - the template's name, amount, owner and dates - so when
+ *     the template changes, it changes with it, and when the template no
+ *     longer calls for it, it goes. Without this, correcting a bill under
+ *     Manage reached nothing: every row for the whole visible horizon had
+ *     already been generated, so the ledger went on showing the old figure and
+ *     the old date and the edit looked like it had been thrown away.
+ *  3. **Generating twice is safe, even at the same instant.** The whole run
  *     holds a per-household advisory lock and sits in one transaction, and the
  *     unique `(templateId, periodKey)` constraint is the backstop
- *     (section 16.1 rule 8).
+ *     (section 16.1 rule 8). A second run finds everything already right and
+ *     writes nothing at all.
  *
- * Paycheques are created before flexible items, because a flexible item hangs
- * off a paycheque and needs its row to exist first.
+ * The past is read and never written to: only rows that still lie ahead are
+ * reconciled. Last month's power bill says what it said.
+ *
+ * Dated items are settled before flexible ones, because a flexible item hangs
+ * off a paycheque and needs its row to exist, on its final date, first.
  */
 import {
+  compareDates,
   computeHorizonEnd,
   generateOccurrences,
   generationWindow,
   type GeneratedOccurrence,
   type PaySchedule,
+  type PlainDate,
   type ScheduleSpec,
   type TemplateSpec,
 } from "@headroom/core";
@@ -61,10 +73,19 @@ const scheduleSchema = z.discriminatedUnion("type", [
           "A biweekly item either follows a payday or has its own anchor date - one of the two, not both.",
       },
     ),
-  z.object({
-    type: z.literal("flexible"),
-    frequency: z.enum(["monthly", "per_pay_period"]),
-  }),
+  z
+    .object({
+      type: z.literal("flexible"),
+      frequency: z.enum(["monthly", "per_pay_period"]),
+      /**
+       * The day of the month the household plans to pay it. Optional: without
+       * it the item is undated and hangs off a paycheque.
+       */
+      day: z.number().int().min(1).max(31).optional(),
+    })
+    .refine((schedule) => schedule.day === undefined || schedule.frequency === "monthly", {
+      message: "Only a monthly item can have a day of the month; every payday has no such day.",
+    }),
 ]);
 
 export interface GenerationResult {
@@ -72,8 +93,19 @@ export interface GenerationResult {
   readonly to: string;
   readonly considered: number;
   readonly created: number;
-  /** Already there, so left untouched along with any edits made to them. */
+  /** Already there and already right, so not written to at all. */
   readonly existing: number;
+  /**
+   * Already there, and brought into line with a template that has since been
+   * edited. Only rows nobody had made their own.
+   */
+  readonly updated: number;
+  /**
+   * Taken off the ledger because the template no longer calls for them - it
+   * was archived, or its dates moved. Only rows nobody had made their own,
+   * and only ones still in the future.
+   */
+  readonly removed: number;
   /**
    * Paycheque templates created for paydays that had none. Normally zero;
    * non-zero on the run that heals a household set up before paydays brought
@@ -83,10 +115,29 @@ export interface GenerationResult {
   readonly skipped: readonly { readonly templateId: string; readonly reason: string }[];
 }
 
+/** An occurrence as reconciliation reads it. */
+interface ExistingOccurrence {
+  readonly id: string;
+  readonly templateId: string | null;
+  readonly periodKey: string | null;
+  readonly name: string;
+  readonly cents: bigint;
+  readonly withdrawal: "auto" | "flexible";
+  readonly date: Date | null;
+  readonly anchorOccurrenceId: string | null;
+  readonly sortIndex: number;
+  readonly ownerUserId: string | null;
+  readonly version: number;
+  readonly customisedAt: Date | null;
+  readonly verifiedAt: Date | null;
+  readonly clearedAt: Date | null;
+}
+
 /**
  * Bring the household's occurrences up to date with its templates.
  *
- * Idempotent by construction: running it again creates nothing new.
+ * Idempotent by construction: a second run finds everything already right and
+ * writes nothing.
  */
 /**
  * Bring the occurrences up to date after a change, without being able to undo
@@ -341,10 +392,18 @@ export async function generateForAllHouseholds(
     warn: (object: unknown, message?: string) => void;
   },
   now: Date = new Date(),
-): Promise<{ households: number; created: number; paychequeTemplatesCreated: number }> {
+): Promise<{
+  households: number;
+  created: number;
+  updated: number;
+  removed: number;
+  paychequeTemplatesCreated: number;
+}> {
   const households = await prisma.household.findMany({ select: { id: true } });
 
   let created = 0;
+  let updated = 0;
+  let removed = 0;
   let paychequeTemplatesCreated = 0;
 
   for (const household of households) {
@@ -353,6 +412,8 @@ export async function generateForAllHouseholds(
         generateForHousehold(tx, household.id, now),
       );
       created += result.created;
+      updated += result.updated;
+      removed += result.removed;
       paychequeTemplatesCreated += result.paychequeTemplatesCreated;
     } catch (error) {
       log.warn(
@@ -362,14 +423,14 @@ export async function generateForAllHouseholds(
     }
   }
 
-  if (created > 0 || paychequeTemplatesCreated > 0) {
+  if (created > 0 || updated > 0 || removed > 0 || paychequeTemplatesCreated > 0) {
     log.info(
-      { households: households.length, created, paychequeTemplatesCreated },
-      "periodic generation sweep added upcoming items",
+      { households: households.length, created, updated, removed, paychequeTemplatesCreated },
+      "periodic generation sweep brought upcoming items up to date",
     );
   }
 
-  return { households: households.length, created, paychequeTemplatesCreated };
+  return { households: households.length, created, updated, removed, paychequeTemplatesCreated };
 }
 
 export async function generateForHousehold(
@@ -413,8 +474,17 @@ export async function generateForHousehold(
 
   const window = generationWindow(today, horizonEnd);
 
+  /**
+   * Archived templates are loaded too, and want nothing.
+   *
+   * Reconciliation needs to know the difference between "this row's template
+   * no longer calls for it" and "this row's template was not looked at", and
+   * only a template that was loaded can say the first. Without the archived
+   * ones, turning a bill off would leave its untouched future rows on the
+   * ledger for the whole horizon.
+   */
   const templateRows = await tx.template.findMany({
-    where: { householdId, deletedAt: null, active: true },
+    where: { householdId, deletedAt: null },
     select: {
       id: true,
       name: true,
@@ -424,6 +494,7 @@ export async function generateForHousehold(
       scheduleType: true,
       scheduleJson: true,
       ownerUserId: true,
+      active: true,
     },
     orderBy: { name: "asc" },
   });
@@ -431,8 +502,24 @@ export async function generateForHousehold(
   const templates: TemplateSpec[] = [];
   const skipped: { templateId: string; reason: string }[] = [];
 
+  /**
+   * The templates whose occurrences this run is entitled to change.
+   *
+   * An archived one belongs here: it wants nothing, and saying so is the
+   * point. An active one whose schedule cannot be read does not: we have no
+   * idea what it wants, and removing its rows on that basis would delete a
+   * real bill because of a typo in a JSON column.
+   */
+  const reconcilable = new Set<string>();
+
   for (const row of templateRows) {
     const parsed = scheduleSchema.safeParse(row.scheduleJson);
+
+    if (!row.active) {
+      reconcilable.add(row.id);
+      continue;
+    }
+
     if (!parsed.success) {
       // A bad schedule stops that one template, not the whole run.
       skipped.push({
@@ -442,6 +529,7 @@ export async function generateForHousehold(
       continue;
     }
 
+    reconcilable.add(row.id);
     templates.push({
       id: row.id,
       name: row.name,
@@ -452,40 +540,227 @@ export async function generateForHousehold(
     });
   }
 
-  if (templates.length === 0) {
-    return {
-      from: window.from,
-      to: window.to,
-      considered: 0,
-      created: 0,
-      existing: 0,
-      paychequeTemplatesCreated,
-      skipped,
-    };
+  const generated =
+    templates.length === 0
+      ? []
+      : generateOccurrences({
+          templates,
+          paySchedules,
+          from: window.from,
+          to: window.to,
+          weekendRule: household.weekendWithdrawalRule,
+        });
+
+  /** Everything the templates call for, by the key the database is unique on. */
+  const wanted = new Map<string, GeneratedOccurrence>();
+  for (const occurrence of generated) {
+    wanted.set(occurrenceKey(occurrence.templateId, occurrence.periodKey), occurrence);
   }
 
-  const generated = generateOccurrences({
-    templates,
-    paySchedules,
-    from: window.from,
-    to: window.to,
-    weekendRule: household.weekendWithdrawalRule,
+  // Every occurrence the household has, because an anchor may be a one-off
+  // paycheque and the dates of rows this run is not touching are still needed
+  // to work out where a flexible row effectively sits.
+  const presentRows = await tx.occurrence.findMany({
+    where: { householdId, deletedAt: null },
+    select: {
+      id: true,
+      templateId: true,
+      periodKey: true,
+      name: true,
+      cents: true,
+      kind: true,
+      withdrawal: true,
+      date: true,
+      anchorOccurrenceId: true,
+      sortIndex: true,
+      ownerUserId: true,
+      version: true,
+      customisedAt: true,
+      verifiedAt: true,
+      clearedAt: true,
+    },
   });
 
-  // Dated items first: a flexible item needs its anchor paycheque to exist.
-  const dated = generated.filter((occurrence) => occurrence.placement === "auto");
-  const flexible = generated.filter((occurrence) => occurrence.placement === "flexible");
+  const dateById = new Map<string, PlainDate | null>();
+  for (const row of presentRows) dateById.set(row.id, row.date ? toPlainDate(row.date) : null);
+
+  const byKey = new Map<string, ExistingOccurrence>();
+  for (const row of presentRows) {
+    if (row.templateId === null || row.periodKey === null) continue;
+    byKey.set(occurrenceKey(row.templateId, row.periodKey), row);
+  }
+
+  /**
+   * Where a row effectively sits, which decides whether it is still the
+   * future.
+   *
+   * A flexible row with neither a date nor an anchor means "now", so it counts
+   * as current: `null` here is deliberately treated as in scope by the caller.
+   */
+  const effectiveDateOf = (row: ExistingOccurrence): PlainDate | null => {
+    if (row.date) return toPlainDate(row.date);
+    if (row.anchorOccurrenceId === null) return null;
+    return dateById.get(row.anchorOccurrenceId) ?? null;
+  };
+
+  /** The past is history. Generation reads it and never writes to it. */
+  const stillAhead = (row: ExistingOccurrence): boolean => {
+    const date = effectiveDateOf(row);
+    return date === null || compareDates(date, window.from) >= 0;
+  };
 
   let created = 0;
   let existing = 0;
+  let updated = 0;
+  let removed = 0;
 
-  for (const occurrence of dated) {
-    const result = await upsert(tx, householdId, occurrence, null);
-    if (result === "created") created += 1;
-    else existing += 1;
+  const reconcile = async (
+    occurrence: GeneratedOccurrence,
+    anchorOccurrenceId: string | null,
+  ): Promise<void> => {
+    const row = byKey.get(occurrenceKey(occurrence.templateId, occurrence.periodKey));
+
+    if (!row) {
+      const result = await create(tx, householdId, occurrence, anchorOccurrenceId);
+      if (result === "created") created += 1;
+      else existing += 1;
+      return;
+    }
+
+    if (isSomebodysOwn(row)) {
+      // The whole point of the rule: an amount typed in, a verification or a
+      // move is never undone by a later edit to the template.
+      existing += 1;
+      return;
+    }
+
+    const date = occurrence.date ? fromPlainDate(occurrence.date) : null;
+    const ownerUserId = occurrence.ownerId ?? null;
+
+    const same =
+      row.name === occurrence.name &&
+      row.cents === occurrence.cents &&
+      row.withdrawal === occurrence.placement &&
+      samePlainDate(row.date, occurrence.date) &&
+      row.anchorOccurrenceId === anchorOccurrenceId &&
+      row.sortIndex === occurrence.sortIndex &&
+      row.ownerUserId === ownerUserId;
+
+    if (same) {
+      existing += 1;
+      return;
+    }
+
+    await tx.occurrence.update({
+      where: { id: row.id },
+      data: {
+        name: occurrence.name,
+        cents: occurrence.cents,
+        withdrawal: occurrence.placement,
+        date,
+        anchorOccurrenceId,
+        sortIndex: occurrence.sortIndex,
+        ownerUserId,
+        version: row.version + 1,
+        updatedAt: new Date(),
+      },
+    });
+    updated += 1;
+  };
+
+  /*
+   * Dated items first, flexible ones after.
+   *
+   * A flexible item that hangs off a paycheque needs that paycheque's row to
+   * exist and to be on its final date before it can be anchored, and the
+   * removals in between mean a cheque the pay schedule no longer calls for is
+   * gone by the time anything is hung from it.
+   */
+  const placedByDate = generated.filter((occurrence) => occurrence.date !== undefined);
+  const placedByAnchor = generated.filter((occurrence) => occurrence.date === undefined);
+
+  for (const occurrence of placedByDate) await reconcile(occurrence, null);
+
+  // ---- What the templates no longer call for -------------------------------
+  const doomed = presentRows.filter(
+    (row) =>
+      row.templateId !== null &&
+      row.periodKey !== null &&
+      reconcilable.has(row.templateId) &&
+      !wanted.has(occurrenceKey(row.templateId, row.periodKey)) &&
+      !isSomebodysOwn(row) &&
+      stillAhead(row),
+  );
+
+  if (doomed.length > 0) {
+    const doomedIds = new Set(doomed.map((row) => row.id));
+
+    /*
+     * A paycheque row about to go may be holding somebody's flexible bill.
+     *
+     * The foreign key nulls the anchor on delete, which would silently move
+     * that bill to "now" - in front of every cheque, dragging the lowest point
+     * of the whole ledger down with it. So the ones that are staying are moved
+     * to the nearest cheque that is still there, on or before the date they
+     * were hanging from.
+     */
+    const orphans = presentRows.filter(
+      (row) =>
+        row.anchorOccurrenceId !== null &&
+        doomedIds.has(row.anchorOccurrenceId) &&
+        !doomedIds.has(row.id),
+    );
+
+    await tx.occurrence.deleteMany({ where: { id: { in: doomed.map((row) => row.id) } } });
+    removed += doomed.length;
+    for (const row of doomed) byKey.delete(occurrenceKey(row.templateId as string, row.periodKey as string));
+
+    if (orphans.length > 0) {
+      const remaining = await tx.occurrence.findMany({
+        where: { householdId, deletedAt: null, kind: "paycheque", date: { not: null } },
+        select: { id: true, date: true },
+        orderBy: { date: "asc" },
+      });
+
+      for (const orphan of orphans) {
+        const lostOn = dateById.get(orphan.anchorOccurrenceId as string) ?? null;
+        if (lostOn === null) continue;
+
+        /*
+         * The nearest cheque that is still there, in either direction.
+         *
+         * Not "the last one on or before": correcting a payday by a day moves
+         * the whole series forward, so there is often nothing before the date
+         * that was lost, and insisting on one would leave the bill at "now" -
+         * in front of every cheque on the ledger. One day late beats that by
+         * a long way. A tie goes to the earlier cheque, because paying a bill
+         * out of money that has arrived is the safer of the two readings.
+         */
+        let replacement: string | null = null;
+        let closest = Number.POSITIVE_INFINITY;
+
+        for (const cheque of remaining) {
+          if (!cheque.date) continue;
+          const away = Math.abs(cheque.date.getTime() - fromPlainDate(lostOn).getTime());
+          if (away < closest) {
+            closest = away;
+            replacement = cheque.id;
+          }
+        }
+
+        // Nothing left to hang it from at all leaves the anchor null, which is
+        // "now" - the only honest answer when the household has no cheques.
+        if (replacement !== null) {
+          await tx.occurrence.update({
+            where: { id: orphan.id },
+            data: { anchorOccurrenceId: replacement },
+          });
+        }
+      }
+    }
   }
 
-  // Paycheques now exist, so anchors can be resolved by date.
+  // ---- Flexible items, now that the cheques are settled -------------------
   const paychequesByDate = new Map<string, string>();
   const paychequeRows = await tx.occurrence.findMany({
     where: { householdId, deletedAt: null, kind: "paycheque", date: { not: null } },
@@ -500,7 +775,7 @@ export async function generateForHousehold(
     if (!paychequesByDate.has(key)) paychequesByDate.set(key, row.id);
   }
 
-  for (const occurrence of flexible) {
+  for (const occurrence of placedByAnchor) {
     const anchorDate = occurrence.anchorPaydayDate;
     const anchorId = anchorDate ? paychequesByDate.get(anchorDate) ?? null : null;
 
@@ -514,9 +789,7 @@ export async function generateForHousehold(
       continue;
     }
 
-    const result = await upsert(tx, householdId, occurrence, anchorId);
-    if (result === "created") created += 1;
-    else existing += 1;
+    await reconcile(occurrence, anchorId);
   }
 
   return {
@@ -525,31 +798,53 @@ export async function generateForHousehold(
     considered: generated.length,
     created,
     existing,
+    updated,
+    removed,
     paychequeTemplatesCreated,
     skipped,
   };
 }
 
+/** The key the database is unique on, as a string. */
+function occurrenceKey(templateId: string, periodKey: string): string {
+  return `${templateId}|${periodKey}`;
+}
+
 /**
- * Create the occurrence if its (template, period) is not already there.
+ * Has a person made this row their own?
  *
- * The update branch is deliberately empty: an existing occurrence may have
- * been edited, verified, moved or cleared, and none of that may be undone by
- * a regeneration.
+ * If so, generation must never change it again. Three things count, and all
+ * three are statements by a person rather than by a template: the row's own
+ * details were edited, somebody confirmed the amount, or somebody marked it
+ * paid.
  */
-async function upsert(
+function isSomebodysOwn(row: {
+  customisedAt: Date | null;
+  verifiedAt: Date | null;
+  clearedAt: Date | null;
+}): boolean {
+  return row.customisedAt !== null || row.verifiedAt !== null || row.clearedAt !== null;
+}
+
+/** A stored `@db.Date` against a plain date the engine produced. */
+function samePlainDate(stored: Date | null, generated: PlainDate | undefined): boolean {
+  if (stored === null) return generated === undefined;
+  if (generated === undefined) return false;
+  return toPlainDate(stored) === generated;
+}
+
+/**
+ * Create the occurrence, unless its (template, period) is already there.
+ *
+ * Reconciliation handles the rows that exist; this only has to survive losing
+ * a race with another run.
+ */
+async function create(
   tx: Prisma.TransactionClient,
   householdId: string,
   occurrence: GeneratedOccurrence,
   anchorOccurrenceId: string | null,
 ): Promise<"created" | "existing"> {
-  const existing = await tx.occurrence.findFirst({
-    where: { templateId: occurrence.templateId, periodKey: occurrence.periodKey },
-    select: { id: true },
-  });
-
-  if (existing) return "existing";
-
   try {
     await tx.occurrence.create({
       data: {

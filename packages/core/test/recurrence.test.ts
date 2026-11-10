@@ -265,6 +265,94 @@ describe("flexible bills", () => {
     expect(generated.every((occurrence) => occurrence.placement === "flexible")).toBe(true);
   });
 
+  it("sits on the day it is planned for, when one is given", () => {
+    /*
+     * "Every month, but I choose when to pay it" with a day chosen. The
+     * household still decides, so it stays flexible and movable - but it
+     * belongs on that day of the ledger, against the balance it will actually
+     * come out of, rather than on whichever payday happens to come first.
+     */
+    const visa = template({
+      id: "visa",
+      name: "Visa",
+      schedule: { type: "flexible", frequency: "monthly", day: 20 },
+    });
+
+    const generated = generateOccurrences({
+      templates: [visa],
+      paySchedules: SCHEDULES,
+      from: "2026-11-07",
+      to: "2027-01-31",
+    });
+
+    expect(generated.map((occurrence) => occurrence.date)).toEqual([
+      "2026-11-20",
+      "2026-12-20",
+      "2027-01-20",
+    ]);
+    // Still flexible, and hanging off nothing.
+    expect(generated.every((occurrence) => occurrence.placement === "flexible")).toBe(true);
+    expect(generated.every((occurrence) => occurrence.anchorPaydayDate === undefined)).toBe(true);
+  });
+
+  it("keeps the same period key whether or not a day is chosen", () => {
+    // Which is what lets choosing a day, changing it or clearing it move the
+    // row that is already on the ledger instead of adding a second one.
+    const common = { id: "visa", name: "Visa" } as const;
+    const withoutDay = generateOccurrences({
+      templates: [template({ ...common, schedule: { type: "flexible", frequency: "monthly" } })],
+      paySchedules: SCHEDULES,
+      from: "2026-11-07",
+      to: "2026-12-31",
+    });
+    const withDay = generateOccurrences({
+      templates: [
+        template({ ...common, schedule: { type: "flexible", frequency: "monthly", day: 20 } }),
+      ],
+      paySchedules: SCHEDULES,
+      from: "2026-11-07",
+      to: "2026-12-31",
+    });
+
+    expect(withDay.map((occurrence) => occurrence.periodKey)).toEqual(
+      withoutDay.map((occurrence) => occurrence.periodKey),
+    );
+  });
+
+  it("clamps a planned day a short month does not have", () => {
+    const visa = template({
+      id: "visa",
+      schedule: { type: "flexible", frequency: "monthly", day: 31 },
+    });
+
+    const generated = generateOccurrences({
+      templates: [visa],
+      paySchedules: SCHEDULES,
+      from: "2026-11-01",
+      to: "2026-12-31",
+    });
+
+    expect(generated.map((occurrence) => occurrence.date)).toEqual(["2026-11-30", "2026-12-31"]);
+  });
+
+  it("needs no paydays at all when it has a day of its own", () => {
+    // Without a day it has nothing to hang from and produces nothing; with
+    // one, the date is the household's and does not depend on anybody's pay.
+    const visa = template({
+      id: "visa",
+      schedule: { type: "flexible", frequency: "monthly", day: 20 },
+    });
+
+    const generated = generateOccurrences({
+      templates: [visa],
+      paySchedules: [],
+      from: "2026-11-01",
+      to: "2026-12-31",
+    });
+
+    expect(generated.map((occurrence) => occurrence.date)).toEqual(["2026-11-20", "2026-12-20"]);
+  });
+
   it("makes one per pay period when that is the frequency", () => {
     const savings = template({
       id: "savings",

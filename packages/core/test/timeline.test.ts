@@ -241,22 +241,116 @@ describe("inputs the engine refuses", () => {
     ).toThrow(/has no date/);
   });
 
-  it("refuses a flexible item that carries a date", () => {
+  it("places a flexible item on the day it is planned for", () => {
+    /*
+     * A planned date says when the household means to pay it, so the running
+     * balance has to show it leaving then - but it is still their choice, so
+     * it must never be reported as something the bank will take whether or not
+     * the money is there.
+     */
+    const result = computeTimeline({
+      events: [
+        {
+          id: "pay",
+          name: "Pay",
+          cents: 200_000n,
+          kind: "paycheque",
+          placement: "auto",
+          date: "2026-11-12",
+        },
+        {
+          id: "rent",
+          name: "Rent",
+          cents: -80_000n,
+          kind: "bill",
+          placement: "auto",
+          date: "2026-11-25",
+        },
+        {
+          id: "visa",
+          name: "Visa",
+          cents: -30_000n,
+          kind: "bill",
+          placement: "flexible",
+          date: "2026-11-20",
+        },
+      ],
+      startBalanceCents: 0n,
+    });
+
+    // In date order, between the cheque and the rent.
+    expect(result.rows.map((row) => row.event.id)).toEqual(["pay", "visa", "rent"]);
+    expect(result.rows.map((row) => row.runningCents)).toEqual([200_000n, 170_000n, 90_000n]);
+    expect(result.rows[1]?.effectiveDate).toBe("2026-11-20");
+    // Flexible, so it is not one of the things coverage is about.
+    expect(result.rows[1]?.requiresCoverage).toBe(false);
+    expect(result.coverage.autoWithdrawalCount).toBe(1);
+  });
+
+  it("sorts a planned flexible item under a cheque landing the same day", () => {
+    const result = computeTimeline({
+      events: [
+        {
+          id: "visa",
+          name: "Visa",
+          cents: -30_000n,
+          kind: "bill",
+          placement: "flexible",
+          date: "2026-11-12",
+        },
+        {
+          id: "water",
+          name: "Water",
+          cents: -14_400n,
+          kind: "bill",
+          placement: "auto",
+          date: "2026-11-12",
+        },
+        {
+          id: "pay",
+          name: "Pay",
+          cents: 200_000n,
+          kind: "paycheque",
+          placement: "auto",
+          date: "2026-11-12",
+        },
+      ],
+      startBalanceCents: 0n,
+    });
+
+    // The pay lands first, then what we choose to pay out of it, then what the
+    // bank takes on its own account (HANDOFF section 6.2).
+    expect(result.rows.map((row) => row.event.id)).toEqual(["pay", "visa", "water"]);
+  });
+
+  it("refuses a flexible item placed two ways at once", () => {
+    // A date is now allowed on a flexible item - it is the day the household
+    // plans to pay it. A date AND an anchor paycheque is not: there would be
+    // no answer to where the row goes.
     expect(() =>
       computeTimeline({
         events: [
+          {
+            id: "pay",
+            name: "Pay",
+            cents: 100n,
+            kind: "paycheque",
+            placement: "auto",
+            date: "2026-11-12",
+          },
           {
             id: "x",
             name: "Power",
             cents: -1n,
             kind: "bill",
             placement: "flexible",
-            date: "2026-11-12",
+            date: "2026-11-20",
+            anchorId: "pay",
           },
         ],
         startBalanceCents: 0n,
       }),
-    ).toThrow(/carries a date/);
+    ).toThrow(/placed one way or the other/);
   });
 
   it("refuses an anchor that is not a paycheque in this timeline", () => {

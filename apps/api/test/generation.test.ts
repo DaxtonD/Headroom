@@ -778,7 +778,15 @@ describe("POST /api/templates/generate", () => {
 });
 
 describe("PATCH /api/templates/:id", () => {
-  it("changes the template without touching occurrences already generated", async () => {
+  it("carries a corrected amount through to the ledger", async () => {
+    /*
+     * The bug this replaces: every occurrence for the whole visible horizon
+     * had already been generated, and generation would not touch a row that
+     * existed. So correcting an amount under Manage changed the template, the
+     * budget, and nothing else - the ledger went on showing the old figure
+     * until the horizon rolled past it, which for a monthly bill is months.
+     * Editing an expense looked like it had done nothing at all.
+     */
     const schedules = await seedSchedules();
     const template = await harness.db.prisma.template.create({
       data: {
@@ -793,10 +801,10 @@ describe("PATCH /api/templates/:id", () => {
     });
 
     await generate();
-    const before = await harness.db.prisma.occurrence.findMany({
+    const before = await harness.db.prisma.occurrence.count({
       where: { templateId: template.id },
-      select: { cents: true },
     });
+    expect(before).toBeGreaterThan(0);
 
     const patched = await harness.app.inject({
       method: "PATCH",
@@ -807,13 +815,157 @@ describe("PATCH /api/templates/:id", () => {
     expect(patched.statusCode).toBe(200);
     expect(patched.json().template.defaultCents).toBe("105000");
 
-    // Existing occurrences keep their amounts: changing the usual amount is
-    // not the same as rewriting what is already on the timeline.
     const after = await harness.db.prisma.occurrence.findMany({
       where: { templateId: template.id },
       select: { cents: true },
     });
-    expect(after).toEqual(before);
+
+    // The same rows, carrying the new figure. Not a second set beside the old.
+    expect(after.length).toBe(before);
+    for (const row of after) expect(row.cents).toBe(-105_000n);
+  });
+
+  it("carries a new name and a new date through as well", async () => {
+    await seedSchedules();
+    const created = await harness.app.inject({
+      method: "POST",
+      url: "/api/templates",
+      headers: { cookie, "idempotency-key": randomUUID() },
+      payload: {
+        name: "Strreaming",
+        kind: "bill",
+        defaultCents: "1800",
+        withdrawal: "auto",
+        schedule: { type: "monthly", day: 9 },
+      },
+    });
+    const template = created.json().template as { id: string; version: number };
+
+    const fixed = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/templates/${template.id}`,
+      headers: {
+        cookie,
+        "idempotency-key": randomUUID(),
+        "if-match": `"${String(template.version)}"`,
+      },
+      payload: { name: "Streaming", schedule: { type: "monthly", day: 14 } },
+    });
+    expect(fixed.statusCode).toBe(200);
+
+    const rows = await harness.db.prisma.occurrence.findMany({
+      where: { templateId: template.id },
+      select: { name: true, date: true },
+    });
+
+    expect(rows.length).toBeGreaterThan(0);
+    for (const row of rows) {
+      // The typo does not stay on the ledger after being fixed under Manage,
+      // and the day of the month moves with the schedule.
+      expect(row.name).toBe("Streaming");
+      expect(row.date?.toISOString().slice(8, 10)).toBe("14");
+    }
+  });
+
+  it("leaves a row somebody has made their own exactly as it is", async () => {
+    const schedules = await seedSchedules();
+    const template = await harness.db.prisma.template.create({
+      data: {
+        householdId,
+        name: "Power",
+        kind: "bill",
+        defaultCents: 18_600n,
+        withdrawal: "auto",
+        scheduleType: "relative_to_pay",
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 2 },
+      },
+    });
+
+    await generate();
+
+    // The real bill arrives and the amount is typed in.
+    const first = await harness.db.prisma.occurrence.findFirstOrThrow({
+      where: { templateId: template.id },
+      orderBy: { date: "asc" },
+    });
+    const typed = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/occurrences/${first.id}`,
+      headers: { cookie, "if-match": `"${first.version}"`, "idempotency-key": randomUUID() },
+      payload: { cents: "-21233" },
+    });
+    expect(typed.statusCode).toBe(200);
+
+    // Later, the usual amount is corrected under Manage.
+    const patched = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/templates/${template.id}`,
+      headers: { cookie, "if-match": '"1"', "idempotency-key": randomUUID() },
+      payload: { defaultCents: "19000" },
+    });
+    expect(patched.statusCode).toBe(200);
+
+    // The typed figure stands: it is what the bill actually said.
+    const reread = await harness.db.prisma.occurrence.findUniqueOrThrow({
+      where: { id: first.id },
+    });
+    expect(reread.cents).toBe(-21_233n);
+
+    // Every other row follows the new usual amount.
+    const others = await harness.db.prisma.occurrence.findMany({
+      where: { templateId: template.id, id: { not: first.id } },
+      select: { cents: true },
+    });
+    expect(others.length).toBeGreaterThan(0);
+    for (const row of others) expect(row.cents).toBe(-19_000n);
+  });
+
+  it("takes an archived expense off the ledger, and brings it back", async () => {
+    const schedules = await seedSchedules();
+    const template = await harness.db.prisma.template.create({
+      data: {
+        householdId,
+        name: "Gym",
+        kind: "bill",
+        defaultCents: 4_500n,
+        withdrawal: "auto",
+        scheduleType: "relative_to_pay",
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 3 },
+      },
+    });
+
+    await generate();
+    expect(
+      await harness.db.prisma.occurrence.count({ where: { templateId: template.id } }),
+    ).toBeGreaterThan(0);
+
+    const off = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/templates/${template.id}`,
+      headers: { cookie, "if-match": '"1"', "idempotency-key": randomUUID() },
+      payload: { active: false },
+    });
+    expect(off.statusCode).toBe(200);
+
+    // Cancelling a membership has to take the payments off the ledger, or
+    // every balance below them is short by a bill nobody owes any more.
+    expect(await harness.db.prisma.occurrence.count({ where: { templateId: template.id } })).toBe(0);
+
+    const back = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/templates/${template.id}`,
+      headers: {
+        cookie,
+        "idempotency-key": randomUUID(),
+        "if-match": `"${String((off.json().template as { version: number }).version)}"`,
+      },
+      payload: { active: true },
+    });
+    expect(back.statusCode).toBe(200);
+
+    expect(
+      await harness.db.prisma.occurrence.count({ where: { templateId: template.id } }),
+    ).toBeGreaterThan(0);
   });
 
   it("needs a version, like every other change", async () => {

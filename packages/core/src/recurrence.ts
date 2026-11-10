@@ -56,8 +56,24 @@ export type ScheduleSpec =
       readonly payScheduleId?: string;
       readonly anchorDate?: PlainDate;
     }
-  /** Undated, attached to a paycheque, movable. */
-  | { readonly type: "flexible"; readonly frequency: "monthly" | "per_pay_period" };
+  /**
+   * We choose when to pay it.
+   *
+   * Without a `day`, it is undated and hangs off a paycheque - the first one
+   * of the month, or the one whose pay period it falls in - and can be moved
+   * from there.
+   *
+   * With a `day`, it sits on that day of each month, which is the day the
+   * household plans to pay it. That is a plan, not an instruction to the bank:
+   * it still counts as flexible, is never reported as an uncovered automatic
+   * withdrawal, and can be moved or re-dated at any time. `day` applies to the
+   * monthly frequency only; "every payday" has no day of the month to use.
+   */
+  | {
+      readonly type: "flexible";
+      readonly frequency: "monthly" | "per_pay_period";
+      readonly day?: number;
+    };
 
 export interface TemplateSpec {
   readonly id: string;
@@ -184,7 +200,12 @@ export function generateOccurrences(options: GenerateOptions): GeneratedOccurren
 
       case "flexible":
         generated.push(
-          ...flexibleOccurrences(template, template.schedule.frequency, options),
+          ...flexibleOccurrences(
+            template,
+            template.schedule.frequency,
+            template.schedule.day,
+            options,
+          ),
         );
         break;
 
@@ -346,17 +367,28 @@ function biweeklyOccurrences(
 }
 
 /**
- * Flexible items: undated, hung off a paycheque.
+ * Flexible items: we choose when, so they can be moved.
  *
- * `monthly` produces one per month, anchored to the first paycheque of that
- * month. `per_pay_period` produces one per pay period, anchored to its
- * paycheque. Either can be moved afterwards without generating another.
+ * `monthly` produces one per month and `per_pay_period` one per pay period.
+ * Each is anchored to a paycheque - the first of the month, or the period's
+ * own - and can be moved afterwards without generating another.
+ *
+ * A monthly one given a `day` is placed on that day instead, because that is
+ * when the household plans to pay it. No weekend rule applies: nobody else is
+ * taking the money, so a Sunday is a Sunday. The period key is the same either
+ * way, so choosing a day, changing it or clearing it moves the row that is
+ * already there rather than producing a second one.
  */
 function flexibleOccurrences(
   template: TemplateSpec,
   frequency: "monthly" | "per_pay_period",
+  day: number | undefined,
   options: GenerateOptions,
 ): GeneratedOccurrence[] {
+  if (frequency === "monthly" && day !== undefined) {
+    return plannedMonthlyOccurrences(template, day, options);
+  }
+
   const allPaydays = everyPayday(options);
   if (allPaydays.length === 0) return [];
 
@@ -392,6 +424,40 @@ function flexibleOccurrences(
       kind: template.kind,
       placement: "flexible",
       anchorPaydayDate: firstPayday,
+      sortIndex: template.sortIndex ?? 0,
+      ownerId: template.ownerId,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * A flexible monthly item on the day the household plans to pay it.
+ *
+ * Deliberately close to `monthlyOccurrences`: the same clamping for a day a
+ * short month does not have, the same period key. The two differences are that
+ * no weekend rule is applied and the placement stays flexible.
+ */
+function plannedMonthlyOccurrences(
+  template: TemplateSpec,
+  day: number,
+  options: GenerateOptions,
+): GeneratedOccurrence[] {
+  const result: GeneratedOccurrence[] = [];
+
+  for (const { year, month } of monthsBetween(options.from, options.to)) {
+    const date = monthlyOccurrenceDate(year, month, day);
+    if (compareDates(date, options.from) < 0 || compareDates(date, options.to) > 0) continue;
+
+    result.push({
+      templateId: template.id,
+      periodKey: monthKey(year, month),
+      name: template.name,
+      cents: outflowSign(template),
+      kind: template.kind,
+      placement: "flexible",
+      date,
       sortIndex: template.sortIndex ?? 0,
       ownerId: template.ownerId,
     });

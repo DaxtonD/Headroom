@@ -49,7 +49,12 @@ const patchBody = z
     anchorOccurrenceId: z.string().uuid().nullable().optional(),
     sortIndex: z.number().int().min(0).max(100_000).optional(),
     ownerUserId: z.string().uuid().nullable().optional(),
-    date: plainDateSchema.optional(),
+    /**
+     * When it sits on the ledger. For a flexible item this is the day the
+     * household plans to pay it, and null takes that plan away and hangs it
+     * back on a payday. An automatic withdrawal always has one.
+     */
+    date: plainDateSchema.nullable().optional(),
     // Accepted and ignored here; it is read from the body by requireBaseVersion.
     baseVersion: z.number().int().min(1).optional(),
   })
@@ -156,6 +161,16 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
       );
     }
 
+    // A row is placed one way or the other: on a date, or hanging off a
+    // payday. Asking for both in one request has no answer.
+    if (changes["date"] !== undefined && changes["date"] !== null && "anchorOccurrenceId" in changes) {
+      throw new HttpError(
+        400,
+        "invalid_request",
+        "Give this a date or a payday to hang off, not both.",
+      );
+    }
+
     const baseVersion = requireBaseVersion(request);
     const idempotencyKey = requireIdempotencyKey(request);
 
@@ -172,6 +187,25 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
           where: { id: request.params.id, householdId: user.householdId, deletedAt: null },
         });
         if (!existing) throw new HttpError(404, "not_found", "That item no longer exists.");
+
+        // The bank has already chosen the date of an automatic withdrawal, so
+        // it cannot be taken away or replaced with a payday to hang off.
+        if (existing.withdrawal === "auto") {
+          if (changes["date"] === null) {
+            throw new HttpError(
+              400,
+              "invalid_request",
+              "This one comes out automatically on its date, so it has to have one.",
+            );
+          }
+          if (changes["anchorOccurrenceId"] !== undefined) {
+            throw new HttpError(
+              400,
+              "invalid_request",
+              "This one comes out automatically on its date, so it cannot hang off a payday.",
+            );
+          }
+        }
 
         // A command that is already true is a no-op (section 16.1 rule 6):
         // clearing an already-cleared bill must not clear it twice.
@@ -490,8 +524,9 @@ function dropNoOps(
         if ((value ?? null) !== current.ownerUserId) result[field] = value;
         break;
       case "date": {
-        const next = value as string;
-        if (!current.date || toPlainDate(current.date) !== next) result[field] = value;
+        const next = value === null ? null : (value as string);
+        const now = current.date ? toPlainDate(current.date) : null;
+        if (now !== next) result[field] = value;
         break;
       }
       default:
@@ -503,15 +538,28 @@ function dropNoOps(
 }
 
 /**
+ * The row's own details, as opposed to its state.
+ *
+ * Changing any of these makes the row somebody's own, and generation stops
+ * bringing it into line with its template from then on: the figure a person
+ * typed must not be replaced by a later edit to the usual amount. Verifying or
+ * clearing is not in the list because each already records its own timestamp,
+ * and generation reads all three.
+ */
+const OWN_DETAIL_FIELDS = ["cents", "name", "date", "anchorOccurrenceId", "sortIndex", "ownerUserId"];
+
+/**
  * Translate the API's field names into database columns.
  *
  * `verified` and `cleared` are booleans to the client but a who-and-when pair
- * in the database, because "Carol verified this" has to be answerable.
+ * in the database, because "who verified this" has to be answerable.
  */
 function toPrismaData(changes: Record<string, unknown>, userId: string): Record<string, unknown> {
   const data: Record<string, unknown> = {};
   // The server clock is authoritative for these timestamps.
   const now = new Date();
+
+  if (OWN_DETAIL_FIELDS.some((field) => field in changes)) data["customisedAt"] = now;
 
   for (const [field, value] of Object.entries(changes)) {
     switch (field) {
@@ -534,7 +582,16 @@ function toPrismaData(changes: Record<string, unknown>, userId: string): Record<
         }
         break;
       case "date":
-        data["date"] = fromPlainDate(value as string);
+        // Giving a flexible row a date is choosing when to pay it, so it
+        // stops hanging off a payday; clearing the date sends it back to one.
+        data["date"] = value === null ? null : fromPlainDate(value as string);
+        if (value !== null) data["anchorOccurrenceId"] = null;
+        break;
+      case "anchorOccurrenceId":
+        // The other direction: hanging it on a payday drops the planned date,
+        // because a row is placed one way or the other and never both.
+        data["anchorOccurrenceId"] = value;
+        data["date"] = null;
         break;
       default:
         data[field] = value;

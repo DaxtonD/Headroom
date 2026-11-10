@@ -157,12 +157,46 @@ describe("occurrence shape", () => {
           withdrawal: "auto",
         },
       }),
-    ).rejects.toThrow(/occurrence_dated_xor_flexible/);
+    ).rejects.toThrow(/occurrence_placed_one_way/);
   });
 
-  it("refuses a flexible item that also carries a date", async () => {
+  it("accepts a flexible item on the day it is planned for", async () => {
+    // "Monthly, but I choose when to pay it" with a day chosen. The household
+    // decides the date, so it is still flexible - but it belongs on that day
+    // of the ledger, against the balance it will come out of.
     const { household } = await seedHousehold(harness);
 
+    const occurrence = await harness.db.prisma.occurrence.create({
+      data: {
+        householdId: household.id,
+        name: "Water",
+        cents: -14_400n,
+        kind: "bill",
+        withdrawal: "flexible",
+        date: new Date("2026-11-19"),
+      },
+    });
+
+    expect(occurrence.withdrawal).toBe("flexible");
+    expect(occurrence.date).not.toBeNull();
+  });
+
+  it("refuses a flexible item placed on a date and a payday at once", async () => {
+    const { household } = await seedHousehold(harness);
+
+    const payday = await harness.db.prisma.occurrence.create({
+      data: {
+        householdId: household.id,
+        name: "Pay",
+        cents: 200_000n,
+        kind: "paycheque",
+        withdrawal: "auto",
+        date: new Date("2026-11-12"),
+      },
+    });
+
+    // One or the other. Both would leave the running balance with no answer
+    // to where this row goes.
     await expect(
       harness.db.prisma.occurrence.create({
         data: {
@@ -172,9 +206,10 @@ describe("occurrence shape", () => {
           kind: "bill",
           withdrawal: "flexible",
           date: new Date("2026-11-19"),
+          anchorOccurrenceId: payday.id,
         },
       }),
-    ).rejects.toThrow(/occurrence_dated_xor_flexible/);
+    ).rejects.toThrow(/occurrence_placed_one_way/);
   });
 
   it("refuses a blank name", async () => {

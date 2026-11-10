@@ -249,15 +249,30 @@ describe("changing the pay amount", () => {
     expect(template.defaultCents).toBe(215_000n);
   });
 
-  it("does not rewrite a cheque already on the ledger", async () => {
+  it("reaches the cheques on the ledger, and leaves an edited one alone", async () => {
     const schedule = await addPayday(firstMemberId, nextThursday(), "200000");
 
     const before = await harness.db.prisma.occurrence.findMany({
       where: { householdId, kind: "paycheque", deletedAt: null },
-      select: { id: true, cents: true },
+      select: { id: true, version: true },
       orderBy: { date: "asc" },
     });
-    expect(before.length).toBeGreaterThan(0);
+    expect(before.length).toBeGreaterThan(1);
+
+    // One cheque was bigger: overtime, or banked hours paid out. The figure
+    // is typed in against that row.
+    const overtime = before[0] as { id: string; version: number };
+    const edited = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/occurrences/${overtime.id}`,
+      headers: {
+        cookie,
+        "idempotency-key": randomUUID(),
+        "if-match": `"${String(overtime.version)}"`,
+      },
+      payload: { cents: "243150" },
+    });
+    expect(edited.statusCode).toBe(200);
 
     await harness.app.inject({
       method: "PATCH",
@@ -270,13 +285,15 @@ describe("changing the pay amount", () => {
       payload: { defaultCents: "215000" },
     });
 
+    // A raise has to show up in what is coming, or every forecast below it is
+    // wrong until the horizon rolls past the cheques already generated.
     const after = await harness.db.prisma.occurrence.findMany({
       where: { id: { in: before.map((row) => row.id) } },
-      select: { cents: true },
+      select: { id: true, cents: true },
     });
-    // One of these may have been edited for overtime or banked hours. A raise
-    // entered later must not reach back and rewrite it.
-    for (const row of after) expect(row.cents).toBe(200_000n);
+    for (const row of after) {
+      expect(row.cents).toBe(row.id === overtime.id ? 243_150n : 215_000n);
+    }
   });
 });
 

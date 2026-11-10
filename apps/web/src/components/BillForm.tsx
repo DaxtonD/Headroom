@@ -38,7 +38,7 @@ const RECURRENCE_OPTIONS = [
   // a lender set, which is what a mortgage has.
   { key: "biweekly_own", label: "Every two weeks, on its own dates" },
   { key: "after_payday", label: "A few days after someone's payday" },
-  { key: "flexible_monthly", label: "Monthly, but I choose when to pay it" },
+  { key: "flexible_monthly", label: "Every month, but I choose when to pay it" },
   { key: "flexible_per_pay", label: "Every payday, but I choose when" },
 ] as const;
 
@@ -89,6 +89,7 @@ export function BillForm({
     amount: useId(),
     recurrence: useId(),
     day: useId(),
+    plannedDay: useId(),
     anchor: useId(),
     payday: useId(),
     offset: useId(),
@@ -116,6 +117,17 @@ export function BillForm({
   });
   const [offsetDays, setOffsetDays] = useState(
     existing?.schedule.type === "relative_to_pay" ? String(existing.schedule.offsetDays) : "1",
+  );
+  /**
+   * The day of the month a flexible item is planned for.
+   *
+   * Empty is a real answer and the one this started as: no plan, so it hangs
+   * off the first paycheque of the month and gets moved by hand.
+   */
+  const [plannedDay, setPlannedDay] = useState(
+    existing?.schedule.type === "flexible" && existing.schedule.day !== undefined
+      ? String(existing.schedule.day)
+      : "",
   );
   const [anchorDate, setAnchorDate] = useState(
     existing?.schedule.type === "biweekly" ? (existing.schedule.anchorDate ?? "") : "",
@@ -172,8 +184,12 @@ export function BillForm({
         if (!Number.isInteger(parsed) || parsed < -31 || parsed > 31) return null;
         return { type: "relative_to_pay", payScheduleId, offsetDays: parsed };
       }
-      case "flexible_monthly":
-        return { type: "flexible", frequency: "monthly" };
+      case "flexible_monthly": {
+        if (plannedDay.trim() === "") return { type: "flexible", frequency: "monthly" };
+        const parsed = Number(plannedDay);
+        if (!Number.isInteger(parsed) || parsed < 1 || parsed > 31) return null;
+        return { type: "flexible", frequency: "monthly", day: parsed };
+      }
       case "flexible_per_pay":
         return { type: "flexible", frequency: "per_pay_period" };
       default:
@@ -416,6 +432,27 @@ export function BillForm({
             onChange={(event) => setAnchorDate(event.target.value)}
             disabled={saving}
             required
+          />
+        </Field>
+      ) : null}
+
+      {recurrence === "flexible_monthly" ? (
+        <Field
+          label="Which day of the month do you plan to pay it?"
+          htmlFor={ids.plannedDay}
+          hint="Optional. With a day, it sits on that day of the ledger so you can see the balance it will come out of - and you can still move it or change the day. Leave it empty and it hangs off the first paycheque of the month instead."
+        >
+          <input
+            className="hr-input"
+            id={ids.plannedDay}
+            type="number"
+            min={1}
+            max={31}
+            step={1}
+            value={plannedDay}
+            onChange={(event) => setPlannedDay(event.target.value)}
+            placeholder="No particular day"
+            disabled={saving}
           />
         </Field>
       ) : null}

@@ -146,8 +146,9 @@ export function Ledger({
               : ""}
           </p>
           <p className="ledger__warning-detail">
-            {formatCents(data.coverage.firstShortfall.shortCents)} short. Move a flexible bill to a
-            later cheque — the move buttons are on the flexible rows below.
+            {formatCents(data.coverage.firstShortfall.shortCents)} short. Push a flexible bill
+            later — tap one of the rows below to change the day you pay it, or to hang it off a
+            later cheque.
           </p>
         </section>
       ) : (

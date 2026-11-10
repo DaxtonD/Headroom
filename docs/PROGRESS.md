@@ -12,11 +12,12 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | M0 Scaffold, CI, login, compose | done | m0 | Verified end-to-end in the built image: migrations, login, app shell |
 | M1 Calculation engine + golden tests | done | m1 | Reproduces every expected value in BOTH the real seed and the synthetic fixture |
 | M2 Home + Upcoming + integrity layer | done | m2 | All section 16.8 integrity tests pass against a real Postgres |
-| M3 Recurrence + Pay plan | done | m3 | Generation never undoes an edit; flexible bills move between periods |
+| M3 Recurrence + Pay plan | done | m3 | Generation follows a template edit and never undoes a person's; flexible bills move between periods |
 | M4 Budget, Goals, Net worth | done | m4 | Every retirement assumption editable; shares are of the section |
 | Manage screen + expense model | done | | Added at Dax's request, before M5. One entry feeds timeline and budget. Second pass: every section editable |
 | Biweekly/monthly redesign | done | | Agreed with Dax 2026-11-08. Engine, schema, API, Year screen, Savings screen, and Home+Upcoming+Pay plan merged into one Ledger |
 | Biweekly expenses | done | | At Dax's request. Any expense can be every two weeks on its own dates; the mortgage can be anchored either way |
+| Manage edits reach the ledger | done | | Bug 14, reported from production. Generation reconciles untouched rows; "I choose when to pay it" takes a planned day |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -30,8 +31,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
   second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
   engine, schema and migration, the savings and mortgage API, the Year screen, the Savings screen,
   and Home + Upcoming + Pay plan merged into one Ledger.
-- **682 tests green**: 305 engine, 274 API against a real Postgres, 103 web source checks. Lint,
-  typecheck and `pnpm build` clean.
+- **735 tests green** as of 2026-11-09: 311 engine, 323 API against a real Postgres, 101 web
+  source checks. Lint, typecheck and `pnpm build` clean.
 - The screens are now: **Ledger, Year, Budget, Savings, Manage**, with Net worth reached from
   Savings. Seven tabs became five.
 
@@ -500,6 +501,86 @@ sweep or the server.
 There is no test that every variable in `env.ts` appears in `.env.example` and
 `unraid/Headroom.xml`. Keeping the three in step is currently done by hand, and this change
 needed it in all three.
+
+## Bug 14: an edit under Manage reached nothing (2026-11-09, reported from production)
+
+Changing an expense under Manage appeared to do nothing at all. The template changed, the
+budget changed, and the ledger went on showing the old name, the old amount and the old date.
+
+### What was wrong
+
+Generation would not touch an occurrence that already existed - the rule that protects a
+typed-in figure from being overwritten. But by the time anyone edits anything, every occurrence
+to the horizon has already been generated, so there was nothing left for an edit to affect.
+A corrected amount would first appear on the ledger whenever the horizon rolled past the last
+row already made, which for a monthly bill is months away. The one rule meant to protect real
+data was silently refusing every correction.
+
+Archiving was the same bug with worse consequences: generation stopped making new rows and left
+the existing ones, so a cancelled bill went on pulling every balance below it down for the rest
+of the horizon.
+
+### The fix: generation reconciles instead of ignoring
+
+The rule is now split in two, which is what it should always have been.
+
+- **A row nobody has touched is pure derivation of its template**, so it follows the template:
+  name, amount, owner, date, placement, and whether it should exist at all.
+- **A row somebody has made their own is never written to again.** `customisedAt` (new column)
+  records when a person changed the row's own details; `verifiedAt` and `clearedAt` already
+  recorded the other two ways. Any of the three makes the row theirs for good.
+
+Also:
+
+- **The past is read and never written to.** Only rows that still lie ahead are reconciled, so
+  last month's power bill says what it said.
+- **A second pass writes nothing.** Each field is compared before any update, so the sweep that
+  runs on a timer and at every boot does not churn versions - which would otherwise make the
+  other phone's next save fail with a conflict about a change nobody made.
+- **A flexible bill is not stranded when its cheque goes.** Correcting a payday removes the
+  cheque a flexible bill was hanging from, and the foreign key nulls the anchor, which means
+  "now" - in front of every cheque, dragging the lowest point of the whole ledger down. Those
+  rows are now moved to the nearest cheque still there. A test found this: the first attempt
+  looked only for a cheque on or *before* the lost date, and a payday corrected one day forward
+  leaves nothing before it.
+
+Changing the pay amount now reaches the cheques on the ledger too, where before only the
+template default moved. The overtime case that justified the old behaviour is covered properly:
+an edited cheque carries `customisedAt` and is left alone.
+
+### A planned day for "every month, but I choose when to pay it"
+
+Asked for in the same message. The option meant "undated, hanging off the first paycheque of the
+month", which is right about who decides and wrong about where it appears: a household that
+plans to pay the card on the 20th wants to see it on the 20th, against the balance it will come
+out of.
+
+So the two halves of the old rule are separated. `withdrawal` says who decides - `auto` is the
+bank, `flexible` is us - and the date says where it sits. The database constraint changed from
+"an automatic item has a date and a flexible one does not" to "an automatic item must have a
+date; a flexible one may have a date, or a payday to hang off, or neither, but never both".
+The day is optional and the period key is unchanged, so choosing a day, changing it or clearing
+it moves the row already on the ledger rather than adding a second one. A flexible row with a
+date is still never counted as an automatic withdrawal to be covered.
+
+The same date can be set on one occurrence from the ledger - "pay this month's late" - and
+doing so makes that row the household's own, so the next generation pass leaves it where they
+put it while later months stay on the planned day.
+
+### Verified by hand
+
+Against a real Postgres and the built server, over HTTP: renaming a bill and changing its
+amount and day moved the row and recomputed every balance below it; a flexible bill given day 20
+moved off the first payday onto the 20th in every month; pushing one month's to the 27th from
+the ledger moved it into the next window and left the following month on the 20th; archiving a
+bill took it off the ledger and dropped the coverage count. Each protection was also proved to
+bite by stubbing it out and watching the right tests fail.
+
+### Still to do
+
+There are no component tests on the web side - the two web test files are source-level wiring
+checks - so the new form field and the row's date editor are covered by the API tests underneath
+them and by the hand check, not by a test that renders them.
 
 ## Git history and attribution (2026-11-09)
 

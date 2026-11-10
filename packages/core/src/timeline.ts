@@ -48,10 +48,11 @@ function isAutoWithdrawal(event: TimelineInput): boolean {
  * Order the events the way the bank would apply them.
  *
  * 1. Dated items by date.
- * 2. Flexible items immediately after their anchor paycheque, in user order.
- *    An item anchored to "now" comes before everything.
- * 3. On the same day: paycheque, then its flexible items, then other dated
- *    items.
+ * 2. A flexible item with a date of its own by that date - the day the
+ *    household plans to pay it.
+ * 3. A flexible item without one immediately after its anchor paycheque, in
+ *    user order. An item anchored to "now" comes before everything.
+ * 4. On the same day: paycheque, then flexible items, then other dated items.
  *
  * This differs from the spreadsheet's row order in one place (a bill the sheet
  * lists under an earlier cheque but which the bank takes on its own date), and
@@ -89,10 +90,25 @@ export function orderTimeline(events: readonly TimelineInput[]): TimelineInput[]
       };
     }
 
+    /*
+     * A flexible item may have a date: "monthly, but I choose when to pay it"
+     * with a day chosen. It still ranks as flexible, so it sits under the
+     * cheque it shares a day with and is never counted as something the bank
+     * will take whether or not the money is there.
+     */
     if (event.date) {
-      throw new Error(
-        `"${event.name}" (${event.id}) is flexible but carries a date. A flexible item hangs off a paycheque instead.`,
-      );
+      if (event.anchorId) {
+        throw new Error(
+          `"${event.name}" (${event.id}) has both a date and an anchor paycheque. A flexible item is placed one way or the other.`,
+        );
+      }
+      return {
+        event,
+        sortDate: event.date,
+        rank: RANK_FLEXIBLE,
+        sortIndex: event.sortIndex ?? 0,
+        position,
+      };
     }
 
     const anchorId = event.anchorId ?? null;
@@ -123,14 +139,17 @@ export function orderTimeline(events: readonly TimelineInput[]): TimelineInput[]
 }
 
 /**
- * The date a row effectively sits on. A flexible item borrows its anchor
- * paycheque's date, because that is when the bank would see it.
+ * The date a row effectively sits on.
+ *
+ * A flexible item with a planned date sits on it. One without borrows its
+ * anchor paycheque's date, because that is when the bank would see it.
  */
 function effectiveDateOf(
   event: TimelineInput,
   paychequeDates: ReadonlyMap<string, PlainDate>,
 ): PlainDate | null {
-  if (event.placement === "auto") return event.date ?? null;
+  if (event.date) return event.date;
+  if (event.placement === "auto") return null;
   const anchorId = event.anchorId ?? null;
   if (anchorId === null) return null;
   return paychequeDates.get(anchorId) ?? null;

@@ -648,9 +648,12 @@ function describeSchedule(bill: Bill): string {
     case "biweekly":
       return `Every payday${howOften}`;
     case "flexible":
-      return schedule.frequency === "per_pay_period"
-        ? `Flexible, every payday${howOften}`
-        : `Flexible, monthly${howOften}`;
+      if (schedule.frequency === "per_pay_period") return `Flexible, every payday${howOften}`;
+      // A planned day is worth saying: it is why this one sits where it does
+      // on the ledger instead of under the first cheque of the month.
+      return schedule.day === undefined
+        ? `Flexible, monthly${howOften}`
+        : `Flexible, planned for the ${ordinal(schedule.day)}${howOften}`;
     default:
       return "Schedule not readable";
   }

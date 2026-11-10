@@ -30,7 +30,15 @@ export type ScheduleSpec =
       readonly payScheduleId?: string;
       readonly anchorDate?: string;
     }
-  | { readonly type: "flexible"; readonly frequency: "monthly" | "per_pay_period" };
+  /**
+   * We choose when to pay it. With a `day`, that choice is written down: the
+   * item sits on that day of the month on the ledger and can still be moved.
+   */
+  | {
+      readonly type: "flexible";
+      readonly frequency: "monthly" | "per_pay_period";
+      readonly day?: number;
+    };
 
 export interface Bill {
   readonly id: string;

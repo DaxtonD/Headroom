@@ -394,6 +394,13 @@ model Occurrence {
   clearedById  String?   @db.Uuid
   clearedAt    DateTime? @db.Timestamptz(6)
 
+  /// When a person last changed this row's own details - the amount, the name,
+  /// the date, where it hangs, who it belongs to. Null means every detail is
+  /// still exactly what the template produced, so generation may bring it into
+  /// line with a later edit to that template. Set, and generation leaves it
+  /// alone for good: it is somebody's own figure now.
+  customisedAt DateTime? @db.Timestamptz(6)
+
   version     Int       @default(1)
   createdById String?   @db.Uuid
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)

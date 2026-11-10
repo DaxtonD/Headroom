@@ -55,9 +55,11 @@ export function OccurrenceRow({
   onRemove,
 }: OccurrenceRowProps): React.JSX.Element {
   const amountId = useId();
+  const dateId = useId();
   const panelId = useId();
 
   const [amountText, setAmountText] = useState(() => formatCents(row.cents, { currencySymbol: false }));
+  const [dateText, setDateText] = useState(row.date ?? "");
   const [error, setError] = useState<string | null>(null);
   const [conflict, setConflict] = useState<ConflictInfo | null>(null);
   const [saving, setSaving] = useState(false);
@@ -79,6 +81,7 @@ export function OccurrenceRow({
   if (seenVersion !== row.version) {
     setSeenVersion(row.version);
     setAmountText(formatCents(row.cents, { currencySymbol: false }));
+    setDateText(row.date ?? "");
     setConflict(null);
     setError(null);
   }
@@ -164,7 +167,9 @@ export function OccurrenceRow({
                 {row.cents > 0n ? "Auto deposit" : "Auto"} · {row.date ? formatDateShort(row.date) : ""}
               </Chip>
             ) : (
-              <Chip tone="flexible">Flexible</Chip>
+              <Chip tone="flexible">
+                {row.date ? `Flexible · ${formatDateShort(row.date)}` : "Flexible"}
+              </Chip>
             )}
             {row.isOneOff ? <Chip tone="oneoff">One-off</Chip> : null}
           </span>
@@ -197,7 +202,9 @@ export function OccurrenceRow({
           ) : null}
           {!row.isDated ? (
             <p className="row__note">
-              Flexible: it can move to an earlier or later payday when money is tight.
+              {row.date
+                ? "Flexible: this is the day you plan to pay it, not a day the bank takes it. Change the date or hang it off a payday whenever money is tight."
+                : "Flexible: it can move to an earlier or later payday when money is tight."}
             </p>
           ) : null}
 
@@ -372,9 +379,35 @@ export function OccurrenceRow({
               </div>
             ) : null}
 
+            {!row.isDated ? (
+              <div className="hr-field row__date-field">
+                <label className="hr-label" htmlFor={dateId}>
+                  Plan to pay it on
+                </label>
+                <div className="row__date-input">
+                  <input
+                    className="hr-input"
+                    id={dateId}
+                    type="date"
+                    value={dateText}
+                    onChange={(event) => setDateText(event.target.value)}
+                    disabled={!canEdit || saving}
+                  />
+                  <button
+                    className="hr-button"
+                    type="button"
+                    onClick={() => void save({ date: dateText === "" ? null : dateText })}
+                    disabled={!canEdit || saving || dateText === (row.date ?? "")}
+                  >
+                    {saving ? "Saving…" : "Save"}
+                  </button>
+                </div>
+              </div>
+            ) : null}
+
             {!row.isDated && moveTargets.length > 0 ? (
               <div className="row__move">
-                <p className="hr-label">Move to</p>
+                <p className="hr-label">{row.date ? "Or hang it off a payday" : "Move to"}</p>
                 <div className="row__move-buttons">
                   {moveTargets.map((target) => (
                     <button

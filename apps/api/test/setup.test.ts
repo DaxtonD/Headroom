@@ -464,10 +464,16 @@ describe("an expense entered once as a recurring bill", () => {
     expect(budget.fixed.lines).toEqual([]);
     expect(budget.totalMonthlyCents).toBe("0");
 
-    // Archived, not deleted: the past occurrences are all still there.
-    expect(await harness.db.prisma.occurrence.count({ where: { templateId: bill.id } })).toBe(
-      occurrencesBefore,
-    );
+    /*
+     * The upcoming payments come off the ledger: a bill nobody owes any more
+     * must stop lowering every balance below it. The template itself stays,
+     * which is what archiving means - the row is still listed below, and the
+     * history of every change to it is untouched.
+     */
+    expect(await harness.db.prisma.occurrence.count({ where: { templateId: bill.id } })).toBe(0);
+    expect(
+      await harness.db.prisma.activity.count({ where: { entity: "template", entityId: bill.id } }),
+    ).toBeGreaterThan(0);
     // And it is still listed, so it can be brought back.
     const templates = await harness.app
       .inject({ method: "GET", url: "/api/templates", headers: { cookie } })

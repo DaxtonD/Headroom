@@ -353,6 +353,11 @@ export interface OccurrenceChange {
   readonly anchorOccurrenceId?: string | null;
   readonly sortIndex?: number;
   readonly ownerUserId?: string | null;
+  /**
+   * When a flexible item is planned for. Null takes the plan away and hangs it
+   * back on a payday instead.
+   */
+  readonly date?: string | null;
 }
 
 export interface ConflictInfo {
