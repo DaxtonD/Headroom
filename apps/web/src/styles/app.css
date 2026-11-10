@@ -11,13 +11,13 @@
 }
 
 .app-splash__card h1 {
-  font-size: 20px;
+  font-size: 1.25rem;
   margin-bottom: var(--hr-space-3);
 }
 
 .app-splash__card p {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .coming-soon {
@@ -26,11 +26,11 @@
 }
 
 .coming-soon__title {
-  font-size: 22px;
+  font-size: 1.375rem;
   margin-bottom: var(--hr-space-2);
 }
 
 .coming-soon__note {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }

@@ -9,6 +9,16 @@
 }
 
 html {
+  /*
+   * The one place text size is decided.
+   *
+   * A percentage of the browser's own base size rather than a px value, so
+   * someone who has set their phone or browser to larger text still gets it;
+   * `--hr-text-scale` is the app's own control on top of that, set on this
+   * element by the appearance store. Every font size in the app is in `rem`,
+   * so both reach all of them.
+   */
+  font-size: calc(100% * var(--hr-text-scale));
   /* Respect the phone's text-size setting rather than locking a px size. */
   -webkit-text-size-adjust: 100%;
 }
@@ -31,7 +41,7 @@ body {
   background: var(--hr-ground);
   color: var(--hr-ink);
   font-family: var(--hr-font-body);
-  font-size: 16px;
+  font-size: 1rem;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -115,7 +125,7 @@ h3 {
   border: 1px solid transparent;
   border-radius: var(--hr-radius-pill);
   background: var(--hr-primary);
-  color: #ffffff;
+  color: var(--hr-on-primary);
   font-weight: 600;
   cursor: pointer;
   transition: background-color 120ms ease;
@@ -148,7 +158,7 @@ h3 {
 
 .hr-label {
   font-weight: 600;
-  font-size: 15px;
+  font-size: 0.9375rem;
   color: var(--hr-text-secondary);
 }
 
@@ -158,8 +168,13 @@ h3 {
   border: 1px solid var(--hr-card-border);
   border-radius: var(--hr-radius-input);
   background: var(--hr-card);
-  /* 16px minimum stops iOS Safari zooming in on focus. */
-  font-size: 16px;
+  /*
+   * Never below 16px, whatever the text scale is set to: iOS Safari zooms the
+   * page in when you focus a field with smaller text than that, and it does
+   * not zoom back out. Turning the text down would otherwise make every
+   * amount field on the ledger lurch.
+   */
+  font-size: max(16px, 1rem);
 }
 
 .hr-input:focus {
@@ -192,7 +207,7 @@ select.hr-input {
   align-items: flex-start;
   gap: var(--hr-space-3);
   margin-top: var(--hr-space-5);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -219,5 +234,5 @@ select.hr-input {
   border-radius: var(--hr-radius-input);
   background: var(--hr-warning-bg);
   color: var(--hr-warning-fg);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }

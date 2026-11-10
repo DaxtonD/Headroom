@@ -24,7 +24,7 @@
 
 .badge--verified {
   background: var(--hr-primary);
-  color: #ffffff;
+  color: var(--hr-on-primary);
 }
 
 .badge--verified svg {
@@ -37,7 +37,7 @@
   border: 2px dashed var(--hr-estimate-ring);
   color: var(--hr-text-muted);
   font-weight: 600;
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1;
 }
 
@@ -54,7 +54,7 @@
   background: var(--hr-green-tint);
   color: var(--hr-positive);
   font-family: var(--hr-font-display);
-  font-size: 10px;
+  font-size: 0.625rem;
   font-weight: 600;
 }
 
@@ -66,7 +66,7 @@
   gap: var(--hr-space-1);
   padding: 2px 10px;
   border-radius: var(--hr-radius-pill);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -105,7 +105,7 @@
   height: 28px;
   border-radius: var(--hr-radius-pill);
   font-family: var(--hr-font-display);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
@@ -116,7 +116,7 @@
   align-items: center;
   padding: 4px 12px;
   border-radius: var(--hr-radius-pill);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 

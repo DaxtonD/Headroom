@@ -18,6 +18,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Biweekly/monthly redesign | done | | Agreed with Dax 2026-11-08. Engine, schema, API, Year screen, Savings screen, and Home+Upcoming+Pay plan merged into one Ledger |
 | Biweekly expenses | done | | At Dax's request. Any expense can be every two weeks on its own dates; the mortgage can be anchored either way |
 | Manage edits reach the ledger | done | | Bug 14, reported from production. Generation reconciles untouched rows; "I choose when to pay it" takes a planned day |
+| Settings: themes + text size | done | | At Dax's request. Five themes plus match-my-device, five text sizes. Per device, not in the database. Contrast checked by test |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -31,8 +32,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
   second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
   engine, schema and migration, the savings and mortgage API, the Year screen, the Savings screen,
   and Home + Upcoming + Pay plan merged into one Ledger.
-- **735 tests green** as of 2026-11-09: 311 engine, 323 API against a real Postgres, 101 web
-  source checks. Lint, typecheck and `pnpm build` clean.
+- **756 tests green** as of 2026-11-09: 311 engine, 323 API against a real Postgres, 122 web
+  source, token, contrast and appearance checks. Lint, typecheck and `pnpm build` clean.
 - The screens are now: **Ledger, Year, Budget, Savings, Manage**, with Net worth reached from
   Savings. Seven tabs became five.
 
@@ -581,6 +582,100 @@ bite by stubbing it out and watching the right tests fail.
 There are no component tests on the web side - the two web test files are source-level wiring
 checks - so the new form field and the row's date editor are covered by the API tests underneath
 them and by the hand check, not by a test that renders them.
+
+## Settings: themes and text size (2026-11-09, at Dax's request)
+
+Asked for as the last thing before the household starts using the app: a settings menu, several
+themes including light and dark, and a text-size control that scales **down** from the current
+size ("probably as large as we'd want to go").
+
+### Where it lives, and where it does not
+
+A `/settings` route reached from a gear in the header, not a sixth tab: five tabs is already as
+many as a phone holds, and this is opened once in a while rather than several times a day.
+
+**Neither choice is in the database, which is deliberate.** Everything else the app stores is a
+household fact that changes the numbers; these are per-eye, per-screen preferences. A phone held
+at arm's length in a dark room wants a different answer from a desktop in a bright kitchen, and
+one person turning the text down must not shrink the other's. So they live in `localStorage`:
+per device, per browser, never crossing the wire. They therefore reach no backup, which is
+correct - losing them costs two taps.
+
+Every read and write is guarded. `localStorage` *throws* rather than returning null in a private
+window or with site data blocked, and an unguarded read would take the whole app down at startup
+with a blank screen and no clue why.
+
+### Themes
+
+Five palettes: **Daylight** (the original), **Paper** (warm, low glare), **Clear** (high
+contrast, firm edges), **Night** (the brand green after dark) and **Slate** (softer dark). Plus
+**Match my device**, which follows `prefers-color-scheme` and updates live while that choice is
+on.
+
+The default stays Daylight, not "match my device": installing an update must never change how
+the app looks without being asked.
+
+Two things made this more than a palette swap.
+
+- **Eight literal colours were scattered through the component stylesheets** - a white button
+  label, the sheet's dim backdrop, the hero's hairline. Each one is a colour no theme can
+  change, and each would have looked wrong in exactly one theme. They are now tokens
+  (`--hr-on-primary`, `--hr-scrim`, `--hr-hero-divider` and so on), and a test fails on any
+  literal colour outside `tokens.css`.
+- **`color-scheme` is declared per theme**, so the scrollbars and - more importantly - the date
+  pickers on the ledger follow the theme. The `color-scheme` meta in `index.html` is gone,
+  because a meta saying "light" while a dark theme is on leaves those controls light.
+
+The four `--hr-user-<name>-*` tokens were deleted: unused since the bubble colours moved into the
+database, and they carried two household first names.
+
+### Contrast is checked by arithmetic, not by eye
+
+`theme-contrast.test.ts` computes WCAG relative luminance from `tokens.css` and holds every text
+pair the stylesheets actually draw to 4.5:1, and borders and rings to 3:1. The pair list was read
+off the real `color:` and `background:` declarations rather than invented.
+
+This found a defect in the palette that had been shipped for months: `--hr-estimate-ring` was
+2.9:1 on the page background, just under the 3:1 a meaningful border needs - and that ring is the
+only thing distinguishing an estimate from a verified amount. Now #818883.
+
+A theme is also checked for **completeness**: a block that leaves a token out does not fall back
+to something sensible, it inherits Daylight's value, which in a dark theme is a white card in the
+middle of a dark page, with no warning of any kind.
+
+### Text size
+
+Five steps from 1 down to 0.76, about 7% apart - enough to notice, small enough that no layout
+jumps between two of them.
+
+All 149 `font-size` declarations became `rem`, and `html` is `calc(100% * var(--hr-text-scale))`.
+A percentage of the browser's own base rather than a px value, so someone who has set their phone
+to larger text still gets it and the app's control sits on top. At scale 1 every computed size is
+what it was, so the conversion itself changes nothing visible.
+
+One exception: `.hr-input` is `max(16px, 1rem)`. iOS Safari zooms the page in when a field with
+text smaller than 16px is focused, and does not zoom back out, so turning the text down would
+otherwise make every amount field on the ledger lurch. Form fields therefore stay at 16px at
+every scale. Say the word if uniform scaling is preferred - it is one line.
+
+### Applied before the first paint
+
+An inline script in `index.html` sets `data-theme` and the scale before the stylesheet runs.
+In React instead, the browser paints Daylight at full size and then corrects itself, so every
+load of a dark theme would start with a flash of white - worst in exactly the situation someone
+chose dark for.
+
+It reads the same two keys the store writes. The scale is stored as the **number** rather than a
+name for it, so that script needs no copy of the table of sizes to drift from; `appearance.test.ts`
+fails if the key names ever part company.
+
+**For M5:** this inline script needs a hash or a nonce when the PWA adds a Content-Security-Policy.
+
+### Not verified by eye
+
+There is no browser in this environment, so the themes were checked by arithmetic, by the build,
+and by a generated preview page built from the real `tokens.css` and sent to Dax to look at.
+Nobody has yet seen the actual app in any theme other than Daylight.
 
 ## Git history and attribution (2026-11-09)
 

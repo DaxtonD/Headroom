@@ -29,7 +29,7 @@
 .shell-header__wordmark {
   font-family: var(--hr-font-display);
   font-weight: 600;
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 .shell-header__right {
@@ -52,7 +52,7 @@
   border: none;
   background: none;
   color: var(--hr-text-secondary);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -68,7 +68,7 @@
   padding: var(--hr-space-3) var(--hr-space-4);
   background: var(--hr-warning-bg);
   color: var(--hr-warning-fg);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -116,7 +116,7 @@
   min-height: var(--hr-touch-min);
   padding: var(--hr-space-2) var(--hr-space-1);
   color: var(--hr-text-muted);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   text-align: center;
   text-decoration: none;
@@ -156,7 +156,7 @@
     justify-content: flex-start;
     border-radius: var(--hr-radius-input);
     padding: 0 var(--hr-space-4);
-    font-size: 15px;
+    font-size: 0.9375rem;
   }
 
   .shell-nav__link--active {
@@ -169,4 +169,27 @@
     margin: 0;
     padding: var(--hr-space-5);
   }
+}
+
+/* ---- Settings, in the header beside the people ---- */
+
+.shell-header__settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* A 44px target around a 22px icon, which is the M5 minimum. */
+  min-width: var(--hr-touch-min);
+  min-height: var(--hr-touch-min);
+  border-radius: var(--hr-radius-pill);
+  color: var(--hr-text-secondary);
+}
+
+.shell-header__settings:hover {
+  color: var(--hr-ink);
+  background: var(--hr-neutral-bg);
+}
+
+.shell-header__settings--active {
+  color: var(--hr-primary);
+  background: var(--hr-green-tint-soft);
 }

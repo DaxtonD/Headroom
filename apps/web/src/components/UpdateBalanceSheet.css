@@ -14,12 +14,12 @@
 .sheet__clearable-legend {
   padding: 0;
   font-weight: 600;
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .sheet__clearable-note {
   margin: var(--hr-space-1) 0 var(--hr-space-3);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
   line-height: 1.45;
 }
@@ -58,7 +58,7 @@
 .sheet__clearable-name {
   flex: 1;
   min-width: 0;
-  font-size: 15px;
+  font-size: 0.9375rem;
   /*
    * Wrapped, not truncated. A name that does not fit on one line is still
    * entirely readable on two, and "Home insurance" rendered as "Home In..."
@@ -74,13 +74,13 @@
 }
 
 .sheet__clearable-date {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--hr-text-muted);
   white-space: nowrap;
 }
 
 .sheet__current {
   margin-top: var(--hr-space-4);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
 }

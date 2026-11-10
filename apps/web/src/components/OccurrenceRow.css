@@ -45,7 +45,7 @@
   background: var(--hr-green-tint);
   color: var(--hr-positive);
   font-family: var(--hr-font-display);
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
@@ -80,7 +80,7 @@
 }
 
 .row__owner {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--hr-text-muted);
 }
 
@@ -97,7 +97,7 @@
 }
 
 .row__running {
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
 }
 
@@ -111,7 +111,7 @@
 }
 
 .row__note {
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--hr-text-secondary);
   line-height: 1.45;
 }
@@ -121,7 +121,7 @@
   border-radius: var(--hr-radius-input);
   background: var(--hr-green-tint);
   color: var(--hr-positive);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .row__conflict {
@@ -179,7 +179,7 @@
 }
 
 .row__move-button {
-  font-size: 14px;
+  font-size: 0.875rem;
   padding: 0 var(--hr-space-4);
 }
 
@@ -206,9 +206,9 @@
 
 .row__danger {
   background: var(--hr-negative);
-  color: #ffffff;
+  color: var(--hr-on-negative);
 }
 
 .row__danger:hover:not(:disabled) {
-  background: #8f1e18;
+  background: var(--hr-negative-hover);
 }

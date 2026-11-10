@@ -58,6 +58,21 @@ export function Shell({
               </li>
             ))}
           </ul>
+          {/*
+            Settings lives here rather than in the tab bar: five tabs is
+            already as many as a phone holds, and this is opened once in a
+            while rather than several times a day. Sign out stays beside it,
+            where it has always been.
+          */}
+          <NavLink
+            className={({ isActive }) =>
+              `shell-header__settings ${isActive ? "shell-header__settings--active" : ""}`
+            }
+            to="/settings"
+            aria-label="Settings"
+          >
+            <GearIcon />
+          </NavLink>
           <button className="shell-header__signout" type="button" onClick={onSignOut}>
             Sign out
           </button>
@@ -90,6 +105,27 @@ export function Shell({
 
       <main className="shell-main">{children}</main>
     </div>
+  );
+}
+
+/** A gear, drawn rather than loaded: one icon is not worth a font or a file. */
+function GearIcon(): React.JSX.Element {
+  return (
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
+      <path
+        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+      />
+      <path
+        d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.7-1.3-1.8-3.1-2 .8a7.6 7.6 0 0 0-2.6-1.5L14.4 2h-3.6l-.3 2.4a7.6 7.6 0 0 0-2.6 1.5l-2-.8L4.1 8.2l1.7 1.3a7.6 7.6 0 0 0 0 3L4.1 13.8l1.8 3.1 2-.8a7.6 7.6 0 0 0 2.6 1.5l.3 2.4h3.6l.3-2.4a7.6 7.6 0 0 0 2.6-1.5l2 .8 1.8-3.1-1.7-1.3Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

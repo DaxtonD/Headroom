@@ -1,10 +1,25 @@
 /**
- * Design tokens, taken from HANDOFF section 15 (which took them from the
- * mockups). Every colour, radius and size in the app comes from here, so a
- * change to Carol's palette is a change in one file.
+ * Design tokens. Every colour, radius and size in the app comes from here, so
+ * a change to the palette is a change in one file.
  *
- * Contrast: every --hr-text-* on its stated background meets WCAG AA 4.5:1,
- * which is a stated acceptance criterion for M5.
+ * `:root` holds Daylight, the palette from HANDOFF section 15 (which took it
+ * from the mockups). Each other theme is a block that redefines the same
+ * names, selected by `data-theme` on `<html>`. Nothing else in the app knows
+ * which theme is on.
+ *
+ * Two rules every theme has to keep, and `css-tokens.test.ts` enforces both:
+ *
+ *  1. **It defines the whole set.** A theme that leaves a token out silently
+ *     inherits Daylight's value for it, which in a dark theme means a near
+ *     white card in the middle of a dark screen.
+ *  2. **Text meets WCAG AA.** Every text colour is 4.5:1 or better on every
+ *     surface it is actually used on, and borders and rings meet 3:1. That is
+ *     checked by arithmetic rather than by eye, because a palette that reads
+ *     well on this monitor can be unreadable on a phone in the sun.
+ *
+ * `--hr-text-scale` is the font-size control. It multiplies the root font
+ * size, and every font size in the app is in `rem`, so one number moves all
+ * of them together.
  */
 
 :root {
@@ -23,10 +38,17 @@
   --hr-hero-bg: #123b33;
   --hr-hero-text: #f4f7f5;
   --hr-hero-muted: #b9d3ca;
+  /* Hairlines and bar tracks drawn on top of the hero. */
+  --hr-hero-divider: rgb(255 255 255 / 0.18);
+  --hr-hero-track: rgb(244 247 245 / 0.16);
+  /* A hero-coloured button, brightened on hover. */
+  --hr-hero-raise: #ffffff;
 
   /* ---- Greens ---- */
   --hr-primary: #0f6b55;
   --hr-primary-hover: #0c5745;
+  /* Text and icons drawn on a primary-coloured button. */
+  --hr-on-primary: #ffffff;
   --hr-positive: #0f5f4c;
   /*
    * Bad news. 6.5:1 on white, so it reads as text and not only as decoration.
@@ -38,6 +60,8 @@
    * and not defined.
    */
   --hr-negative: #b3261e;
+  --hr-negative-hover: #8f1e18;
+  --hr-on-negative: #ffffff;
   --hr-green-tint: #d7ebe3;
   --hr-green-tint-soft: #e3f1eb;
   --hr-payday-row: #eef6f2;
@@ -51,10 +75,19 @@
   --hr-warning-bg: #fbe6cc;
   --hr-neutral-fg: #3f4844;
   --hr-neutral-bg: #eceae3;
-  --hr-estimate-ring: #8a928d;
+  /*
+   * The ring around an amount nobody has confirmed yet.
+   *
+   * Was #8a928d, which is 2.9:1 on the page background - just under the 3:1
+   * WCAG asks of a border that carries meaning, and the ring is the only thing
+   * distinguishing an estimate from a verified figure. Found by arithmetic in
+   * theme-contrast.test.ts, not by eye: nobody had noticed in months.
+   */
+  --hr-estimate-ring: #818883;
 
-  /* ---- Focus ---- */
+  /* ---- Focus, and the dimmed background behind a sheet ---- */
   --hr-focus: #0f6b55;
+  --hr-scrim: rgb(23 32 29 / 0.45);
 
   /* ---- Shape ---- */
   --hr-radius-card: 20px;
@@ -77,15 +110,229 @@
   /* ---- Type ---- */
   --hr-font-display: "Space Grotesk", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
   --hr-font-body: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /*
+   * How big the text is, as a multiple of the browser's own base size.
+   *
+   * 1 is the size the app was designed at, which is the largest anyone wanted,
+   * so the control only goes down from here. Set on `<html>` by the appearance
+   * store; this is the fallback for a first visit and for a browser with no
+   * storage available.
+   */
+  --hr-text-scale: 1;
 
-  --hr-shadow-card: 0 1px 2px rgba(23, 32, 29, 0.04), 0 1px 3px rgba(23, 32, 29, 0.06);
-  --hr-shadow-hero: 0 2px 8px rgba(18, 59, 51, 0.18);
+  --hr-shadow-card: 0 1px 2px rgb(23 32 29 / 0.04), 0 1px 3px rgb(23 32 29 / 0.06);
+  --hr-shadow-hero: 0 2px 8px rgb(18 59 51 / 0.18);
+
+  /* Native scrollbars, date pickers and autofill follow this. */
+  color-scheme: light;
 }
 
-/* Each person's initial bubble. */
-:root {
-  --hr-user-carol-fg: #2a3c8f;
-  --hr-user-carol-bg: #e3e7f7;
-  --hr-user-dax-fg: #7a4a00;
-  --hr-user-dax-bg: #f3e6cf;
+/* ========================================================================== */
+/* Paper - warm and low glare, for reading in daylight                        */
+/* ========================================================================== */
+
+:root[data-theme="paper"] {
+  --hr-ground: #f1e7d4;
+  --hr-card: #fbf5e8;
+  --hr-card-border: #ddcfb4;
+  --hr-row-divider: #ebdfc8;
+
+  --hr-ink: #2b2317;
+  --hr-text-secondary: #554833;
+  --hr-text-muted: #5f523c;
+
+  --hr-hero-bg: #38402a;
+  --hr-hero-text: #f8f3e4;
+  --hr-hero-muted: #cdd6b4;
+  --hr-hero-divider: rgb(255 255 255 / 0.2);
+  --hr-hero-track: rgb(248 243 228 / 0.18);
+  --hr-hero-raise: #ffffff;
+
+  --hr-primary: #45632c;
+  --hr-primary-hover: #375024;
+  --hr-on-primary: #ffffff;
+  --hr-positive: #3c5c27;
+  --hr-negative: #a32e19;
+  --hr-negative-hover: #852513;
+  --hr-on-negative: #ffffff;
+  --hr-green-tint: #dfe6cb;
+  --hr-green-tint-soft: #ebefdb;
+  --hr-payday-row: #edf0e0;
+
+  --hr-oneoff-fg: #33418a;
+  --hr-oneoff-bg: #e2e4f1;
+  --hr-flexible-fg: #71430a;
+  --hr-flexible-bg: #f5e4c2;
+  --hr-warning-fg: #7f3604;
+  --hr-warning-bg: #f6e0c0;
+  --hr-neutral-fg: #463f32;
+  --hr-neutral-bg: #e7dbc3;
+  --hr-estimate-ring: #857a61;
+
+  --hr-focus: #45632c;
+  --hr-scrim: rgb(43 35 23 / 0.45);
+
+  --hr-shadow-card: 0 1px 2px rgb(43 35 23 / 0.05), 0 1px 3px rgb(43 35 23 / 0.07);
+  --hr-shadow-hero: 0 2px 8px rgb(56 64 42 / 0.2);
+
+  color-scheme: light;
+}
+
+/* ========================================================================== */
+/* Clear - the most legible light theme: firm edges, maximum contrast         */
+/* ========================================================================== */
+
+:root[data-theme="clear"] {
+  --hr-ground: #ffffff;
+  --hr-card: #ffffff;
+  /* Cards sit on the same white as the page, so the border does the work. */
+  --hr-card-border: #6f6f6f;
+  --hr-row-divider: #b7b7b7;
+
+  --hr-ink: #000000;
+  --hr-text-secondary: #1c1c1c;
+  --hr-text-muted: #2e2e2e;
+
+  --hr-hero-bg: #05241e;
+  --hr-hero-text: #ffffff;
+  --hr-hero-muted: #cde5dd;
+  --hr-hero-divider: rgb(255 255 255 / 0.3);
+  --hr-hero-track: rgb(255 255 255 / 0.24);
+  --hr-hero-raise: #ffffff;
+
+  --hr-primary: #0a5542;
+  --hr-primary-hover: #074234;
+  --hr-on-primary: #ffffff;
+  --hr-positive: #0a4e3c;
+  --hr-negative: #990f05;
+  --hr-negative-hover: #7a0c04;
+  --hr-on-negative: #ffffff;
+  --hr-green-tint: #cce5dd;
+  --hr-green-tint-soft: #def0ea;
+  --hr-payday-row: #e4f1ec;
+
+  --hr-oneoff-fg: #14318c;
+  --hr-oneoff-bg: #e2e8f8;
+  --hr-flexible-fg: #5e3700;
+  --hr-flexible-bg: #fae7c9;
+  --hr-warning-fg: #6b2d00;
+  --hr-warning-bg: #fae2c4;
+  --hr-neutral-fg: #242424;
+  --hr-neutral-bg: #e6e6e6;
+  --hr-estimate-ring: #595959;
+
+  --hr-focus: #0a5542;
+  --hr-scrim: rgb(0 0 0 / 0.55);
+
+  --hr-shadow-card: none;
+  --hr-shadow-hero: none;
+
+  color-scheme: light;
+}
+
+/* ========================================================================== */
+/* Night - the brand's green, after dark                                      */
+/* ========================================================================== */
+
+:root[data-theme="night"] {
+  --hr-ground: #0b1210;
+  --hr-card: #151f1c;
+  --hr-card-border: #2b3b36;
+  --hr-row-divider: #1f2d29;
+
+  --hr-ink: #e9f0ec;
+  --hr-text-secondary: #b3c3bc;
+  --hr-text-muted: #9dada7;
+
+  /* Lifted off the ground, or the hero would vanish into the page. */
+  --hr-hero-bg: #11332c;
+  --hr-hero-text: #eaf3ef;
+  --hr-hero-muted: #a7cabe;
+  --hr-hero-divider: rgb(234 243 239 / 0.16);
+  --hr-hero-track: rgb(234 243 239 / 0.16);
+  --hr-hero-raise: #ffffff;
+
+  /*
+   * Accents go lighter and their text goes dark, which is the opposite of the
+   * light themes. A dark green button on a dark page is a hole in the screen.
+   */
+  --hr-primary: #45b394;
+  --hr-primary-hover: #58c3a5;
+  --hr-on-primary: #04201a;
+  --hr-positive: #6fd0ae;
+  --hr-negative: #ff8e84;
+  --hr-negative-hover: #ffa79f;
+  --hr-on-negative: #2a0603;
+  --hr-green-tint: #1d3c34;
+  --hr-green-tint-soft: #17302a;
+  --hr-payday-row: #163029;
+
+  --hr-oneoff-fg: #b2c6ff;
+  --hr-oneoff-bg: #1e2945;
+  --hr-flexible-fg: #f3ca8c;
+  --hr-flexible-bg: #392b14;
+  --hr-warning-fg: #ffc08d;
+  --hr-warning-bg: #3c2915;
+  --hr-neutral-fg: #c4d1cc;
+  --hr-neutral-bg: #26332f;
+  --hr-estimate-ring: #8b9a94;
+
+  --hr-focus: #58c3a5;
+  --hr-scrim: rgb(0 0 0 / 0.6);
+
+  --hr-shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
+  --hr-shadow-hero: 0 2px 10px rgb(0 0 0 / 0.5);
+
+  color-scheme: dark;
+}
+
+/* ========================================================================== */
+/* Slate - softer than Night, for a dark room and tired eyes                 */
+/* ========================================================================== */
+
+:root[data-theme="slate"] {
+  --hr-ground: #16191c;
+  --hr-card: #1f2429;
+  --hr-card-border: #353c43;
+  --hr-row-divider: #2a3035;
+
+  --hr-ink: #e6eaee;
+  --hr-text-secondary: #b4bdc6;
+  --hr-text-muted: #9ca6b0;
+
+  --hr-hero-bg: #243039;
+  --hr-hero-text: #eff3f7;
+  --hr-hero-muted: #b4c5d2;
+  --hr-hero-divider: rgb(239 243 247 / 0.16);
+  --hr-hero-track: rgb(239 243 247 / 0.16);
+  --hr-hero-raise: #ffffff;
+
+  --hr-primary: #5ab39a;
+  --hr-primary-hover: #6cc2aa;
+  --hr-on-primary: #06231c;
+  --hr-positive: #80d4b6;
+  --hr-negative: #ff948b;
+  --hr-negative-hover: #ffaba3;
+  --hr-on-negative: #2a0603;
+  --hr-green-tint: #27403a;
+  --hr-green-tint-soft: #223733;
+  --hr-payday-row: #223833;
+
+  --hr-oneoff-fg: #bacbff;
+  --hr-oneoff-bg: #242c44;
+  --hr-flexible-fg: #f1cd96;
+  --hr-flexible-bg: #392e1b;
+  --hr-warning-fg: #ffc595;
+  --hr-warning-bg: #3a2c1b;
+  --hr-neutral-fg: #c7cfd7;
+  --hr-neutral-bg: #2b3238;
+  --hr-estimate-ring: #8d979f;
+
+  --hr-focus: #6cc2aa;
+  --hr-scrim: rgb(0 0 0 / 0.6);
+
+  --hr-shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
+  --hr-shadow-hero: 0 2px 10px rgb(0 0 0 / 0.45);
+
+  color-scheme: dark;
 }

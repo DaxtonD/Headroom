@@ -5,12 +5,12 @@
 }
 
 .manage__title {
-  font-size: 24px;
+  font-size: 1.5rem;
 }
 
 .manage__intro {
   margin-top: calc(-1 * var(--hr-space-2));
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--hr-text-muted);
   line-height: 1.45;
 }
@@ -32,7 +32,7 @@
 .manage__checklist ul {
   margin: 0;
   padding-left: var(--hr-space-5);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
 }
 
@@ -45,7 +45,7 @@
   border-radius: var(--hr-radius-input);
   background: var(--hr-green-tint);
   color: var(--hr-positive);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -64,7 +64,7 @@
 
 .manage__section-title {
   font-family: var(--hr-font-body);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--hr-text-secondary);
 }
@@ -72,21 +72,21 @@
 .manage__count {
   font-family: var(--hr-font-display);
   font-variant-numeric: tabular-nums;
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   color: var(--hr-text-muted);
 }
 
 .manage__note {
   margin-top: var(--hr-space-1);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
   line-height: 1.45;
 }
 
 .manage__empty {
   margin-top: var(--hr-space-3);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--hr-text-muted);
 }
 
@@ -173,7 +173,7 @@
 }
 
 .manage__row-note {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--hr-text-muted);
 }
 
@@ -200,7 +200,7 @@
   border-radius: var(--hr-radius-pill);
   background: var(--hr-card);
   color: var(--hr-primary);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -219,7 +219,7 @@
   width: 110px;
   min-height: 36px;
   padding: 0 var(--hr-space-2);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 /* ---- Actions and inline forms ---- */
@@ -251,7 +251,7 @@
 .manage__field-hint {
   display: block;
   margin-top: var(--hr-space-1);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 400;
   color: var(--hr-text-muted);
   line-height: 1.4;
@@ -262,13 +262,13 @@
 }
 
 .manage__error h2 {
-  font-size: 18px;
+  font-size: 1.125rem;
   margin-bottom: var(--hr-space-2);
 }
 
 .manage__error p {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 /* ---- Desktop: inline forms become a row ---- */

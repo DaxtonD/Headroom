@@ -85,4 +85,40 @@ describe("design tokens", () => {
 
     expect(elsewhere).toEqual([]);
   });
+
+  it("writes no colour outside the token file", () => {
+    /*
+     * A literal colour in a screen's own stylesheet is a colour no theme can
+     * change. Every one of these was found when the themes went in: a white
+     * button label stayed white on a pale green button, the sheet's dim
+     * backdrop stayed the light theme's near-black, and the hero's hairline
+     * stayed white on a theme whose hero is not dark.
+     *
+     * Lint cannot see this and neither can a typecheck. It shows up only as
+     * one element looking wrong in one theme, which is exactly the kind of
+     * thing nobody reports and everybody squints at.
+     */
+    // Matched inside a declaration's value, so an id selector such as `#root`
+    // is never mistaken for a colour.
+    const colourInValue = /:[^;{}]*?(#[0-9a-fA-F]{3,8}|rgba?\([^)]*\))/g;
+
+    // This regex is the whole test, so it is checked against a sample first.
+    // A pattern that silently stopped matching would pass this file forever.
+    expect("a { color: #ffffff; }".match(colourInValue)).not.toBeNull();
+    expect("b { background: rgba(0, 0, 0, 0.5); }".match(colourInValue)).not.toBeNull();
+    expect("#root { color: var(--hr-ink); }".match(colourInValue)).toBeNull();
+
+    const tokensFile = cssFiles.find((file) => file.endsWith("tokens.css"));
+
+    const literals = cssFiles
+      .filter((file) => file !== tokensFile)
+      .flatMap((file) => {
+        const source = readFileSync(file, "utf8");
+        return [...source.matchAll(colourInValue)].map(
+          (match) => `${file}: ${match[1] as string}`,
+        );
+      });
+
+    expect(literals).toEqual([]);
+  });
 });

@@ -21,7 +21,7 @@
   border-radius: var(--hr-radius-pill);
   background: none;
   color: var(--hr-text-secondary);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -44,7 +44,7 @@
 
 .budget__hero-label {
   color: var(--hr-hero-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -57,7 +57,7 @@
 
 .budget__hero-note {
   color: var(--hr-hero-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .budget__bar {
@@ -66,7 +66,7 @@
   border-radius: var(--hr-radius-pill);
   overflow: hidden;
   /* Shows through where the parts do not add up to the full width. */
-  background: rgba(244, 247, 245, 0.16);
+  background: var(--hr-hero-track);
 }
 
 .budget__bar-part {
@@ -93,7 +93,7 @@
   list-style: none;
   margin: var(--hr-space-3) 0 0;
   padding: 0;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-hero-muted);
 }
 
@@ -136,26 +136,26 @@
 
 .budget__section-title {
   font-family: var(--hr-font-body);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--hr-text-secondary);
 }
 
 .budget__section-total {
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
 .budget__note {
   margin-top: var(--hr-space-1);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
   line-height: 1.45;
 }
 
 .budget__empty {
   margin-top: var(--hr-space-3);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--hr-text-muted);
 }
 
@@ -217,7 +217,7 @@
   flex: 0 0 auto;
   min-width: 34px;
   text-align: right;
-  font-size: 12px;
+  font-size: 0.75rem;
   font-variant-numeric: tabular-nums;
   color: var(--hr-text-muted);
 }
@@ -227,13 +227,13 @@
 }
 
 .budget__error h2 {
-  font-size: 18px;
+  font-size: 1.125rem;
   margin-bottom: var(--hr-space-2);
 }
 
 .budget__error p {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 /* ---- Desktop: full tables, as in her sheet ---- */
@@ -253,7 +253,7 @@
 .budget__line-note {
   display: block;
   margin-top: 1px;
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 400;
   color: var(--hr-text-muted);
   white-space: normal;

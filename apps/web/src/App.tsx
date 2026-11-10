@@ -17,6 +17,7 @@ import { Ledger } from "./pages/Ledger.js";
 import { Manage } from "./pages/Manage.js";
 import { NetWorth } from "./pages/NetWorth.js";
 import { Savings } from "./pages/Savings.js";
+import { Settings } from "./pages/Settings.js";
 import { Year } from "./pages/Year.js";
 import { useLogout, useSession } from "./lib/session.js";
 import { useLiveUpdates } from "./lib/useLiveUpdates.js";
@@ -97,6 +98,11 @@ export function App(): React.JSX.Element {
         {/* Reached from Savings rather than the tab bar, as the brief asks. */}
         <Route path="/net-worth" element={<NetWorth canEdit={canEdit} />} />
         <Route path="/manage" element={<Manage canEdit={canEdit} />} />
+        {/*
+          Reached from the header rather than the tab bar: it is opened once in
+          a while and the five tabs are already as many as a phone holds.
+        */}
+        <Route path="/settings" element={<Settings onSignOut={() => logout.mutate()} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 

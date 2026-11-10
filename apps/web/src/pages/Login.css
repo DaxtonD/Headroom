@@ -20,7 +20,7 @@
 .login__eyebrow {
   font-family: var(--hr-font-display);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 0.875rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--hr-primary);
@@ -28,13 +28,13 @@
 }
 
 .login__title {
-  font-size: 28px;
+  font-size: 1.75rem;
   margin-bottom: var(--hr-space-2);
 }
 
 .login__subtitle {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 .login__form {
@@ -52,7 +52,7 @@
   margin-top: var(--hr-space-5);
   padding-top: var(--hr-space-4);
   border-top: 1px solid var(--hr-row-divider);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--hr-text-muted);
 }
 
@@ -68,6 +68,6 @@
   border-radius: 4px;
   background: var(--hr-neutral-bg);
   color: var(--hr-neutral-fg);
-  font-size: 13px;
+  font-size: 0.8125rem;
   white-space: nowrap;
 }

@@ -14,7 +14,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  background: rgba(23, 32, 29, 0.45);
+  background: var(--hr-scrim);
 }
 
 .sheet {
@@ -31,13 +31,13 @@
 }
 
 .sheet__title {
-  font-size: 22px;
+  font-size: 1.375rem;
   margin-bottom: var(--hr-space-1);
 }
 
 .sheet__intro {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
   margin-bottom: var(--hr-space-4);
 }
 
@@ -48,7 +48,7 @@
 .sheet__amount {
   font-family: var(--hr-font-display);
   font-variant-numeric: tabular-nums;
-  font-size: 24px;
+  font-size: 1.5rem;
 }
 
 .sheet__actions {
@@ -75,7 +75,7 @@
   border-radius: var(--hr-radius-pill);
   background: none;
   color: var(--hr-negative);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -87,7 +87,7 @@
 
 .sheet__danger-note {
   margin-top: var(--hr-space-2);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
   line-height: 1.45;
 }
@@ -101,7 +101,7 @@
 .sheet__hint {
   display: block;
   margin-top: var(--hr-space-1);
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 400;
   color: var(--hr-text-muted);
   line-height: 1.4;
@@ -117,7 +117,7 @@
 }
 
 .sheet__preview-title {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.06em;
@@ -125,12 +125,12 @@
 
 .sheet__preview-amount {
   margin: var(--hr-space-1) 0;
-  font-size: 22px;
+  font-size: 1.375rem;
   font-weight: 600;
 }
 
 .sheet__preview-note {
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -163,7 +163,7 @@
   gap: var(--hr-space-3);
   min-height: var(--hr-touch-min);
   margin-top: var(--hr-space-4);
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.4;
   cursor: pointer;
 }
@@ -210,7 +210,7 @@
   align-items: flex-start;
   gap: var(--hr-space-3);
   min-height: var(--hr-touch-min);
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.4;
   cursor: pointer;
 }

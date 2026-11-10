@@ -4,8 +4,14 @@
     <meta charset="utf-8" />
     <!-- viewport-fit=cover so the layout reaches under a phone's notch. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="color-scheme" content="light" />
-    <!-- Matches the dark green hero, so the phone's status bar blends in. -->
+    <!--
+      No color-scheme meta: each theme declares its own in tokens.css, where a
+      CSS declaration on :root overrides this, and a meta saying "light" while
+      a dark theme is on would leave the scrollbars and the date picker light
+      on a dark page.
+    -->
+    <!-- Matches the hero, so the phone's status bar blends in. Kept in step
+         with the chosen theme by the appearance store. -->
     <meta name="theme-color" content="#123B33" />
     <meta
       name="description"
@@ -25,6 +31,42 @@
     />
   </head>
   <body>
+    <!--
+      The chosen theme and text size, applied before the first paint.
+
+      This has to be inline and blocking. Doing it in React instead means the
+      browser paints Daylight at full size first and then corrects itself, so
+      every load of a dark theme starts with a flash of white - which is worst
+      in exactly the situation someone chose dark for.
+
+      It reads the same two keys that src/lib/appearance.ts writes, and
+      appearance.test.ts fails if the names ever drift apart. A value it does
+      not recognise is left alone: an unknown data-theme matches no block in
+      tokens.css, so the app falls back to Daylight on its own.
+
+      When CSP arrives with the PWA in M5 this needs a hash or a nonce.
+    -->
+    <script>
+      (function () {
+        try {
+          var root = document.documentElement;
+          var theme = localStorage.getItem("headroom.theme") || "daylight";
+          if (theme === "system") {
+            theme = window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "night"
+              : "daylight";
+          }
+          root.setAttribute("data-theme", theme);
+
+          var scale = parseFloat(localStorage.getItem("headroom.textScale"));
+          if (scale > 0 && scale <= 1) {
+            root.style.setProperty("--hr-text-scale", String(scale));
+          }
+        } catch (error) {
+          /* No storage: the defaults in tokens.css are already right. */
+        }
+      })();
+    </script>
     <div id="root"></div>
     <noscript>
       Headroom needs JavaScript to work out the running balances. Please enable it and reload.

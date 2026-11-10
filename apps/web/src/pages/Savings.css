@@ -17,26 +17,26 @@
 
 .savings__section-title {
   font-family: var(--hr-font-body);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--hr-text-secondary);
 }
 
 .savings__section-total {
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
 .savings__note {
   margin-top: var(--hr-space-1);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
   line-height: 1.45;
 }
 
 .savings__empty {
   margin-top: var(--hr-space-3);
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--hr-text-muted);
 }
 
@@ -86,7 +86,7 @@
   border-radius: var(--hr-radius-pill);
   background: var(--hr-card);
   color: var(--hr-primary);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -124,7 +124,7 @@
 
 .savings__goal-note {
   margin-top: var(--hr-space-2);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
 }
 
@@ -172,7 +172,7 @@
   align-items: center;
   gap: var(--hr-space-1);
   flex-wrap: wrap;
-  font-size: 11px;
+  font-size: 0.6875rem;
 }
 
 .savings__step {
@@ -198,7 +198,7 @@
   border-radius: var(--hr-radius-pill);
   background: var(--hr-card);
   color: var(--hr-primary);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
 }
@@ -222,7 +222,7 @@
 }
 
 .savings__totals dt {
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--hr-text-muted);
 }
 
@@ -277,14 +277,14 @@
 .savings__link-note {
   display: block;
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
   font-weight: 400;
 }
 
 .savings__link > span:last-child {
   color: var(--hr-primary);
-  font-size: 20px;
+  font-size: 1.25rem;
 }
 
 .savings__error {
@@ -292,13 +292,13 @@
 }
 
 .savings__error h2 {
-  font-size: 18px;
+  font-size: 1.125rem;
   margin-bottom: var(--hr-space-2);
 }
 
 .savings__error p {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 /* ---- What is in the account ---- */
@@ -314,7 +314,7 @@
 }
 
 .savings__balance-label {
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: uppercase;
@@ -324,7 +324,7 @@
 .savings__balance-amount {
   margin-top: var(--hr-space-1);
   font-family: var(--hr-font-display);
-  font-size: 40px;
+  font-size: 2.5rem;
   font-weight: 700;
   line-height: 1.1;
   color: var(--hr-ink);
@@ -332,7 +332,7 @@
 
 .savings__balance-note {
   margin-top: var(--hr-space-2);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
   color: var(--hr-text-secondary);
 }
@@ -361,7 +361,7 @@
   justify-content: space-between;
   gap: var(--hr-space-3);
   min-height: 28px;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--hr-text-secondary);
 }
 
@@ -370,7 +370,7 @@
 }
 
 .savings__allocation-row--strong {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 600;
   color: var(--hr-ink);
 }
@@ -381,7 +381,7 @@
 
 .savings__allocation-note {
   margin-top: var(--hr-space-2);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -397,7 +397,7 @@
 .savings__mortgage-amount {
   margin-top: 2px;
   font-family: var(--hr-font-display);
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 700;
   line-height: 1.15;
   color: var(--hr-ink);
@@ -420,7 +420,7 @@
 }
 
 .savings__gain-title {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   line-height: 1.4;
   color: var(--hr-ink);
@@ -428,7 +428,7 @@
 
 .savings__gain-note {
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
   color: var(--hr-text-secondary);
 }
@@ -436,7 +436,7 @@
 .savings__subtitle {
   margin-top: var(--hr-space-4);
   font-family: var(--hr-font-body);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   color: var(--hr-text-secondary);
 }
@@ -463,12 +463,12 @@
 }
 
 .savings__lump-date {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 
 .savings__lump-note {
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
 }
 
@@ -478,7 +478,7 @@
   border-radius: var(--hr-radius-pill);
   background: var(--hr-green-tint);
   color: var(--hr-positive);
-  font-size: 11px;
+  font-size: 0.6875rem;
   font-weight: 700;
   letter-spacing: 0.03em;
   text-transform: uppercase;

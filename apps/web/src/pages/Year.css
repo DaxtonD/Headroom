@@ -12,14 +12,14 @@
 
 .year__intro-title {
   font-family: var(--hr-font-body);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--hr-text-secondary);
   margin-bottom: var(--hr-space-2);
 }
 
 .year__intro-note {
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.5;
   color: var(--hr-text-secondary);
 }
@@ -30,7 +30,7 @@
 
 .year__section-title {
   font-family: var(--hr-font-body);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--hr-text-secondary);
   margin-bottom: var(--hr-space-3);
@@ -85,12 +85,12 @@
 }
 
 .year__highlight-month {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 600;
 }
 
 .year__highlight-amount {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 600;
   white-space: nowrap;
 }
@@ -105,7 +105,7 @@
 
 .year__highlight-why {
   margin-top: 2px;
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-secondary);
   line-height: 1.45;
 }
@@ -130,12 +130,12 @@
 }
 
 .year__month-label {
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 
 .year__month-flavour {
-  font-size: 12px;
+  font-size: 0.75rem;
   font-weight: 600;
   color: var(--hr-text-muted);
   white-space: nowrap;
@@ -160,7 +160,7 @@
   display: flex;
   align-items: baseline;
   gap: var(--hr-space-2);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
 }
 
@@ -177,7 +177,7 @@
 
 .year__month-effect {
   margin-top: var(--hr-space-1);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
@@ -194,13 +194,13 @@
 }
 
 .year__error h2 {
-  font-size: 18px;
+  font-size: 1.125rem;
   margin-bottom: var(--hr-space-2);
 }
 
 .year__error p {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.5;
 }
 

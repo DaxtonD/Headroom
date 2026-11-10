@@ -29,7 +29,7 @@
 
 .ledger__hero-label {
   color: var(--hr-hero-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
   letter-spacing: 0.02em;
 }
@@ -45,7 +45,7 @@
 
 .ledger__hero-meta {
   color: var(--hr-hero-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .ledger__update {
@@ -56,7 +56,7 @@
 }
 
 .ledger__update:hover:not(:disabled) {
-  background: #ffffff;
+  background: var(--hr-hero-raise);
 }
 
 /*
@@ -70,18 +70,18 @@
   gap: var(--hr-space-4);
   margin-top: var(--hr-space-5);
   padding-top: var(--hr-space-4);
-  border-top: 1px solid rgb(255 255 255 / 0.18);
+  border-top: 1px solid var(--hr-hero-divider);
 }
 
 .ledger__hero-sublabel {
   color: var(--hr-hero-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
 }
 
 .ledger__hero-subamount {
   margin-top: 2px;
-  font-size: 24px;
+  font-size: 1.5rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
@@ -89,7 +89,7 @@
 .ledger__hero-note {
   margin-top: var(--hr-space-3);
   color: var(--hr-hero-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -103,14 +103,14 @@
 }
 
 .ledger__warning-title {
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
   line-height: 1.35;
 }
 
 .ledger__warning-detail {
   margin-top: var(--hr-space-1);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -122,14 +122,14 @@
   border-radius: var(--hr-radius-card);
   background: var(--hr-green-tint-soft);
   color: var(--hr-text-secondary);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .ledger__estimates,
 .ledger__loading {
   padding: 0 var(--hr-space-2);
   color: var(--hr-text-secondary);
-  font-size: 14px;
+  font-size: 0.875rem;
   line-height: 1.45;
 }
 
@@ -168,19 +168,19 @@
 
 .ledger__period-title {
   font-family: var(--hr-font-body);
-  font-size: 16px;
+  font-size: 1rem;
   font-weight: 700;
 }
 
 .ledger__period-dates {
   color: var(--hr-text-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
 }
 
 .ledger__period-note {
   margin-top: var(--hr-space-2);
   color: var(--hr-text-secondary);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -207,7 +207,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--hr-space-2);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 /* ---- What a window leaves behind ---- */
@@ -230,7 +230,7 @@
   justify-content: space-between;
   gap: var(--hr-space-3);
   min-height: 26px;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--hr-text-secondary);
 }
 
@@ -240,7 +240,7 @@
 
 /* Room to save is the decision this screen now supports, so it leads. */
 .ledger__subtotal-row--strong {
-  font-size: 17px;
+  font-size: 1.0625rem;
   font-weight: 700;
   color: var(--hr-ink);
 }
@@ -251,7 +251,7 @@
 
 .ledger__subtotal-note {
   margin-top: var(--hr-space-1);
-  font-size: 12px;
+  font-size: 0.75rem;
   line-height: 1.45;
   color: var(--hr-text-muted);
 }
@@ -263,7 +263,7 @@
 .ledger__empty {
   padding: var(--hr-space-3) 0;
   color: var(--hr-text-secondary);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 .ledger__actions {
@@ -282,20 +282,20 @@
 
 .ledger__footer-label {
   color: var(--hr-hero-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
 .ledger__footer-amount {
   margin: var(--hr-space-1) 0;
-  font-size: 32px;
+  font-size: 2rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .ledger__footer-note {
   color: var(--hr-hero-muted);
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
@@ -304,13 +304,13 @@
 }
 
 .ledger__error h2 {
-  font-size: 18px;
+  font-size: 1.125rem;
   margin-bottom: var(--hr-space-2);
 }
 
 .ledger__error p {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
   line-height: 1.5;
 }
 

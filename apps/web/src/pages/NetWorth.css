@@ -11,7 +11,7 @@
   min-height: var(--hr-touch-min);
   color: var(--hr-primary);
   font-weight: 600;
-  font-size: 14px;
+  font-size: 0.875rem;
   text-decoration: none;
 }
 
@@ -27,7 +27,7 @@
 
 .networth__hero-label {
   color: var(--hr-hero-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
@@ -40,7 +40,7 @@
 
 .networth__hero-note {
   color: var(--hr-hero-muted);
-  font-size: 14px;
+  font-size: 0.875rem;
 }
 
 /* ---- Own / owe ---- */
@@ -63,20 +63,20 @@
 
 .networth__section-title {
   font-family: var(--hr-font-body);
-  font-size: 15px;
+  font-size: 0.9375rem;
   font-weight: 600;
   color: var(--hr-text-secondary);
 }
 
 .networth__section-total {
-  font-size: 18px;
+  font-size: 1.125rem;
   font-weight: 600;
 }
 
 .networth__note,
 .networth__empty {
   margin-top: var(--hr-space-2);
-  font-size: 13px;
+  font-size: 0.8125rem;
   color: var(--hr-text-muted);
   line-height: 1.45;
 }
@@ -123,7 +123,7 @@
 
 .networth__entry-note {
   display: block;
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--hr-text-muted);
 }
 
@@ -139,7 +139,7 @@
   border-radius: var(--hr-radius-pill);
   background: var(--hr-card);
   color: var(--hr-primary);
-  font-size: 13px;
+  font-size: 0.8125rem;
   font-weight: 600;
   white-space: nowrap;
   cursor: pointer;
@@ -182,7 +182,7 @@
 
 .networth__breakdown dt {
   flex: 1;
-  font-size: 14px;
+  font-size: 0.875rem;
   color: var(--hr-text-secondary);
   line-height: 1.4;
 }
@@ -210,7 +210,7 @@
 }
 
 .networth__breakdown-total dd {
-  font-size: 18px;
+  font-size: 1.125rem;
 }
 
 /* ---- The headline result ---- */
@@ -223,19 +223,19 @@
 }
 
 .networth__result-label {
-  font-size: 14px;
+  font-size: 0.875rem;
   font-weight: 600;
 }
 
 .networth__result-amount {
   margin: var(--hr-space-1) 0 var(--hr-space-2);
-  font-size: 34px;
+  font-size: 2.125rem;
   font-weight: 600;
   letter-spacing: -0.01em;
 }
 
 .networth__result-note {
-  font-size: 13px;
+  font-size: 0.8125rem;
   line-height: 1.5;
 }
 
@@ -251,7 +251,7 @@
 
 .networth__field-hint {
   margin-top: var(--hr-space-1);
-  font-size: 12px;
+  font-size: 0.75rem;
   color: var(--hr-text-muted);
   line-height: 1.4;
   font-weight: 400;
@@ -262,7 +262,7 @@
   align-items: flex-start;
   gap: var(--hr-space-3);
   margin-top: var(--hr-space-5);
-  font-size: 15px;
+  font-size: 0.9375rem;
   cursor: pointer;
 }
 
@@ -279,13 +279,13 @@
 }
 
 .networth__error h2 {
-  font-size: 18px;
+  font-size: 1.125rem;
   margin-bottom: var(--hr-space-2);
 }
 
 .networth__error p {
   color: var(--hr-text-secondary);
-  font-size: 15px;
+  font-size: 0.9375rem;
 }
 
 @media (min-width: 1024px) {
