@@ -19,6 +19,7 @@ import {
   type TimelineResult,
 } from "@headroom/core";
 import type { PrismaClient } from "../generated/prisma/client.js";
+import { paydaysWithLivePay } from "./generateService.js";
 import type { PrismaLike } from "./versioning.js";
 
 /**
@@ -158,6 +159,38 @@ export async function loadTimelineContext(
     clearedSince.map((occurrence) => occurrence.cents),
   );
 
+  /*
+   * Cheques that have arrived, and paydays whose pay has been turned off.
+   *
+   * Both are reasons a payday legitimately has no row on the timeline, and
+   * neither is something the engine can work out for itself - so without them
+   * it projected a cheque for the payday and counted the same pay twice.
+   *
+   * Only cheques dated today or later are needed: the windows start today, so
+   * no earlier payday is ever projected.
+   */
+  const [receivedCheques, livePaydays] = await Promise.all([
+    prisma.occurrence.findMany({
+      where: {
+        householdId,
+        deletedAt: null,
+        kind: "paycheque",
+        clearedAt: { not: null },
+        date: { gte: fromPlainDate(today) },
+      },
+      select: { date: true },
+    }),
+    paydaysWithLivePay(prisma, householdId),
+  ]);
+
+  const receivedPaycheques = receivedCheques
+    .filter((cheque): cheque is { date: Date } => cheque.date !== null)
+    .map((cheque) => ({ scheduleId: null, date: toPlainDate(cheque.date) }));
+
+  const paydaysWithoutPay = paySchedules
+    .filter((schedule) => !livePaydays.has(schedule.id))
+    .map((schedule) => schedule.id);
+
   const rows = await prisma.occurrence.findMany({
     where: {
       householdId,
@@ -237,6 +270,8 @@ export async function loadTimelineContext(
           // spreadsheet's two-week columns line up.
           anchorScheduleId: paySchedules[0]?.id,
           cushionCents: household.cushionCents,
+          receivedPaycheques,
+          paydaysWithoutPay,
         })
       : [];
 

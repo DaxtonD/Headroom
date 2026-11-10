@@ -879,3 +879,40 @@ function isUniqueViolation(error: unknown): boolean {
 }
 
 export { scheduleSchema };
+
+/**
+ * Which paydays have a live paycheque on the ledger.
+ *
+ * Three callers need this same answer and each used to work it out for itself:
+ * the setup checklist ("a payday has no pay"), the pay-period projection
+ * (which must not expect a cheque the household has turned off) and this
+ * module. The parsing is the fiddly part - `scheduleJson` is a free-form
+ * column - so it lives in one place.
+ *
+ * "Live" means active and not deleted, deliberately: an archived paycheque is
+ * a decision, and everything downstream has to see that the pay is off.
+ */
+export async function paydaysWithLivePay(
+  tx: Pick<Prisma.TransactionClient, "template">,
+  householdId: string,
+): Promise<Set<string>> {
+  const templates = await tx.template.findMany({
+    where: {
+      householdId,
+      kind: "paycheque",
+      scheduleType: "biweekly",
+      active: true,
+      deletedAt: null,
+    },
+    select: { scheduleJson: true },
+  });
+
+  const paydays = new Set<string>();
+  for (const template of templates) {
+    const parsed = scheduleSchema.safeParse(template.scheduleJson);
+    if (!parsed.success || parsed.data.type !== "biweekly") continue;
+    if (parsed.data.payScheduleId !== undefined) paydays.add(parsed.data.payScheduleId);
+  }
+
+  return paydays;
+}

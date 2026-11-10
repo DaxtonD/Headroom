@@ -19,6 +19,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Biweekly expenses | done | | At Dax's request. Any expense can be every two weeks on its own dates; the mortgage can be anchored either way |
 | Manage edits reach the ledger | done | | Bug 14, reported from production. Generation reconciles untouched rows; "I choose when to pay it" takes a planned day |
 | Settings: themes + text size | done | | At Dax's request. Five themes plus match-my-device, five text sizes. Per device, not in the database. Contrast checked by test |
+| Undo for received/paid | done | | Bug 15, found in testing. A cleared cheque is no longer re-projected, archiving the pay stops the ghost, and the ledger offers an undo |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -32,7 +33,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
   second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
   engine, schema and migration, the savings and mortgage API, the Year screen, the Savings screen,
   and Home + Upcoming + Pay plan merged into one Ledger.
-- **756 tests green** as of 2026-11-09: 311 engine, 323 API against a real Postgres, 122 web
+- **765 tests green** as of 2026-11-09: 311 engine, 330 API against a real Postgres, 124 web
   source, token, contrast and appearance checks. Lint, typecheck and `pnpm build` clean.
 - The screens are now: **Ledger, Year, Budget, Savings, Manage**, with Net worth reached from
   Savings. Seven tabs became five.
@@ -676,6 +677,71 @@ fails if the key names ever part company.
 There is no browser in this environment, so the themes were checked by arithmetic, by the build,
 and by a generated preview page built from the real `tokens.css` and sent to Dax to look at.
 Nobody has yet seen the actual app in any theme other than Daylight.
+
+## Bug 15: a received cheque came back as a ghost (2026-11-09, reported from testing)
+
+Reported in this order: a paycheque was on the ledger, it was marked as received, and after that
+the row could not be opened, edited or undone. The income entry was deleted under Manage to get
+rid of it, and the ledger went on showing it anyway.
+
+Three faults, one seam. A paycheque that is not on the timeline gets **projected** from the
+payday instead - right when the cheque has simply not been generated yet, wrong in both of the
+cases here, because "not on the timeline" was being used for three different situations.
+
+### 1. A cheque that had already arrived was projected again
+
+Clearing a row folds its money into the balance and takes the row off the timeline
+(section 6.1). The payday then looked unplaced, so a cheque was projected for it: the same pay
+counted twice in the window's "coming in", and an uneditable "Expected" row standing exactly
+where the real one had been. That row is what looked "locked in" - it was never an occurrence,
+so there was nothing to open.
+
+`computePayPeriods` now takes `receivedPaycheques` and counts those paydays as placed.
+
+### 2. Archiving the pay left the payday projecting forever
+
+Which is why deleting the entry under Manage did not clear it: the row left behind was never
+produced by the thing that was deleted. `paydaysWithoutPay` now stops a payday expecting a cheque
+the household has turned off. The setup checklist still says the payday has no pay on the ledger,
+which is the honest signal - silently showing no income would be worse than the ghost.
+
+Neither fact can be derived inside the engine, so both are supplied by `timelineService`.
+
+### 3. There was no way back from "Mark as received"
+
+The API has always accepted `cleared: false`. Nothing in the app could reach it: clearing a row
+removes it from the ledger, and the ledger is the only screen that lists rows. An accidental tap
+was unrecoverable without SQL.
+
+`GET /api/balance/cleared` lists what has been marked since the balance was last typed in, and
+the ledger shows it as a collapsed "N marked received or paid" section with an Undo on each.
+
+**It deliberately stops at the last balance entry.** Anything cleared before that is already
+inside the figure someone read off the bank, so putting the row back would subtract it a second
+time - the same double count in the other direction. Those need a fresh balance entry, not an
+undo.
+
+### Tidied on the way
+
+- Three places were parsing `scheduleJson` to find which payday a paycheque follows. One
+  `paydaysWithLivePay` now, used by the checklist, the projection and generation.
+- `/api/balance/clearable` was sending `version: 1` for every candidate - a fabricated value
+  nothing read. Removed rather than left to be believed.
+
+### Verified by hand
+
+The whole sequence, over HTTP against a real Postgres: pay on the ledger, marked received
+(balance rises, row leaves, no ghost, undo offered), undone (balance back, row back, editable),
+then archived (row goes, no ghost, checklist says the payday has no pay).
+
+### Known gaps
+
+- **A payday cannot be deleted.** There is no `DELETE /api/pay-schedules/:id`, only POST and
+  PATCH, so a payday entered by mistake can only be edited. Not needed to unblock this report -
+  archiving the pay now behaves - but it is the obvious next thing someone will try.
+- **Projections are now close to dead code.** Generation covers the horizon plus a fortnight and
+  the windows stop at the horizon, so every payday in view has a real cheque. They are kept as a
+  safety net and are still tested, but nobody should expect to see an "Expected" row.
 
 ## Git history and attribution (2026-11-09)
 

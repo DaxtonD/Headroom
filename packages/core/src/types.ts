@@ -187,10 +187,34 @@ export interface PayPeriodOptions {
   readonly periodCount?: number;
   /**
    * Whose paydays the windows are anchored on. The windows in the spreadsheet
-   * run from Dax's paydays (HANDOFF section 5 rule 1).
+   * run from one person's paydays (HANDOFF section 5 rule 1).
    */
   readonly anchorScheduleId?: string;
   readonly cushionCents?: Cents;
+  /**
+   * Cheques that exist but are not on the timeline, because they have already
+   * arrived: clearing a row folds it into the balance and takes it off the
+   * timeline (section 6.1).
+   *
+   * Without these, a payday whose cheque had been marked received looked as
+   * though no cheque had been placed for it, so one was projected - counting
+   * the same pay twice in "coming in" and putting an uneditable "Expected"
+   * row exactly where the real one had been.
+   */
+  readonly receivedPaycheques?: readonly {
+    readonly scheduleId: string | null;
+    readonly date: PlainDate;
+  }[];
+  /**
+   * Paydays the household has turned the pay off for, by archiving the
+   * paycheque under Manage.
+   *
+   * A projection means "a cheque is coming that has not been written down
+   * yet". If the pay has been turned off, nothing is coming, and projecting it
+   * anyway made archiving the entry look as though it had done nothing: the
+   * row left on the ledger was never produced by the thing that was deleted.
+   */
+  readonly paydaysWithoutPay?: readonly string[];
 }
 
 /* -------------------------------------------------------------------------- */

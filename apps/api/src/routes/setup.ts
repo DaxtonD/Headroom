@@ -11,21 +11,17 @@ import { isPlainDate } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
-import { regenerateQuietly, syncPaychequeDefault } from "../lib/generateService.js";
+import {
+  paydaysWithLivePay,
+  regenerateQuietly,
+  syncPaychequeDefault,
+} from "../lib/generateService.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
 import { wireCents } from "../lib/wire.js";
 import { fromPlainDate, toPlainDate } from "../lib/timelineService.js";
 import type { Account, PaySchedule } from "../generated/prisma/client.js";
-
-/**
- * Just enough of a schedule to see which payday a paycheque template follows.
- * The full union is validated in `generateService`.
- */
-const biweeklySchedule = z
-  .object({ payScheduleId: z.string().min(1).optional() })
-  .passthrough();
 
 const plainDate = z
   .string()
@@ -101,7 +97,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
 
-    const [household, schedules, accounts, members, paychequeTemplates] = await Promise.all([
+    const [household, schedules, accounts, members, payrolled] = await Promise.all([
       app.db.prisma.household.findUniqueOrThrow({
         where: { id: user.householdId },
         select: {
@@ -131,17 +127,10 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         select: { id: true, name: true, initial: true, colorFg: true, colorBg: true },
         orderBy: { name: "asc" },
       }),
-      // Which paydays actually put a cheque on the ledger.
-      app.db.prisma.template.findMany({
-        where: {
-          householdId: user.householdId,
-          deletedAt: null,
-          active: true,
-          kind: "paycheque",
-          scheduleType: "biweekly",
-        },
-        select: { scheduleJson: true },
-      }),
+      // Which paydays actually put a cheque on the ledger. Shared with the
+      // pay-period projection, which must not expect a cheque from a payday
+      // whose pay has been turned off.
+      paydaysWithLivePay(app.db.prisma, user.householdId),
     ]);
 
     // What still has to be filled in before the app can work properly. The
@@ -171,13 +160,6 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
      * enough to answer yes while neither person's pay was on the ledger. The
      * checklist stayed silent through exactly the setup it existed to catch.
      */
-    const payrolled = new Set<string>();
-    for (const template of paychequeTemplates) {
-      const parsed = biweeklySchedule.safeParse(template.scheduleJson);
-      if (parsed.success && parsed.data.payScheduleId !== undefined) {
-        payrolled.add(parsed.data.payScheduleId);
-      }
-    }
     if (schedules.some((schedule) => !payrolled.has(schedule.id))) {
       missing.push("income_on_ledger");
     }

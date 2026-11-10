@@ -18,7 +18,7 @@ import { publishChange } from "../lib/changeStream.js";
 import { HttpError, hashRequest, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { logCreation, type PrismaLike } from "../lib/versioning.js";
-import { loadTimelineContext } from "../lib/timelineService.js";
+import { loadTimelineContext, toPlainDate } from "../lib/timelineService.js";
 import { wireCentsNonNegative } from "../lib/wire.js";
 
 const body = z
@@ -212,7 +212,74 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
         name: row.event.name,
         cents: row.event.cents,
         date: row.effectiveDate,
-        version: 1,
+      })),
+    });
+  });
+
+  /**
+   * What has been marked received or paid since the balance was last typed in,
+   * so it can be undone.
+   *
+   * Clearing a row folds its money into the balance and takes the row off the
+   * timeline (section 6.1) - which left an accidental tap on "Mark as
+   * received" with no way back at all, because the ledger is the only screen
+   * that lists rows and the row was no longer on it. The API has always
+   * accepted `cleared: false`; nothing in the app could reach it.
+   *
+   * Deliberately only back to the last snapshot. Anything cleared before that
+   * is already inside the figure a person typed in off the bank, so putting
+   * the row back would subtract it a second time. Those need a fresh balance
+   * entry rather than an undo, and claiming otherwise would be the same double
+   * count in the other direction.
+   */
+  app.get("/balance/cleared", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const account = await app.db.prisma.account.findFirst({
+      where: { householdId: user.householdId, deletedAt: null, kind: "chequing" },
+      select: { id: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    const snapshot = account
+      ? await app.db.prisma.balanceSnapshot.findFirst({
+          where: { accountId: account.id },
+          orderBy: [{ asOf: "desc" }, { createdAt: "desc" }],
+          select: { asOf: true },
+        })
+      : null;
+
+    const items = await app.db.prisma.occurrence.findMany({
+      where: {
+        householdId: user.householdId,
+        deletedAt: null,
+        clearedAt: snapshot ? { gt: snapshot.asOf } : { not: null },
+      },
+      select: {
+        id: true,
+        name: true,
+        cents: true,
+        date: true,
+        kind: true,
+        version: true,
+        clearedAt: true,
+        clearedBy: { select: { id: true, name: true, initial: true } },
+      },
+      orderBy: { clearedAt: "desc" },
+    });
+
+    return reply.send({
+      since: snapshot?.asOf?.toISOString() ?? null,
+      items: items.map((item) => ({
+        id: item.id,
+        name: item.name,
+        cents: item.cents,
+        kind: item.kind,
+        date: item.date ? toPlainDate(item.date) : null,
+        clearedAt: item.clearedAt?.toISOString() ?? null,
+        clearedBy: item.clearedBy,
+        version: item.version,
       })),
     });
   });

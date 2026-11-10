@@ -227,6 +227,7 @@ function parseTimelineRow(row: TimelineRowWire): TimelineRow {
 
 export const dashboardKey = ["dashboard"] as const;
 export const payPeriodsKey = ["pay-periods"] as const;
+export const clearedKey = ["balance", "cleared"] as const;
 
 export function useDashboard() {
   return useQuery({
@@ -341,6 +342,7 @@ function invalidateMoney(queryClient: ReturnType<typeof useQueryClient>): Promis
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: dashboardKey }),
     queryClient.invalidateQueries({ queryKey: payPeriodsKey }),
+    queryClient.invalidateQueries({ queryKey: clearedKey }),
   ]).then(() => undefined);
 }
 
@@ -492,6 +494,44 @@ export function useClearableCandidates(enabled: boolean) {
           ...candidate,
           cents: toCents(candidate.cents),
         })),
+      };
+    },
+  });
+}
+
+export interface ClearedItem {
+  readonly id: string;
+  readonly name: string;
+  readonly cents: Cents;
+  readonly kind: TimelineRowWire["kind"];
+  readonly date: string | null;
+  readonly clearedBy: PersonWire | null;
+  readonly version: number;
+}
+
+/**
+ * What has been marked received or paid since the balance was last typed in.
+ *
+ * The undo for "Mark as received". Clearing a row takes it off the ledger,
+ * which is the only screen that lists rows, so without this an accidental tap
+ * could not be taken back from anywhere in the app.
+ *
+ * The list stops at the last balance entry on purpose: anything cleared before
+ * that is already inside the figure read off the bank, so putting the row back
+ * would count it twice the other way round.
+ */
+export function useClearedItems() {
+  return useQuery({
+    queryKey: clearedKey,
+    queryFn: async (): Promise<{ since: string | null; items: readonly ClearedItem[] }> => {
+      const wire = await api.get<{
+        since: string | null;
+        items: readonly (Omit<ClearedItem, "cents"> & { cents: string })[];
+      }>("/api/balance/cleared");
+
+      return {
+        since: wire.since,
+        items: wire.items.map((item) => ({ ...item, cents: toCents(item.cents) })),
       };
     },
   });

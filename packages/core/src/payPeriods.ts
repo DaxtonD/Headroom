@@ -136,20 +136,38 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
 
   const windows = payPeriodWindows(today, anchorSchedule, periodCount, options.coverThrough);
 
-  // Which scheduled paydays already exist as placed paycheques, so they are
-  // not counted twice. Matched by schedule when the data says which schedule a
-  // cheque came from, and by date otherwise.
+  // Which scheduled paydays already have a cheque, so they are not counted
+  // twice. Matched by schedule when the data says which schedule a cheque came
+  // from, and by date otherwise.
   const placedByScheduleAndDate = new Set<string>();
   const unclaimedByDate = new Map<PlainDate, number>();
 
+  const note = (scheduleId: string | null | undefined, date: PlainDate): void => {
+    if (scheduleId) {
+      placedByScheduleAndDate.add(`${scheduleId}|${date}`);
+    } else {
+      unclaimedByDate.set(date, (unclaimedByDate.get(date) ?? 0) + 1);
+    }
+  };
+
   for (const row of timeline.rows) {
     if (row.event.kind !== "paycheque" || !row.effectiveDate) continue;
-    if (row.event.payScheduleId) {
-      placedByScheduleAndDate.add(`${row.event.payScheduleId}|${row.effectiveDate}`);
-    } else {
-      unclaimedByDate.set(row.effectiveDate, (unclaimedByDate.get(row.effectiveDate) ?? 0) + 1);
-    }
+    note(row.event.payScheduleId, row.effectiveDate);
   }
+
+  /*
+   * A cheque that has already been received counts as placed too.
+   *
+   * It is not on the timeline - clearing it folded the money into the balance
+   * and took the row off (section 6.1) - but it exists, it has arrived, and
+   * projecting a second one for the same payday counts the same pay twice.
+   */
+  for (const received of options.receivedPaycheques ?? []) {
+    note(received.scheduleId, received.date);
+  }
+
+  /** Paydays the household has turned the pay off for: nothing is coming. */
+  const silenced = new Set(options.paydaysWithoutPay ?? []);
 
   const claimUnplacedPaycheque = (schedule: PaySchedule, payday: PlainDate): boolean => {
     if (placedByScheduleAndDate.has(`${schedule.id}|${payday}`)) return true;
@@ -213,9 +231,10 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       }
     }
 
-    // Cheques due in this window that are not placed on the timeline yet.
+    // Cheques due in this window that are not written down anywhere yet.
     const projectedPaychequeIds: string[] = [];
     for (const schedule of paySchedules) {
+      if (silenced.has(schedule.id)) continue;
       for (const payday of paydaysBetween(schedule.anchorDate, window.start, window.end)) {
         if (claimUnplacedPaycheque(schedule, payday)) continue;
         inCents += schedule.defaultCents;
