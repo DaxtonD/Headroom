@@ -152,8 +152,6 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
 
   for (const row of timeline.rows) {
     if (row.event.kind !== "paycheque" || !row.effectiveDate) continue;
-    // A settled cheque counts as placed too: it exists and it has arrived, so
-    // projecting another for the same payday would count the pay twice.
     note(row.event.payScheduleId, row.effectiveDate);
   }
 
@@ -223,10 +221,6 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
     }
 
     for (const row of rows) {
-      // Already inside the balance this window opens with, so counting it in
-      // "coming in" or "going out" would be counting it twice.
-      if (row.event.settled === true) continue;
-
       const cents = row.event.cents;
       if (cents > 0n) {
         inCents += cents;

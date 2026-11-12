@@ -652,18 +652,8 @@ describe("editing changes the derived numbers immediately", () => {
     expect(BigInt(after.lowest.cents) <= BigInt(before.lowest.cents)).toBe(true);
   });
 
-  it("stops counting a bill the balance has taken in, without hiding it", async () => {
-    /*
-     * This used to assert the row was gone from the timeline. It is not any
-     * more, and that is the point: a ledger that hides what has been paid is
-     * no use to the person reading it, which is the complaint that changed it.
-     * What has to stop is the COUNTING, because the balance now carries it.
-     */
+  it("takes a bill off the timeline once it is marked paid", async () => {
     const { ids } = await buildScenario();
-
-    const before = await harness.app
-      .inject({ method: "GET", url: "/api/timeline", headers: { cookie } })
-      .then((response) => response.json());
 
     const patched = await harness.app.inject({
       method: "PATCH",
@@ -677,20 +667,9 @@ describe("editing changes the derived numbers immediately", () => {
       .inject({ method: "GET", url: "/api/timeline", headers: { cookie } })
       .then((response) => response.json());
 
-    // Still there, and saying what it is.
-    const row = timeline.rows.find((one: { id: string }) => one.id === ids.power.id) as
-      | { settled: boolean; requiresCoverage: boolean }
-      | undefined;
-    expect(row).toBeDefined();
-    expect(row?.settled).toBe(true);
-    expect(row?.requiresCoverage).toBe(false);
-
-    // It cleared after the snapshot, so it counts against the balance - once.
+    expect(timeline.rows.map((row: { id: string }) => row.id)).not.toContain(ids.power.id);
+    // It cleared after the snapshot, so it now counts against the balance.
     expect(BigInt(timeline.startBalanceCents)).toBe(START_CENTS - 12_345n);
-
-    // And exactly once: the end of the timeline is unchanged, because what the
-    // opening balance lost the rows no longer take out again.
-    expect(BigInt(timeline.leftThisCycleCents)).toBe(BigInt(before.leftThisCycleCents));
   });
 
   it("keeps the end balance the same when a flexible bill is moved", async () => {

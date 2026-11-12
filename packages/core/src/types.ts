@@ -46,18 +46,6 @@ export interface TimelineInput {
   readonly ownerId?: string | null | undefined;
   /** Which pay schedule produced this cheque, for pay-period projection. */
   readonly payScheduleId?: string | null | undefined;
-  /**
-   * The money is already inside the balance this timeline starts from, so it
-   * must not be counted again.
-   *
-   * A settled row is kept and ordered like any other, and shown like any
-   * other, but it adds nothing to the running balance, nothing to a window's
-   * totals, and nothing to coverage. That is the whole difference between
-   * "this has been dealt with" and "this is no longer on the screen": the
-   * ledger goes on showing what happened, and the arithmetic stops at the
-   * point where the bank balance already knows about it.
-   */
-  readonly settled?: boolean | undefined;
 }
 
 /** One ordered row of the timeline, with the balance after it. */

@@ -143,7 +143,7 @@ export function OccurrenceRow({
   return (
     <li
       className={`row ${isPaycheque ? "row--payday" : ""} ${expanded ? "row--expanded" : ""} ${
-        row.paid || row.settled ? "row--paid" : ""
+        row.paid ? "row--paid" : ""
       }`}
     >
       <button
@@ -164,7 +164,7 @@ export function OccurrenceRow({
         <span className="row__main">
           <span className="row__name">{row.name}</span>
           <span className="row__chips">
-            {row.paid || row.settled ? (
+            {row.paid ? (
               <Chip tone="payday">{row.cents > 0n ? "Received" : "Paid"}</Chip>
             ) : null}
             {isPaycheque ? (
@@ -182,7 +182,7 @@ export function OccurrenceRow({
           </span>
           {!isPaycheque ? (
             <span className="row__owner">
-              {row.paid || row.settled
+              {row.paid
                 ? row.paidBy
                   ? `Marked by ${row.paidBy.name}`
                   : "Dealt with"
@@ -199,13 +199,7 @@ export function OccurrenceRow({
 
         <span className="row__figures">
           <Amount cents={row.cents} className="row__amount" signed />
-          {row.settled ? (
-            // It changed the balance before the figure above was typed in, so
-            // printing a running balance here would claim it happened twice.
-            <span className="row__running row__running--settled">in your balance</span>
-          ) : (
-            <span className="row__running hr-amount">{formatCents(row.runningCents)}</span>
-          )}
+          <span className="row__running hr-amount">{formatCents(row.runningCents)}</span>
         </span>
       </button>
 
@@ -225,13 +219,7 @@ export function OccurrenceRow({
             </p>
           ) : null}
 
-          {row.settled ? (
-            <p className="row__note">
-              Paid, and already inside the balance at the top — so it is shown here but counted in
-              nothing. Undo it if it turns out the balance did not include it after all, and it
-              goes back to counting.
-            </p>
-          ) : row.paid ? (
+          {row.paid ? (
             <p className="row__note">
               Ticked as dealt with. It still counts towards the running balance — the figures
               change when you type in a balance from the bank, not when you tick this.
@@ -349,37 +337,20 @@ export function OccurrenceRow({
                 entirely and subtracted it from the balance a second time if
                 that balance had already accounted for it.
               */}
-              {row.settled ? (
-                /*
-                 * Undoing a settled row says "that is not inside my balance
-                 * after all", so it has to put the row back to counting - and
-                 * untick it too, because the tick was what the balance update
-                 * acted on.
-                 */
-                <button
-                  className="hr-button hr-button--secondary"
-                  type="button"
-                  disabled={!canEdit || saving}
-                  onClick={() => void save({ cleared: false, paid: false })}
-                >
-                  Undo, and count it again
-                </button>
-              ) : (
-                <button
-                  className={`hr-button ${row.paid ? "" : "hr-button--secondary"}`}
-                  type="button"
-                  disabled={!canEdit || saving}
-                  onClick={() => void save({ paid: !row.paid })}
-                >
-                  {row.paid
-                    ? row.cents > 0n
-                      ? "Undo received"
-                      : "Undo paid"
-                    : row.cents > 0n
-                      ? "Mark as received"
-                      : "Mark as paid"}
-                </button>
-              )}
+              <button
+                className={`hr-button ${row.paid ? "" : "hr-button--secondary"}`}
+                type="button"
+                disabled={!canEdit || saving}
+                onClick={() => void save({ paid: !row.paid })}
+              >
+                {row.paid
+                  ? row.cents > 0n
+                    ? "Undo received"
+                    : "Undo paid"
+                  : row.cents > 0n
+                    ? "Mark as received"
+                    : "Mark as paid"}
+              </button>
             </div>
 
             {/*

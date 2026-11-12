@@ -85,11 +85,6 @@ interface TimelineRowWire {
   readonly verifiedAt: string | null;
   readonly paid: boolean;
   readonly paidBy: PersonWire | null;
-  /**
-   * Already inside the balance typed in off the bank, so it is shown and
-   * counted in nothing. Its running balance is the one carried past it.
-   */
-  readonly settled: boolean;
   readonly owner: PersonWire | null;
   readonly requiresCoverage: boolean;
   readonly runningCents: string;
@@ -165,11 +160,6 @@ export interface TimelineRow {
   /** Ticked as dealt with. A marker only: it moves no figure. */
   readonly paid: boolean;
   readonly paidBy: PersonWire | null;
-  /**
-   * Already inside the balance typed in off the bank, so it is shown and
-   * counted in nothing. Its running balance is the one carried past it.
-   */
-  readonly settled: boolean;
   readonly owner: PersonWire | null;
   readonly requiresCoverage: boolean;
   readonly runningCents: Cents;

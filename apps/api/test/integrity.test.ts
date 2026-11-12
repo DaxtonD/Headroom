@@ -520,20 +520,11 @@ describe("balance snapshots", () => {
     expect(dashboard.balance.cents).toBe("26000");
     expect(dashboard.balance.snapshotCents).toBe("41000");
 
-    // And it has stopped counting, without leaving the screen: the ledger goes
-    // on showing what was paid, and only the arithmetic stops.
+    // And it has left the timeline.
     const timeline = await harness.app
       .inject({ method: "GET", url: "/api/timeline", headers: { cookie: carolCookie } })
       .then((response) => response.json());
-
-    const row = timeline.rows.find((one: { id: string }) => one.id === bill.id) as
-      | { settled: boolean; runningCents: string }
-      | undefined;
-    expect(row?.settled).toBe(true);
-
-    // The balance carries past it unchanged, which is the thing that stops the
-    // same bill being taken out twice.
-    expect(BigInt(row?.runningCents ?? "0")).toBe(BigInt(timeline.startBalanceCents as string));
+    expect(timeline.rows.map((row: { id: string }) => row.id)).not.toContain(bill.id);
   });
 });
 
