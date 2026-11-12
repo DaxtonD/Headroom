@@ -130,6 +130,7 @@ interface ExistingOccurrence {
   readonly version: number;
   readonly customisedAt: Date | null;
   readonly verifiedAt: Date | null;
+  readonly paidAt: Date | null;
   readonly clearedAt: Date | null;
 }
 
@@ -282,27 +283,45 @@ export async function ensurePaychequeTemplates(
   const created: string[] = [];
   for (const schedule of schedules) {
     if (claimed.has(schedule.id) || blocked.has(schedule.id)) continue;
-
-    const template = await tx.template.create({
-      data: {
-        householdId,
-        kind: "paycheque",
-        name: paychequeNameFor(schedule.user.name),
-        defaultCents: schedule.defaultCents,
-        ownerUserId: schedule.userId,
-        // A paycheque lands on a date the employer chose, like any other
-        // dated item. It is not something that can be moved to a later cheque.
-        withdrawal: "auto",
-        scheduleType: "biweekly",
-        scheduleJson: { type: "biweekly", payScheduleId: schedule.id },
-        section: "income",
-      },
-      select: { id: true },
-    });
+    const template = await createPaycheque(tx, householdId, schedule);
     created.push(template.id);
   }
 
   return created;
+}
+
+/**
+ * One paycheque template, bound to the payday it follows.
+ *
+ * Shared by automatic generation and by the explicit "put the pay back"
+ * request, so the two cannot drift into producing different rows.
+ */
+async function createPaycheque(
+  tx: Prisma.TransactionClient,
+  householdId: string,
+  schedule: {
+    id: string;
+    userId: string;
+    defaultCents: bigint;
+    user: { name: string };
+  },
+): Promise<{ id: string; version: number; name: string }> {
+  return await tx.template.create({
+    data: {
+      householdId,
+      kind: "paycheque",
+      name: paychequeNameFor(schedule.user.name),
+      defaultCents: schedule.defaultCents,
+      ownerUserId: schedule.userId,
+      // A paycheque lands on a date the employer chose, like any other dated
+      // item. It is not something that can be moved to a later cheque.
+      withdrawal: "auto",
+      scheduleType: "biweekly",
+      scheduleJson: { type: "biweekly", payScheduleId: schedule.id },
+      section: "income",
+    },
+    select: { id: true, version: true, name: true },
+  });
 }
 
 /**
@@ -577,6 +596,7 @@ export async function generateForHousehold(
       version: true,
       customisedAt: true,
       verifiedAt: true,
+      paidAt: true,
       clearedAt: true,
     },
   });
@@ -814,16 +834,22 @@ function occurrenceKey(templateId: string, periodKey: string): string {
  * Has a person made this row their own?
  *
  * If so, generation must never change it again. Three things count, and all
- * three are statements by a person rather than by a template: the row's own
- * details were edited, somebody confirmed the amount, or somebody marked it
- * paid.
+ * four are statements by a person rather than by a template: the row's own
+ * details were edited, somebody confirmed the amount, somebody ticked it as
+ * dealt with, or it is already inside a typed-in balance.
  */
 function isSomebodysOwn(row: {
   customisedAt: Date | null;
   verifiedAt: Date | null;
+  paidAt: Date | null;
   clearedAt: Date | null;
 }): boolean {
-  return row.customisedAt !== null || row.verifiedAt !== null || row.clearedAt !== null;
+  return (
+    row.customisedAt !== null ||
+    row.verifiedAt !== null ||
+    row.paidAt !== null ||
+    row.clearedAt !== null
+  );
 }
 
 /** A stored `@db.Date` against a plain date the engine produced. */
@@ -915,4 +941,93 @@ export async function paydaysWithLivePay(
   }
 
   return paydays;
+}
+
+/**
+ * Put a payday's pay back on the ledger.
+ *
+ * The checklist could say a payday had no paycheque and leave no way to act on
+ * it. `ensurePaychequeTemplates` deliberately will not recreate an archived
+ * cheque - turning the pay off has to stick - and the only button under "Money
+ * coming in" creates a `deposit`, which looks like income in the list but
+ * satisfies none of the things a paycheque does: it does not anchor flexible
+ * bills, it does not claim the payday, and so the checklist went on
+ * complaining whatever was entered.
+ *
+ * So this is the deliberate opposite of archiving, asked for explicitly:
+ * restore the archived cheque for this payday if there is one, otherwise make
+ * one. Returns the template, or null if the payday already has live pay.
+ */
+export async function restorePaycheque(
+  tx: Prisma.TransactionClient,
+  householdId: string,
+  payScheduleId: string,
+  userId: string,
+): Promise<{ id: string; version: number; name: string } | null> {
+  const live = await paydaysWithLivePay(tx, householdId);
+  if (live.has(payScheduleId)) return null;
+
+  const schedule = await tx.paySchedule.findFirst({
+    where: { id: payScheduleId, deletedAt: null, user: { householdId, deletedAt: null } },
+    select: {
+      id: true,
+      userId: true,
+      defaultCents: true,
+      user: { select: { name: true } },
+    },
+  });
+  if (!schedule) return null;
+
+  const candidates = await tx.template.findMany({
+    where: {
+      householdId,
+      kind: "paycheque",
+      scheduleType: "biweekly",
+      deletedAt: null,
+      active: false,
+    },
+    select: { id: true, version: true, name: true, ownerUserId: true, scheduleJson: true },
+  });
+
+  // Bound to this payday by id, or failing that owned by the person whose
+  // payday it is - which is how a cheque entered by hand before paydays
+  // brought their own would look.
+  const archived =
+    candidates.find((candidate) => {
+      const parsed = scheduleSchema.safeParse(candidate.scheduleJson);
+      return (
+        parsed.success &&
+        parsed.data.type === "biweekly" &&
+        parsed.data.payScheduleId === payScheduleId
+      );
+    }) ?? candidates.find((candidate) => candidate.ownerUserId === schedule.userId);
+
+  if (archived) {
+    return await tx.template.update({
+      where: { id: archived.id },
+      data: {
+        active: true,
+        // Rebind it, in case it was one of the hand-made ones that never named
+        // the payday it follows.
+        scheduleJson: { type: "biweekly", payScheduleId },
+        ownerUserId: schedule.userId,
+        version: archived.version + 1,
+        updatedById: userId,
+        updatedAt: new Date(),
+      },
+      select: { id: true, version: true, name: true },
+    });
+  }
+
+  /*
+   * Nothing to restore, so make one.
+   *
+   * Deliberately not via `ensurePaychequeTemplates`: that refuses to recreate
+   * a cheque that has been removed, because automatic generation must never
+   * undo a household's decision. This is not automatic - somebody pressed a
+   * button that says to put the pay back - so the refusal does not apply, and
+   * going through it would make the button do nothing at all for a payday
+   * whose cheque was removed rather than archived.
+   */
+  return await createPaycheque(tx, householdId, schedule);
 }

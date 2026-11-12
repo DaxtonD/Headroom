@@ -9,7 +9,7 @@ import type { Cents } from "@headroom/core";
 import { api, newIdempotencyKey } from "./api.js";
 import { budgetKey, goalsKey, netWorthKey, yearKey } from "./plannerQueries.js";
 import { savingsKey } from "./savingsQueries.js";
-import { clearedKey, dashboardKey, payPeriodsKey } from "./queries.js";
+import { dashboardKey, payPeriodsKey } from "./queries.js";
 
 const toCents = (value: string): Cents => BigInt(value);
 
@@ -91,6 +91,12 @@ export interface AccountEntry {
   readonly version: number;
 }
 
+/** A payday that is not putting any money on the ledger, and whose it is. */
+export interface PaydayWithoutPay {
+  readonly scheduleId: string;
+  readonly person: string;
+}
+
 export interface Setup {
   readonly household: HouseholdSettings;
   readonly members: readonly Member[];
@@ -98,6 +104,7 @@ export interface Setup {
   readonly accounts: readonly AccountEntry[];
   /** What still has to be filled in before everything works properly. */
   readonly missing: readonly string[];
+  readonly paydaysWithoutPay: readonly PaydayWithoutPay[];
 }
 
 /**
@@ -135,6 +142,7 @@ export function useSetup() {
         paySchedules: (Omit<PayScheduleEntry, "defaultCents"> & { defaultCents: string })[];
         accounts: AccountEntry[];
         missing: string[];
+        paydaysWithoutPay: PaydayWithoutPay[];
       }>("/api/setup");
 
       return {
@@ -158,6 +166,8 @@ export function useSetup() {
         })),
         accounts: wire.accounts,
         missing: wire.missing,
+        // Absent from an older server, and this reads during a rolling update.
+        paydaysWithoutPay: wire.paydaysWithoutPay ?? [],
       };
     },
   });
@@ -236,7 +246,6 @@ function invalidateEverything(queryClient: ReturnType<typeof useQueryClient>): P
       yearKey,
       dashboardKey,
       payPeriodsKey,
-      clearedKey,
     ].map((key) => queryClient.invalidateQueries({ queryKey: key })),
   ).then(() => undefined);
 }
@@ -545,6 +554,30 @@ export function usePatchAccount() {
         baseVersion: input.version,
         idempotencyKey: newIdempotencyKey(),
       }),
+    onSuccess: () => invalidateEverything(queryClient),
+  });
+}
+
+/**
+ * Put a payday's pay back on the ledger.
+ *
+ * The resolution for "a payday has no paycheque": it restores the archived
+ * cheque, or creates one if there is nothing to restore. Without this the
+ * checklist named a problem whose only fix was to find a collapsed Archived
+ * section further down the same screen - and if the cheque had been removed
+ * rather than archived, there was no fix at all, because the button under
+ * "Money coming in" makes a deposit rather than a paycheque.
+ */
+export function useRestorePaycheque() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { scheduleId: string }) =>
+      api.post<{ restored: boolean }>(
+        `/api/pay-schedules/${input.scheduleId}/paycheque`,
+        {},
+        { idempotencyKey: newIdempotencyKey() },
+      ),
     onSuccess: () => invalidateEverything(queryClient),
   });
 }

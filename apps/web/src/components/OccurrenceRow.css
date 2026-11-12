@@ -212,3 +212,25 @@
 .row__danger:hover:not(:disabled) {
   background: var(--hr-negative-hover);
 }
+
+/*
+ * A row that has been ticked as dealt with.
+ *
+ * Dimmed and struck rather than removed: it still counts towards the running
+ * balance, and a ledger whose lines disappear is the complaint this answers.
+ * The chip beside the name carries the word, so the styling is not the only
+ * thing saying it.
+ */
+.row--paid .row__name {
+  text-decoration: line-through;
+  text-decoration-thickness: 1px;
+}
+
+.row--paid .row__summary {
+  opacity: 0.72;
+}
+
+.row--paid:hover .row__summary,
+.row--paid.row--expanded .row__summary {
+  opacity: 1;
+}

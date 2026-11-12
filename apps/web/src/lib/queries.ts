@@ -64,6 +64,7 @@ interface DashboardWire {
     readonly balanceAfterCents: string;
     readonly verified: boolean;
     readonly verifiedBy: PersonWire | null;
+    readonly paid: boolean;
     readonly owner: PersonWire | null;
     readonly version: number;
   }[];
@@ -82,6 +83,8 @@ interface TimelineRowWire {
   readonly verified: boolean;
   readonly verifiedBy: PersonWire | null;
   readonly verifiedAt: string | null;
+  readonly paid: boolean;
+  readonly paidBy: PersonWire | null;
   readonly owner: PersonWire | null;
   readonly requiresCoverage: boolean;
   readonly runningCents: string;
@@ -136,6 +139,7 @@ export interface Dashboard {
     readonly balanceAfterCents: Cents;
     readonly verified: boolean;
     readonly verifiedBy: PersonWire | null;
+    readonly paid: boolean;
     readonly owner: PersonWire | null;
     readonly version: number;
   }[];
@@ -153,6 +157,9 @@ export interface TimelineRow {
   readonly isOneOff: boolean;
   readonly verified: boolean;
   readonly verifiedBy: PersonWire | null;
+  /** Ticked as dealt with. A marker only: it moves no figure. */
+  readonly paid: boolean;
+  readonly paidBy: PersonWire | null;
   readonly owner: PersonWire | null;
   readonly requiresCoverage: boolean;
   readonly runningCents: Cents;
@@ -227,7 +234,6 @@ function parseTimelineRow(row: TimelineRowWire): TimelineRow {
 
 export const dashboardKey = ["dashboard"] as const;
 export const payPeriodsKey = ["pay-periods"] as const;
-export const clearedKey = ["balance", "cleared"] as const;
 
 export function useDashboard() {
   return useQuery({
@@ -342,7 +348,6 @@ function invalidateMoney(queryClient: ReturnType<typeof useQueryClient>): Promis
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: dashboardKey }),
     queryClient.invalidateQueries({ queryKey: payPeriodsKey }),
-    queryClient.invalidateQueries({ queryKey: clearedKey }),
   ]).then(() => undefined);
 }
 
@@ -351,6 +356,19 @@ export interface OccurrenceChange {
   readonly cents?: string;
   readonly name?: string;
   readonly verified?: boolean;
+  /**
+   * "We have dealt with this." A tick: the row stays on the ledger and goes on
+   * being counted, and no figure moves. Whether the money has left is answered
+   * by the balance typed in off the bank.
+   */
+  readonly paid?: boolean;
+  /**
+   * "This is already inside the balance that was typed in."
+   *
+   * Sent only by the balance-update sheet. It used to be reachable from a row
+   * on the ledger, which is how a bill could be subtracted twice: once inside
+   * the figure read off the bank and once again by marking it paid.
+   */
   readonly cleared?: boolean;
   readonly anchorOccurrenceId?: string | null;
   readonly sortIndex?: number;
@@ -475,6 +493,8 @@ export interface ClearableCandidate {
   readonly name: string;
   readonly cents: Cents;
   readonly date: string | null;
+  /** Already ticked as dealt with, so the sheet can tick it for them. */
+  readonly paid: boolean;
 }
 
 /** "Did any of these clear since the last update?" (HANDOFF section 6.1) */
@@ -485,7 +505,13 @@ export function useClearableCandidates(enabled: boolean) {
     queryFn: async (): Promise<{ currentCents: Cents; candidates: readonly ClearableCandidate[] }> => {
       const wire = await api.get<{
         currentCents: string;
-        candidates: readonly { id: string; name: string; cents: string; date: string | null }[];
+        candidates: readonly {
+          id: string;
+          name: string;
+          cents: string;
+          date: string | null;
+          paid: boolean;
+        }[];
       }>("/api/balance/clearable");
 
       return {
@@ -494,44 +520,6 @@ export function useClearableCandidates(enabled: boolean) {
           ...candidate,
           cents: toCents(candidate.cents),
         })),
-      };
-    },
-  });
-}
-
-export interface ClearedItem {
-  readonly id: string;
-  readonly name: string;
-  readonly cents: Cents;
-  readonly kind: TimelineRowWire["kind"];
-  readonly date: string | null;
-  readonly clearedBy: PersonWire | null;
-  readonly version: number;
-}
-
-/**
- * What has been marked received or paid since the balance was last typed in.
- *
- * The undo for "Mark as received". Clearing a row takes it off the ledger,
- * which is the only screen that lists rows, so without this an accidental tap
- * could not be taken back from anywhere in the app.
- *
- * The list stops at the last balance entry on purpose: anything cleared before
- * that is already inside the figure read off the bank, so putting the row back
- * would count it twice the other way round.
- */
-export function useClearedItems() {
-  return useQuery({
-    queryKey: clearedKey,
-    queryFn: async (): Promise<{ since: string | null; items: readonly ClearedItem[] }> => {
-      const wire = await api.get<{
-        since: string | null;
-        items: readonly (Omit<ClearedItem, "cents"> & { cents: string })[];
-      }>("/api/balance/cleared");
-
-      return {
-        since: wire.since,
-        items: wire.items.map((item) => ({ ...item, cents: toCents(item.cents) })),
       };
     },
   });

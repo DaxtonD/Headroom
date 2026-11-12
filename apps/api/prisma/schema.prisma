@@ -207,6 +207,7 @@ model User {
   ownedTemplates   Template[]         @relation("templateOwner")
   ownedOccurrences Occurrence[]       @relation("occurrenceOwner")
   verifiedOccurrences Occurrence[]    @relation("occurrenceVerifier")
+  paidOccurrences     Occurrence[]    @relation("occurrencePayer")
   clearedOccurrences  Occurrence[]    @relation("occurrenceClearer")
   snapshots        BalanceSnapshot[]
   bankedHours      BankedHoursEntry[]
@@ -391,6 +392,19 @@ model Occurrence {
 
   verifiedById String?   @db.Uuid
   verifiedAt   DateTime? @db.Timestamptz(6)
+
+  /// "We have dealt with this." A tick for the two people, and nothing else:
+  /// the row stays on the timeline and goes on being counted, because whether
+  /// the money has left is decided by the bank balance somebody types in, not
+  /// by a tick. Keeping the two apart is what stops a bill being subtracted
+  /// twice - once inside the balance read off the bank, and once by marking it
+  /// paid afterwards.
+  paidById     String?   @db.Uuid
+  paidAt       DateTime? @db.Timestamptz(6)
+
+  /// "This is already inside the balance that was typed in", so the timeline
+  /// must stop counting it. Set only by the balance-update checklist, which is
+  /// the one place that knows what the typed figure included.
   clearedById  String?   @db.Uuid
   clearedAt    DateTime? @db.Timestamptz(6)
 
@@ -415,6 +429,7 @@ model Occurrence {
   // Who entered the real amount, and who marked it paid. The other person has
   // to be able to see this clearly (HANDOFF section 5 rule 5).
   verifiedBy User?        @relation("occurrenceVerifier", fields: [verifiedById], references: [id])
+  paidBy     User?        @relation("occurrencePayer", fields: [paidById], references: [id])
   clearedBy  User?        @relation("occurrenceClearer", fields: [clearedById], references: [id])
   anchor     Occurrence?  @relation("anchorChildren", fields: [anchorOccurrenceId], references: [id], onDelete: SetNull)
   anchored   Occurrence[] @relation("anchorChildren")

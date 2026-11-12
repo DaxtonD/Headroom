@@ -57,6 +57,22 @@ async function seedSchedules() {
   return { dax, carol };
 }
 
+/**
+ * A day of the month three days from now.
+ *
+ * Any fixed day is a time bomb: `day: 9` put the next occurrence on the 9th of
+ * NEXT month for most of any month, which is past the horizon, so the row
+ * generated but never reached the timeline and the test failed for two thirds
+ * of every month. Three days out is always inside the horizon, which is at
+ * least a fortnight.
+ */
+function dayInAFewDays(): number {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + 3);
+  return date.getUTCDate();
+}
+
 function generate() {
   return harness.app.inject({
     method: "POST",
@@ -114,7 +130,7 @@ describe("generation happens on its own", () => {
         kind: "bill",
         defaultCents: "1800",
         withdrawal: "auto",
-        schedule: { type: "monthly", day: 9 },
+        schedule: { type: "monthly", day: dayInAFewDays() },
       },
     });
     const template = created.json().template;

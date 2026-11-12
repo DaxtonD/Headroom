@@ -38,6 +38,7 @@ import {
   usePatchAccount,
   usePatchBill,
   usePatchHousehold,
+  useRestorePaycheque,
   useSaveIncome,
   useSetup,
   type AccountEntry,
@@ -69,6 +70,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
   const [editing, setEditing] = useState<Editing>(null);
   const [showArchived, setShowArchived] = useState(false);
+  const restorePay = useRestorePaycheque();
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
@@ -141,15 +143,32 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
               The one that caused a real wrong answer in production: paydays
               entered, no income on the ledger, so every bill looked uncovered.
             */}
-            {data.missing.includes("income_on_ledger") ? (
-              <li>
-                <strong>A payday has no paycheque on the ledger.</strong> Paydays set the dates
-                everything hangs off; the paycheque is what puts the money on the timeline. Without
-                it the running balance only ever goes down and the coverage warning fires. Adding a
-                payday creates its paycheque, so this means one was archived - restore it under
-                <em> Money coming in</em> below.
+            {data.paydaysWithoutPay.map((payday) => (
+              <li key={payday.scheduleId}>
+                <strong>{payday.person}&rsquo;s payday is not putting any money on the ledger.</strong>{" "}
+                A payday sets the dates everything hangs off; a <em>paycheque</em> is what puts the
+                money on the timeline, anchors the flexible bills and stops every withdrawal
+                looking uncovered. Anything added under <em>Money coming in</em> by hand is a
+                deposit, which sits in the same list but does none of that — so this is the button
+                that fixes it.
+                <span className="manage__checklist-action">
+                  <button
+                    className="hr-button manage__checklist-button"
+                    type="button"
+                    disabled={!canEdit || restorePay.isPending}
+                    onClick={() =>
+                      void restorePay
+                        .mutateAsync({ scheduleId: payday.scheduleId })
+                        .catch(() => undefined)
+                    }
+                  >
+                    {restorePay.isPending
+                      ? "Putting it back…"
+                      : `Put ${payday.person}'s pay on the ledger`}
+                  </button>
+                </span>
               </li>
-            ) : null}
+            ))}
             {data.missing.includes("pay_schedule") ? (
               <li>
                 <strong>Paydays.</strong> Without these, pay periods and the horizon cannot be
@@ -646,7 +665,17 @@ function describeSchedule(bill: Bill): string {
     case "relative_to_pay":
       return `${schedule.offsetDays === 0 ? "On" : `${schedule.offsetDays} day(s) after`} a payday${howOften}`;
     case "biweekly":
-      return `Every payday${howOften}`;
+      /*
+       * Worth distinguishing. Both a paycheque and a hand-entered deposit sit
+       * in "Money coming in" looking alike, and only the paycheque anchors
+       * flexible bills and satisfies the payday - which is exactly the
+       * confusion that had someone adding a deposit and wondering why the
+       * checklist would not clear.
+       */
+      if (bill.kind === "paycheque" && schedule.payScheduleId !== undefined) {
+        return `From the payday below — the amount follows it${howOften}`;
+      }
+      return `Every two weeks${howOften}`;
     case "flexible":
       if (schedule.frequency === "per_pay_period") return `Flexible, every payday${howOften}`;
       // A planned day is worth saying: it is why this one sits where it does

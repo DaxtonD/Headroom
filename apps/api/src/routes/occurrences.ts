@@ -44,6 +44,21 @@ const patchBody = z
     cents: centsSchema.optional(),
     name: z.string().trim().min(1, "Give this a name.").max(120).optional(),
     verified: z.boolean().optional(),
+    /**
+     * "We have dealt with this." A tick, and nothing more: the row stays on
+     * the timeline and goes on being counted. Whether the money has left is
+     * answered by the balance somebody types in off the bank.
+     */
+    paid: z.boolean().optional(),
+    /**
+     * "This is already inside the balance that was typed in", so the timeline
+     * must stop counting it.
+     *
+     * Set by the balance-update checklist, which is the only place that knows
+     * what the typed figure covered. It used to be reachable from a row on the
+     * ledger too, which is how a bill could be subtracted twice: once inside
+     * the figure read off the bank and once again by marking it paid.
+     */
     cleared: z.boolean().optional(),
     // null means "move it to before the first upcoming paycheque".
     anchorOccurrenceId: z.string().uuid().nullable().optional(),
@@ -88,6 +103,9 @@ function serialiseOccurrence(row: Occurrence) {
     verified: row.verifiedAt !== null,
     verifiedById: row.verifiedById,
     verifiedAt: row.verifiedAt?.toISOString() ?? null,
+    paid: row.paidAt !== null,
+    paidById: row.paidById,
+    paidAt: row.paidAt?.toISOString() ?? null,
     cleared: row.clearedAt !== null,
     clearedById: row.clearedById,
     clearedAt: row.clearedAt?.toISOString() ?? null,
@@ -113,6 +131,7 @@ function snapshotOccurrence(row: Occurrence): Record<string, unknown> {
     anchorOccurrenceId: row.anchorOccurrenceId,
     sortIndex: row.sortIndex,
     verified: row.verifiedAt !== null,
+    paid: row.paidAt !== null,
     cleared: row.clearedAt !== null,
     ownerUserId: row.ownerUserId,
   };
@@ -126,6 +145,10 @@ function actionFor(changes: Record<string, unknown>): ActivityAction {
   const keys = Object.keys(changes);
   if (keys.length === 1) {
     if ("verified" in changes) return changes["verified"] === true ? "verify" : "unverify";
+    // A tick and a clearing are different statements, but the history only has
+    // the one pair of verbs for "done"/"not done" and they read correctly for
+    // both: "marked Power paid".
+    if ("paid" in changes) return changes["paid"] === true ? "clear" : "unclear";
     if ("cleared" in changes) return changes["cleared"] === true ? "clear" : "unclear";
     if ("anchorOccurrenceId" in changes || "sortIndex" in changes) return "move";
   }
@@ -505,6 +528,9 @@ function dropNoOps(
       case "verified":
         if (value !== (current.verifiedAt !== null)) result[field] = value;
         break;
+      case "paid":
+        if (value !== (current.paidAt !== null)) result[field] = value;
+        break;
       case "cleared":
         if (value !== (current.clearedAt !== null)) result[field] = value;
         break;
@@ -570,6 +596,15 @@ function toPrismaData(changes: Record<string, unknown>, userId: string): Record<
         } else {
           data["verifiedAt"] = null;
           data["verifiedById"] = null;
+        }
+        break;
+      case "paid":
+        if (value === true) {
+          data["paidAt"] = now;
+          data["paidById"] = userId;
+        } else {
+          data["paidAt"] = null;
+          data["paidById"] = null;
         }
         break;
       case "cleared":

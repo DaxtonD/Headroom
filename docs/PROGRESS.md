@@ -20,6 +20,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Manage edits reach the ledger | done | | Bug 14, reported from production. Generation reconciles untouched rows; "I choose when to pay it" takes a planned day |
 | Settings: themes + text size | done | | At Dax's request. Five themes plus match-my-device, five text sizes. Per device, not in the database. Contrast checked by test |
 | Undo for received/paid | done | | Bug 15, found in testing. A cleared cheque is no longer re-projected, archiving the pay stops the ghost, and the ledger offers an undo |
+| "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -33,7 +34,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
   second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
   engine, schema and migration, the savings and mortgage API, the Year screen, the Savings screen,
   and Home + Upcoming + Pay plan merged into one Ledger.
-- **765 tests green** as of 2026-11-09: 311 engine, 330 API against a real Postgres, 124 web
+- **780 tests green** as of 2026-11-11: 311 engine, 345 API against a real Postgres, 124 web
   source, token, contrast and appearance checks. Lint, typecheck and `pnpm build` clean.
 - The screens are now: **Ledger, Year, Budget, Savings, Manage**, with Net worth reached from
   Savings. Seven tabs became five.
@@ -762,6 +763,79 @@ positive figure on it as well, in all five themes.
 - **Projections are now close to dead code.** Generation covers the horizon plus a fortnight and
   the windows stop at the horizon, so every payday in view has a real cheque. They are kept as a
   safety net and are still tested, but nobody should expect to see an "Expected" row.
+
+## Bug 16: "paid" was doing two jobs (2026-11-11, reported from use)
+
+Two reports in one message, and the second one turned out to be a silent money bug.
+
+### "A payday has no paycheque" with no way to resolve it
+
+The checklist said this while both people's pay was entered under "Money coming in". It was
+right, and nothing on screen could have explained why.
+
+**"Money coming in" shows two different things in one list and never says which is which.** A
+`paycheque` is created by a payday and is what anchors flexible bills and satisfies the
+checklist. A `deposit` is what the only button there creates. They look identical in the list
+and do completely different jobs - so re-adding archived pay by hand produced a deposit, and the
+checklist went on complaining about something the list appeared to show.
+
+It also pointed to the wrong place ("restore it under *Money coming in*" when an archived entry
+is in a separate collapsed **Archived** section), named no person, and had no fix at all if the
+cheque had been removed rather than archived, because nothing in the app creates a paycheque.
+
+Now: the item names the person, one line per payday, and carries a button that restores the
+archived cheque or creates one - `restorePaycheque`, which is the deliberate opposite of
+archiving and so is allowed to do what automatic generation refuses. It also rebinds a hand-made
+cheque to the payday by id, so the amount follows it afterwards. Income rows say which they are.
+
+### "Mark as paid" moved the balance, and nobody knew
+
+Carol's complaint was that a paid item disappears. Measuring it to answer that turned up worse:
+marking a $186 bill paid dropped the balance by $186, because one flag was doing two unrelated
+jobs - "we have dealt with this" and "this is already inside the balance I typed in".
+
+Which means a bill that came out **before** the bank was read got subtracted twice: once inside
+the typed figure and once again by the tick. The household is left short by the amount of the
+bill with nothing on screen to say why. Dax had not realised it moved money at all:
+
+> "I actually didn't realize that marking a bill paid actually moved the balance until now."
+
+Offered three ways out; he chose the one that makes the double subtraction **impossible** rather
+than merely fixed.
+
+- **`paidAt`/`paidById` is new, and is a tick.** It records that the two of them have dealt with
+  something. The row stays on the ledger, struck through with a "Paid" chip and who marked it,
+  and goes on being counted in the running balance. No figure moves.
+- **`clearedAt` keeps its one real job**: "this is inside the balance that was typed in", so the
+  timeline stops counting it. Set only by the balance-update checklist, which is the one place
+  that knows what the typed figure covered. It is no longer reachable from a row.
+- **The two are joined up**: anything ticked on the ledger starts ticked on the balance
+  checklist, so nobody has to say it twice - which is how a bill got counted twice.
+
+The figures now only ever move when somebody types in a balance read off the bank, which is also
+the conservative direction: safe-to-spend stays low until the bank is read, rather than rising
+on a tick.
+
+The "Already in your balance" band from two days ago is gone. It existed only because rows
+vanished; they no longer do, and undo is tapping the row again. `GET /api/balance/cleared` went
+with it.
+
+Dax also asked whether paid-ness carries into the next cycle. It cannot: each cycle is its own
+occurrence row, so ticking November says nothing about December. Tested.
+
+### A test that was a time bomb
+
+`generation.test.ts` used `day: 9` for a monthly bill, so for most of any month the next
+occurrence fell past the horizon, generated fine and never reached the timeline. It had been
+failing since the 10th and would have failed for two thirds of every month. Now derived from
+today.
+
+### Still to do
+
+- **A payday still cannot be deleted.** No `DELETE /api/pay-schedules/:id`.
+- **Nobody has seen any of this rendered.** There is no browser in this environment, so the paid
+  row, the checklist button and the pre-ticked balance sheet are verified by tests and by HTTP
+  against a real Postgres, not by eye.
 
 ## Git history and attribution (2026-11-09)
 

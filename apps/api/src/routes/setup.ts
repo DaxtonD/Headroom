@@ -14,6 +14,7 @@ import { publishChange } from "../lib/changeStream.js";
 import {
   paydaysWithLivePay,
   regenerateQuietly,
+  restorePaycheque,
   syncPaychequeDefault,
 } from "../lib/generateService.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
@@ -160,7 +161,16 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
      * enough to answer yes while neither person's pay was on the ledger. The
      * checklist stayed silent through exactly the setup it existed to catch.
      */
-    if (schedules.some((schedule) => !payrolled.has(schedule.id))) {
+    const paydaysWithoutPay = schedules
+      .filter((schedule) => !payrolled.has(schedule.id))
+      .map((schedule) => ({
+        scheduleId: schedule.id,
+        // Named, because "a payday has no paycheque" left someone looking at
+        // two entries under Money coming in with no idea which was wrong.
+        person: schedule.user?.name ?? "Someone",
+      }));
+
+    if (paydaysWithoutPay.length > 0) {
       missing.push("income_on_ledger");
     }
 
@@ -175,6 +185,8 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       paySchedules: schedules.map(serialiseSchedule),
       accounts: accounts.map(serialiseAccount),
       missing,
+      /** Which paydays are not putting money on the ledger, and whose. */
+      paydaysWithoutPay,
     });
   });
 
@@ -379,6 +391,70 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     // and whose absence looked like a bug: an expense was added and the ledger
     // did not show it. Runs after the write has committed, so it cannot undo
     // it.
+    await regenerateQuietly(app.db.prisma, user.householdId, app.log);
+    return reply.status(result.statusCode).send(result.body);
+  });
+
+  /**
+   * Put this payday's pay back on the ledger.
+   *
+   * The resolution for the one checklist item that had none. Archiving a
+   * paycheque is a decision generation deliberately will not reverse, and the
+   * only "Add money coming in" button makes a `deposit` - which sits in the
+   * same list looking like income while anchoring no flexible bills and
+   * claiming no payday, so the checklist went on complaining whatever was
+   * entered. This is the explicit opposite of archiving.
+   */
+  app.post<{ Params: { id: string } }>("/pay-schedules/:id/paycheque", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const idempotencyKey = requireIdempotencyKey(request);
+
+    const result = await runIdempotent({
+      prisma: app.db.prisma,
+      key: idempotencyKey,
+      userId: user.id,
+      method: "POST",
+      path: `/api/pay-schedules/${request.params.id}/paycheque`,
+      requestHash: hashRequest(
+        "POST",
+        `/api/pay-schedules/${request.params.id}/paycheque`,
+        request.body ?? {},
+      ),
+      ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
+      work: async (tx) => {
+        const schedule = await tx.paySchedule.findFirst({
+          where: {
+            id: request.params.id,
+            deletedAt: null,
+            user: { householdId: user.householdId, deletedAt: null },
+          },
+          select: { id: true },
+        });
+        if (!schedule) throw new HttpError(404, "not_found", "That payday no longer exists.");
+
+        const template = await restorePaycheque(tx, user.householdId, schedule.id, user.id);
+
+        // Already fine, which is the honest answer to asking twice rather than
+        // an error (section 16.1 rule 6).
+        if (!template) {
+          return { statusCode: 200, body: { restored: false, template: null } };
+        }
+
+        await publishChange(tx, {
+          householdId: user.householdId,
+          entity: "template",
+          id: template.id,
+          version: template.version,
+          by: user.id,
+        });
+
+        return { statusCode: 200, body: { restored: true, template } };
+      },
+    });
+
+    // The cheques themselves, now that something wants them again.
     await regenerateQuietly(app.db.prisma, user.householdId, app.log);
     return reply.status(result.statusCode).send(result.body);
   });

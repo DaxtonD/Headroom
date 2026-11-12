@@ -141,7 +141,11 @@ export function OccurrenceRow({
   };
 
   return (
-    <li className={`row ${isPaycheque ? "row--payday" : ""} ${expanded ? "row--expanded" : ""}`}>
+    <li
+      className={`row ${isPaycheque ? "row--payday" : ""} ${expanded ? "row--expanded" : ""} ${
+        row.paid ? "row--paid" : ""
+      }`}
+    >
       <button
         className="row__summary"
         type="button"
@@ -160,6 +164,9 @@ export function OccurrenceRow({
         <span className="row__main">
           <span className="row__name">{row.name}</span>
           <span className="row__chips">
+            {row.paid ? (
+              <Chip tone="payday">{row.cents > 0n ? "Received" : "Paid"}</Chip>
+            ) : null}
             {isPaycheque ? (
               <Chip tone="payday">Payday · {row.date ? formatDateShort(row.date) : ""}</Chip>
             ) : row.isDated ? (
@@ -175,13 +182,17 @@ export function OccurrenceRow({
           </span>
           {!isPaycheque ? (
             <span className="row__owner">
-              {row.verified
-                ? row.verifiedBy
-                  ? `Verified by ${row.verifiedBy.name}`
-                  : "Verified"
-                : row.owner
-                  ? `${row.owner.name}'s bill · still an estimate`
-                  : "Set who gets this bill"}
+              {row.paid
+                ? row.paidBy
+                  ? `Marked by ${row.paidBy.name}`
+                  : "Dealt with"
+                : row.verified
+                  ? row.verifiedBy
+                    ? `Verified by ${row.verifiedBy.name}`
+                    : "Verified"
+                  : row.owner
+                    ? `${row.owner.name}'s bill · still an estimate`
+                    : "Set who gets this bill"}
             </span>
           ) : null}
         </span>
@@ -205,6 +216,13 @@ export function OccurrenceRow({
               {row.date
                 ? "Flexible: this is the day you plan to pay it, not a day the bank takes it. Change the date or hang it off a payday whenever money is tight."
                 : "Flexible: it can move to an earlier or later payday when money is tight."}
+            </p>
+          ) : null}
+
+          {row.paid ? (
+            <p className="row__note">
+              Ticked as dealt with. It still counts towards the running balance — the figures
+              change when you type in a balance from the bank, not when you tick this.
             </p>
           ) : null}
 
@@ -311,13 +329,27 @@ export function OccurrenceRow({
                 </button>
               ) : null}
 
+              {/*
+                A tick, not a transaction. It records that the two of them have
+                dealt with something and moves no figure: whether the money has
+                left is answered by the balance typed in off the bank. It used
+                to clear the row instead, which took it off the ledger
+                entirely and subtracted it from the balance a second time if
+                that balance had already accounted for it.
+              */}
               <button
-                className="hr-button hr-button--secondary"
+                className={`hr-button ${row.paid ? "" : "hr-button--secondary"}`}
                 type="button"
                 disabled={!canEdit || saving}
-                onClick={() => void save({ cleared: true })}
+                onClick={() => void save({ paid: !row.paid })}
               >
-                {row.cents > 0n ? "Mark as received" : "Mark as paid"}
+                {row.paid
+                  ? row.cents > 0n
+                    ? "Undo received"
+                    : "Undo paid"
+                  : row.cents > 0n
+                    ? "Mark as received"
+                    : "Mark as paid"}
               </button>
             </div>
 

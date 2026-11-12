@@ -145,61 +145,239 @@ describe("marking a cheque as received", () => {
     expect(after[0]?.inCents).toBe(inBefore);
   });
 
-  it("can be undone", async () => {
+  it("is not how a row is ticked off any more", async () => {
+    /*
+     * Clearing is now only what the balance-update checklist does. The gesture
+     * on a row is a tick that moves nothing - see the describe below - because
+     * one flag doing both jobs is what let a bill be subtracted twice: once
+     * inside the figure read off the bank, and once again by marking it paid.
+     */
     await addPayday();
-    const received = (await cheques())[0] as { id: string; version: number };
+    const cheque = (await cheques())[0] as { id: string; version: number };
+    await patch(`/api/occurrences/${cheque.id}`, cheque.version, { cleared: true });
 
-    await patch(`/api/occurrences/${received.id}`, received.version, { cleared: true });
-
-    // It has to be reachable, or an accidental tap is permanent: clearing a
-    // row takes it off the ledger, which is the only screen that lists rows.
-    const listed = await get("/api/balance/cleared");
-    expect(listed.statusCode).toBe(200);
-
-    const body = listed.json() as {
-      items: readonly { id: string; name: string; cents: string; version: number }[];
-    };
-    const found = body.items.find((item) => item.id === received.id);
-    expect(found).toBeDefined();
-
-    const undone = await patch(
-      `/api/occurrences/${received.id}`,
-      (found as { version: number }).version,
-      { cleared: false },
-    );
+    // The way back is still there for the balance flow to use.
+    const reread = await harness.db.prisma.occurrence.findUniqueOrThrow({
+      where: { id: cheque.id },
+    });
+    const undone = await patch(`/api/occurrences/${cheque.id}`, reread.version, {
+      cleared: false,
+    });
     expect(undone.statusCode).toBe(200);
 
-    // Back on the ledger, editable again.
-    const reread = await harness.db.prisma.occurrence.findUniqueOrThrow({
-      where: { id: received.id },
+    const after = await harness.db.prisma.occurrence.findUniqueOrThrow({
+      where: { id: cheque.id },
     });
-    expect(reread.clearedAt).toBeNull();
-    expect(reread.clearedById).toBeNull();
+    expect(after.clearedAt).toBeNull();
+    expect(after.clearedById).toBeNull();
 
     const rows = (await windows()).flatMap((window) => window.rows);
-    expect(rows.some((row) => row.id === received.id)).toBe(true);
+    expect(rows.some((row) => row.id === cheque.id)).toBe(true);
+  });
+});
+
+describe("ticking a row as dealt with", () => {
+  /*
+   * What "mark as paid" means now, decided with Dax after he found that it
+   * moved the balance: a tick for the two of them and nothing else.
+   *
+   *   "I actually didn't realize that marking a bill paid actually moved the
+   *    balance until now."
+   *
+   * Two things follow, and both are tested here. The row stays on the ledger,
+   * because a ledger whose lines disappear is the complaint this answers. And
+   * no figure moves, which makes the double subtraction impossible rather than
+   * merely fixed: the balance changes only when somebody types one in.
+   */
+  async function figures(): Promise<{
+    balance: string;
+    safe: string;
+    lowest: string;
+    left: string;
+  }> {
+    const body = await get("/api/dashboard").then((response) => response.json());
+    return {
+      balance: body.balance.cents,
+      safe: body.safeToSpendNowCents,
+      lowest: body.lowest.cents,
+      left: body.leftThisCycleCents,
+    };
+  }
+
+  async function bill(): Promise<{ id: string; version: number }> {
+    const soon = new Date();
+    soon.setUTCHours(0, 0, 0, 0);
+    soon.setUTCDate(soon.getUTCDate() + 3);
+
+    const created = await post("/api/templates", {
+      name: "Power",
+      kind: "bill",
+      section: "fixed",
+      defaultCents: "18600",
+      withdrawal: "auto",
+      schedule: { type: "monthly", day: soon.getUTCDate() },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const row = await harness.db.prisma.occurrence.findFirstOrThrow({
+      where: { householdId, name: "Power" },
+      orderBy: { date: "asc" },
+      select: { id: true, version: true },
+    });
+    return row;
+  }
+
+  it("moves no figure at all", async () => {
+    await addPayday();
+    expect((await post("/api/balance", { cents: "80000" })).statusCode).toBe(201);
+    const target = await bill();
+
+    const before = await figures();
+    const ticked = await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
+    expect(ticked.statusCode).toBe(200);
+    expect(ticked.json().occurrence.paid).toBe(true);
+
+    // The whole point. The bank balance is what moves money, not a tick.
+    expect(await figures()).toEqual(before);
   });
 
-  it("offers nothing to undo when nothing has been marked", async () => {
+  it("leaves the row on the ledger, marked", async () => {
     await addPayday();
+    const target = await bill();
+    await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
 
-    const body = await get("/api/balance/cleared").then((response) => response.json());
-    expect(body.items).toEqual([]);
+    const rows = (await windows()).flatMap((window) => window.rows);
+    const found = rows.find((row) => row.id === target.id) as
+      | { paid: boolean; paidBy: { name: string } | null }
+      | undefined;
+
+    expect(found).toBeDefined();
+    expect(found?.paid).toBe(true);
+    // Who ticked it, because on the other phone the question is "did you
+    // already pay this?".
+    expect(found?.paidBy?.name).toBe("Carol");
   });
 
-  it("stops offering an undo once the balance has been entered", async () => {
+  it("can be untapped", async () => {
     await addPayday();
-    const received = (await cheques())[0] as { id: string; version: number };
-    await patch(`/api/occurrences/${received.id}`, received.version, { cleared: true });
+    const target = await bill();
+    const ticked = await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
 
-    // Typing in a new balance takes the cleared cheque into the figure itself.
-    // Undoing it after that would put the row back on the ledger while the
-    // money stayed in the balance, which is the same double count the other
-    // way round - so it is deliberately no longer offered.
-    expect((await post("/api/balance", { cents: "350000" })).statusCode).toBe(201);
+    const undone = await patch(
+      `/api/occurrences/${target.id}`,
+      (ticked.json().occurrence as { version: number }).version,
+      { paid: false },
+    );
+    expect(undone.statusCode).toBe(200);
+    expect(undone.json().occurrence.paid).toBe(false);
 
-    const body = await get("/api/balance/cleared").then((response) => response.json());
-    expect(body.items).toEqual([]);
+    const row = await harness.db.prisma.occurrence.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    expect(row.paidAt).toBeNull();
+    expect(row.paidById).toBeNull();
+  });
+
+  it("says nothing happened when it is already ticked", async () => {
+    await addPayday();
+    const target = await bill();
+    const first = await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
+    const version = (first.json().occurrence as { version: number }).version;
+
+    const again = await patch(`/api/occurrences/${target.id}`, version, { paid: true });
+    expect(again.statusCode).toBe(200);
+    expect(again.json().noop).toBe(true);
+  });
+
+  it("does not carry over to the next cycle", async () => {
+    // What Dax asked for, and it holds by construction: each cycle is its own
+    // row, so ticking one says nothing about the next.
+    await addPayday();
+    const target = await bill();
+    await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
+
+    const later = await harness.db.prisma.occurrence.findMany({
+      where: { householdId, name: "Power", id: { not: target.id } },
+      select: { paidAt: true },
+    });
+    expect(later.length).toBeGreaterThan(0);
+    for (const row of later) expect(row.paidAt).toBeNull();
+  });
+
+  it("survives the next generation pass", async () => {
+    await addPayday();
+    const target = await bill();
+    await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
+
+    await post("/api/templates/generate", {});
+
+    const row = await harness.db.prisma.occurrence.findUniqueOrThrow({
+      where: { id: target.id },
+    });
+    expect(row.paidAt).not.toBeNull();
+  });
+
+  it("is ticked for them on the balance checklist", async () => {
+    /*
+     * The two gestures answer different questions, but somebody who has said
+     * "we paid this" will almost always mean "and it is inside the figure I am
+     * about to read off the bank". Making them say it twice is how a bill
+     * ends up counted twice.
+     */
+    await addPayday();
+    const target = await bill();
+
+    const before = await get("/api/balance/clearable").then((response) => response.json());
+    const unticked = before.candidates.find(
+      (candidate: { id: string }) => candidate.id === target.id,
+    );
+    // Dated a few days out, so not a candidate until its day arrives.
+    expect(unticked).toBeUndefined();
+
+    /*
+     * A row dated today is, and that is the one worth checking.
+     *
+     * The date comes from the server rather than from `new Date()` here: the
+     * household's today is in America/Regina and a UTC date is already
+     * tomorrow there for the last six hours of every day, which would date
+     * this row into the future and quietly take it out of the candidates.
+     */
+    const added = await post("/api/occurrences", {
+      name: "Water",
+      cents: "-14400",
+      kind: "bill",
+      date: before.today as string,
+    });
+    expect(added.statusCode).toBe(201);
+    const water = added.json().occurrence as { id: string; version: number };
+
+    await patch(`/api/occurrences/${water.id}`, water.version, { paid: true });
+
+    const after = await get("/api/balance/clearable").then((response) => response.json());
+    const candidate = after.candidates.find(
+      (one: { id: string }) => one.id === water.id,
+    ) as { paid: boolean } | undefined;
+    expect(candidate?.paid).toBe(true);
+  });
+
+  it("cannot subtract a bill the typed-in balance already covered", async () => {
+    /*
+     * The bug this design removes. Before, the tick cleared the row, and
+     * clearing subtracted it from the balance - so a bill that had come out
+     * BEFORE the bank was read got taken off twice: once by the bank and once
+     * by the tick. The household was short by the amount of the bill, with
+     * nothing on screen to say why.
+     */
+    await addPayday();
+    const target = await bill();
+
+    // The figure read off the bank, which already accounts for the bill.
+    expect((await post("/api/balance", { cents: "61400" })).statusCode).toBe(201);
+    const before = await figures();
+
+    await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
+
+    expect((await figures()).balance).toBe(before.balance);
   });
 });
 

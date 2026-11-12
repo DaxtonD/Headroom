@@ -304,3 +304,13 @@
 .manage__add-row .hr-input {
   flex: 1 1 12rem;
 }
+
+/* A checklist item you can act on, rather than only read. */
+.manage__checklist-action {
+  display: block;
+  margin-top: var(--hr-space-3);
+}
+
+.manage__checklist-button {
+  font-size: 0.875rem;
+}

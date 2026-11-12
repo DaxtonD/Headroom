@@ -40,6 +40,13 @@ function serialiseTimelineRow(row: TimelineRow, decoration: OccurrenceDecoration
     verified: row.event.verified === true,
     verifiedBy: decoration?.verifiedBy ?? null,
     verifiedAt: decoration?.verifiedAt?.toISOString() ?? null,
+    /*
+     * "We have dealt with this." A tick, which is why it travels as a
+     * decoration rather than as something the engine knows about: it changes
+     * no figure, so the engine has no business seeing it.
+     */
+    paid: decoration?.paidAt !== null && decoration?.paidAt !== undefined,
+    paidBy: decoration?.paidBy ?? null,
     owner: decoration?.owner ?? null,
     requiresCoverage: row.requiresCoverage,
     runningCents: row.runningCents,
@@ -101,6 +108,9 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
           balanceAfterCents: row.runningCents,
           verified: row.event.verified === true,
           verifiedBy: decoration?.verifiedBy ?? null,
+          // Ticked as dealt with, so this list says so too rather than leaving
+          // the ledger and Home disagreeing about the same bill.
+          paid: decoration?.paidAt !== null && decoration?.paidAt !== undefined,
           owner: decoration?.owner ?? null,
           version: decoration?.version ?? 1,
         };

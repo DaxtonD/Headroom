@@ -306,6 +306,8 @@ export interface OccurrenceDecoration {
   readonly owner: { readonly id: string; readonly name: string; readonly initial: string } | null;
   readonly verifiedBy: { readonly id: string; readonly name: string; readonly initial: string } | null;
   readonly verifiedAt: Date | null;
+  readonly paidBy: { readonly id: string; readonly name: string; readonly initial: string } | null;
+  readonly paidAt: Date | null;
 }
 
 /**
@@ -327,8 +329,10 @@ export async function loadOccurrenceDecorations(
       version: true,
       templateId: true,
       verifiedAt: true,
+      paidAt: true,
       owner: { select: { id: true, name: true, initial: true } },
       verifiedBy: { select: { id: true, name: true, initial: true } },
+      paidBy: { select: { id: true, name: true, initial: true } },
     },
   });
 
@@ -341,6 +345,8 @@ export async function loadOccurrenceDecorations(
         owner: row.owner,
         verifiedBy: row.verifiedBy,
         verifiedAt: row.verifiedAt,
+        paidBy: row.paidBy,
+        paidAt: row.paidAt,
       },
     ]),
   );
