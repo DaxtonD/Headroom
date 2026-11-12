@@ -45,6 +45,9 @@ export function fromPlainDate(value: PlainDate): Date {
  * throughout. The server clock decides what "today" is (section 16.1 rule 10);
  * a client's idea of the date is never trusted.
  */
+/** How many days a settled row stays on the ledger after its date. */
+const SETTLED_VISIBLE_DAYS = 31;
+
 export function todayInZone(timezone: string, now: Date = new Date()): PlainDate {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -191,18 +194,49 @@ export async function loadTimelineContext(
     .filter((schedule) => !livePaydays.has(schedule.id))
     .map((schedule) => schedule.id);
 
+  /*
+   * How far back a settled row stays on screen.
+   *
+   * Once the balance has been typed in, a paid row has nothing left to
+   * contribute to the arithmetic - but it is still what the household did, and
+   * hiding it is the complaint this answers: "when an item on the ledger is
+   * marked as paid, it disappears. Carol doesn't like this."
+   *
+   * So they stay, shown and not counted. A month is a cycle of bills, which is
+   * long enough to look back over and short enough that the ledger does not
+   * turn into an archive.
+   */
+  const settledFrom = addDaysToPlainDate(today, -SETTLED_VISIBLE_DAYS);
+
   const rows = await prisma.occurrence.findMany({
     where: {
       householdId,
       deletedAt: null,
-      // Cleared items have left the timeline.
-      clearedAt: null,
       OR: [
-        // Dated items up to the horizon. A dated item in the past that has not
-        // cleared is still coming: the money has not moved yet.
-        { date: { lte: fromPlainDate(horizonEnd) } },
-        // Flexible items have no date; the engine places them by anchor.
-        { date: null },
+        // Still to happen, or happened and not yet accounted for by a balance.
+        {
+          clearedAt: null,
+          OR: [
+            // Dated items up to the horizon. A dated item in the past that has
+            // not cleared is still coming: the money has not moved yet.
+            { date: { lte: fromPlainDate(horizonEnd) } },
+            // Flexible items have no date; the engine places them by anchor.
+            { date: null },
+          ],
+        },
+        // Already inside a typed-in balance, and recent enough to still show.
+        {
+          clearedAt: { not: null },
+          OR: [
+            { date: { gte: fromPlainDate(settledFrom), lte: fromPlainDate(horizonEnd) } },
+            // A flexible one has no date of its own; it is placed by its
+            // anchor cheque, and the anchor filter below drops it if that
+            // cheque is no longer in view. Without this clause a flexible bill
+            // would still disappear on being paid while a dated one stayed,
+            // which is the same complaint with extra inconsistency.
+            { date: null },
+          ],
+        },
       ],
     },
     select: {
@@ -216,6 +250,7 @@ export async function loadTimelineContext(
       sortIndex: true,
       isOneOff: true,
       verifiedAt: true,
+      clearedAt: true,
       templateId: true,
       ownerUserId: true,
       version: true,
@@ -231,6 +266,7 @@ export async function loadTimelineContext(
     .filter(
       (row) =>
         row.withdrawal === "auto" ||
+        row.date !== null ||
         row.anchorOccurrenceId === null ||
         includedIds.has(row.anchorOccurrenceId),
     )
@@ -247,6 +283,8 @@ export async function loadTimelineContext(
       verified: row.verifiedAt !== null,
       ownerId: row.ownerUserId,
       payScheduleId: null,
+      // Shown, and counted in nothing: the balance already has it.
+      settled: row.clearedAt !== null,
     }));
 
   const timeline = computeTimeline({

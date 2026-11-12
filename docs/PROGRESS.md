@@ -21,6 +21,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Settings: themes + text size | done | | At Dax's request. Five themes plus match-my-device, five text sizes. Per device, not in the database. Contrast checked by test |
 | Undo for received/paid | done | | Bug 15, found in testing. A cleared cheque is no longer re-projected, archiving the pay stops the ghost, and the ledger offers an undo |
 | "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
+| A paid row stays to the end | done | | Settled rows stay on the ledger for a month, shown and counted in nothing, with an undo. Previously paid items become visible again |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -34,7 +35,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
   second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
   engine, schema and migration, the savings and mortgage API, the Year screen, the Savings screen,
   and Home + Upcoming + Pay plan merged into one Ledger.
-- **780 tests green** as of 2026-11-11: 311 engine, 345 API against a real Postgres, 124 web
+- **786 tests green** as of 2026-11-11: 313 engine, 349 API against a real Postgres, 124 web
   source, token, contrast and appearance checks. Lint, typecheck and `pnpm build` clean.
 - The screens are now: **Ledger, Year, Budget, Savings, Manage**, with Net worth reached from
   Savings. Seven tabs became five.
@@ -836,6 +837,60 @@ today.
 - **Nobody has seen any of this rendered.** There is no browser in this environment, so the paid
   row, the checklist button and the pre-ticked balance sheet are verified by tests and by HTTP
   against a real Postgres, not by eye.
+
+## A paid row stays on the ledger to the end (2026-11-11, Dax's follow-up)
+
+He asked two things: when a bill marked paid gets reset to unpaid, and to see previously paid
+items on the ledger with an undo. Answering the first exposed that the second was still half
+broken.
+
+### The life of a row, which is now the answer to "when is it reset"
+
+Nothing ever resets a tick. It belongs to one occurrence, and the next cycle is a different row
+born unticked, so paid-ness cannot leak forward. What happens instead is three states:
+
+1. **Coming up.** Counted in the running balance.
+2. **Ticked paid.** Still counted, shown struck through with a *Paid* chip and who marked it. No
+   figure moves - the tick is a note between the two of them.
+3. **Taken into a typed-in balance**, by the update checklist, where anything already ticked is
+   pre-ticked for them. Now it *stops counting*, because the figure read off the bank carries it.
+
+Step 3 used to make the row vanish, which is the same disappearing act Carol objected to, just
+one step later. So a settled row stays: shown, marked, and counted in nothing - no running
+balance of its own, because the balance at the top already went past it. It drops off after a
+month (`SETTLED_VISIBLE_DAYS`), which is a cycle of bills: long enough to look back over, short
+enough that the ledger is not an archive.
+
+So the tick is a note to themselves, and the balance update is what retires a row. Which also
+means his existing paid items, invisible until now because they were cleared, come back into
+view on deploy - the thing he asked for.
+
+### `settled` in the engine
+
+`TimelineInput.settled` is new. A settled row is ordered and shown like any other and adds
+nothing to the running balance, nothing to a window's totals, nothing to coverage and nothing to
+the estimates count. Doing it in the engine rather than in the route means window membership
+stays the engine's single decision - re-deriving it in the API is a mistake this file has
+recorded before.
+
+Undo on a settled row says "that is not inside my balance after all": it un-clears *and* unticks,
+and the row goes back to counting. Verified by hand over HTTP: ticking moved nothing, the typed
+balance left "left this cycle" unchanged (the bill counted exactly once), and undoing dropped it
+by exactly the amount of the bill.
+
+### Two tests asserted the vanishing
+
+`views.test.ts` ("takes a bill off the timeline once it is marked paid") and `integrity.test.ts`
+both pinned the old behaviour. Rewritten to assert what matters instead: the row is still there,
+says it is settled, and the balance carries past it unchanged - which is the property that stops
+the same bill being taken out twice.
+
+### Still to do
+
+- **A payday still cannot be deleted.** No `DELETE /api/pay-schedules/:id`.
+- **A month is a guess.** `SETTLED_VISIBLE_DAYS` is 31 because a month is a cycle of bills. If the
+  ledger feels cluttered or too forgetful, it is one number.
+- **Nobody has seen it rendered.** No browser in this environment.
 
 ## Git history and attribution (2026-11-09)
 

@@ -47,6 +47,12 @@ function serialiseTimelineRow(row: TimelineRow, decoration: OccurrenceDecoration
      */
     paid: decoration?.paidAt !== null && decoration?.paidAt !== undefined,
     paidBy: decoration?.paidBy ?? null,
+    /*
+     * Already inside the balance that was typed in, so it is shown and counted
+     * in nothing. The UI words it differently and offers a different way back:
+     * undoing this says "that is not in my balance after all".
+     */
+    settled: row.event.settled === true,
     owner: decoration?.owner ?? null,
     requiresCoverage: row.requiresCoverage,
     runningCents: row.runningCents,

@@ -234,3 +234,14 @@
 .row--paid.row--expanded .row__summary {
   opacity: 1;
 }
+
+/*
+ * A settled row changed the balance before the figure at the top was typed in,
+ * so it has no running balance of its own to show. Saying where it went is
+ * more use than a blank.
+ */
+.row__running--settled {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--hr-text-muted);
+}

@@ -40,8 +40,9 @@ const BEFORE_EVERYTHING = "0000-00-00";
 function isAutoWithdrawal(event: TimelineInput): boolean {
   // Coverage is about money leaving on a date the bank has already chosen.
   // Paycheques and automatic deposits are dated too, but they bring money in,
-  // so there is nothing to cover.
-  return event.placement === "auto" && event.cents < 0n;
+  // so there is nothing to cover. A settled item has already left, so there is
+  // nothing to cover either.
+  return event.placement === "auto" && event.cents < 0n && event.settled !== true;
 }
 
 /**
@@ -159,8 +160,12 @@ function effectiveDateOf(
  * Build the timeline and everything derived from it.
  *
  * `startBalanceCents` is the **effective** current balance: the latest
- * snapshot plus anything cleared since (section 6.1). Cleared items must
- * already be gone from `events`; they have left the timeline.
+ * snapshot plus anything cleared since (section 6.1).
+ *
+ * An item the balance already accounts for may still be passed in, marked
+ * `settled`: it is shown and ordered like any other row and counted in
+ * nothing, because a ledger that hides what has been paid is no use to the
+ * person reading it.
  */
 export function computeTimeline(options: TimelineOptions): TimelineResult {
   const cushionCents = options.cushionCents ?? 0n;
@@ -175,7 +180,9 @@ export function computeTimeline(options: TimelineOptions): TimelineResult {
   let running = options.startBalanceCents;
 
   for (const event of ordered) {
-    running += event.cents;
+    // A settled row is history: the balance this timeline starts from already
+    // includes it, so adding it here would subtract the same bill twice.
+    if (event.settled !== true) running += event.cents;
     rows.push({
       event,
       runningCents: running,
@@ -225,7 +232,7 @@ export function computeTimeline(options: TimelineOptions): TimelineResult {
 
   // An amount nobody has confirmed yet is still a guess, and the UI says so.
   const estimatesCount = ordered.filter(
-    (event) => event.kind === "bill" && event.verified !== true,
+    (event) => event.kind === "bill" && event.verified !== true && event.settled !== true,
   ).length;
 
   const lastRow = rows.at(-1);

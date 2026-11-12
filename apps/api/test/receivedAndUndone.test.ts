@@ -381,6 +381,138 @@ describe("ticking a row as dealt with", () => {
   });
 });
 
+describe("a bill the balance has already accounted for", () => {
+  /*
+   * The last state in the life of a row, and the one Dax asked to be able to
+   * see: ticked as paid, then taken into a typed-in balance by the update
+   * checklist. Before this it vanished from the ledger at that point, which is
+   * the disappearing act Carol objected to - just moved one step later.
+   *
+   * So it stays, shown and counted in nothing, with a way back.
+   */
+  async function paidAndSettled(): Promise<{ id: string }> {
+    const soon = new Date();
+    soon.setUTCHours(0, 0, 0, 0);
+    soon.setUTCDate(soon.getUTCDate() + 2);
+
+    const created = await post("/api/templates", {
+      name: "Power",
+      kind: "bill",
+      section: "fixed",
+      defaultCents: "18600",
+      withdrawal: "auto",
+      schedule: { type: "monthly", day: soon.getUTCDate() },
+    });
+    expect(created.statusCode).toBe(201);
+
+    const row = await harness.db.prisma.occurrence.findFirstOrThrow({
+      where: { householdId, name: "Power" },
+      orderBy: { date: "asc" },
+      select: { id: true, version: true },
+    });
+
+    const ticked = await patch(`/api/occurrences/${row.id}`, row.version, { paid: true });
+    expect(ticked.statusCode).toBe(200);
+
+    // What the balance-update checklist does: "this is inside the figure I
+    // just read off the bank".
+    const settled = await post("/api/balance", {
+      cents: "61400",
+      clearedOccurrenceIds: [row.id],
+    });
+    expect(settled.statusCode).toBe(201);
+
+    return { id: row.id };
+  }
+
+  it("is still on the ledger, marked paid", async () => {
+    await addPayday();
+    const row = await paidAndSettled();
+
+    const found = (await windows())
+      .flatMap((window) => window.rows)
+      .find((one) => one.id === row.id) as
+      | { paid: boolean; settled: boolean; name: string }
+      | undefined;
+
+    expect(found).toBeDefined();
+    expect(found?.settled).toBe(true);
+    expect(found?.paid).toBe(true);
+  });
+
+  it("is counted in nothing", async () => {
+    await addPayday();
+    const row = await paidAndSettled();
+
+    const body = await get("/api/dashboard").then((response) => response.json());
+
+    // The typed-in balance already has the bill in it, and nothing has changed
+    // it since.
+    expect(body.balance.cents).toBe("61400");
+
+    // By id, not by name: next month's Power is a different row and is still
+    // very much coming.
+    expect(
+      body.nextAutoWithdrawals.some((one: { id: string }) => one.id === row.id),
+    ).toBe(false);
+
+    // Nothing to confirm the amount of, either. It is over.
+    const settledRow = (await windows())
+      .flatMap((window) => window.rows)
+      .find((one) => one.id === row.id) as { requiresCoverage: boolean } | undefined;
+    expect(settledRow?.requiresCoverage).toBe(false);
+  });
+
+  it("can be undone, and counts again", async () => {
+    await addPayday();
+    const row = await paidAndSettled();
+
+    /*
+     * "Left this cycle" is the figure to watch rather than safe-to-spend: it
+     * is the running balance at the end, so every row that counts is in it,
+     * whereas the lowest point can sit at the opening balance and not move at
+     * all when a bill comes out after a cheque lands.
+     */
+    const before = await get("/api/dashboard").then((response) => response.json());
+
+    const current = await harness.db.prisma.occurrence.findUniqueOrThrow({
+      where: { id: row.id },
+    });
+    const undone = await patch(`/api/occurrences/${row.id}`, current.version, {
+      cleared: false,
+      paid: false,
+    });
+    expect(undone.statusCode).toBe(200);
+
+    // "That is not inside my balance after all": it goes back to counting.
+    const after = await get("/api/dashboard").then((response) => response.json());
+    expect(BigInt(after.leftThisCycleCents as string)).toBe(
+      BigInt(before.leftThisCycleCents as string) - 18_600n,
+    );
+
+    const found = (await windows())
+      .flatMap((window) => window.rows)
+      .find((one) => one.id === row.id) as { settled: boolean; paid: boolean } | undefined;
+    expect(found?.settled).toBe(false);
+    expect(found?.paid).toBe(false);
+  });
+
+  it("drops off the ledger once it is old", async () => {
+    await addPayday();
+    const row = await paidAndSettled();
+
+    // A month on, it is history rather than something to look back over, and
+    // the ledger is not an archive.
+    await harness.db.prisma.occurrence.update({
+      where: { id: row.id },
+      data: { date: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000) },
+    });
+
+    const found = (await windows()).flatMap((window) => window.rows).find((one) => one.id === row.id);
+    expect(found).toBeUndefined();
+  });
+});
+
 describe("archiving a paycheque", () => {
   it("stops the payday projecting a replacement for it", async () => {
     await addPayday();
