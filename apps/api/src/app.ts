@@ -9,6 +9,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
+import { join } from "node:path";
 import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import rateLimit from "@fastify/rate-limit";
@@ -28,8 +29,9 @@ import { registerTemplateRoutes } from "./routes/templates.js";
 import { registerViewRoutes } from "./routes/views.js";
 import { registerYearRoutes } from "./routes/year.js";
 import { registerHealthRoutes } from "./routes/health.js";
-import { registerWebApp } from "./routes/web.js";
+import { registerWebApp, webDistDir } from "./routes/web.js";
 import { resolveSessionUser, type SessionUser } from "./auth/session.js";
+import { contentSecurityPolicy, inlineScriptHashes } from "./lib/csp.js";
 import { HttpError } from "./lib/http.js";
 import { LoginThrottle } from "./auth/loginThrottle.js";
 import { ChangeStream } from "./lib/changeStream.js";
@@ -120,10 +122,29 @@ export async function buildApp({ env, db, changeStream }: BuildAppOptions): Prom
   // Fastify's default serializer and throw on the first BigInt it met.
   app.setReplySerializer((payload) => JSON.stringify(payload, jsonReplacer));
 
+  /*
+   * The policy is built once, at startup, from the page that is actually
+   * going to be served - the one inline script in it is allowed by hash, and
+   * reading it here means the hash can never drift from the script. See
+   * lib/csp.ts for what is allowed and what is deliberately not.
+   *
+   * It is logged, because a CSP that is subtly wrong fails by breaking one
+   * screen in a way that only shows in a browser console nobody is watching,
+   * and the first question then is always "what policy is it actually
+   * sending".
+   */
+  const scriptHashes = inlineScriptHashes(join(webDistDir(env), "index.html"));
+  app.log.info(
+    { inlineScripts: scriptHashes.length },
+    "content security policy built from the served page",
+  );
+
   await app.register(helmet, {
-    // The web app is served from the same origin; CSP is configured with the
-    // PWA in M5, where the service worker and manifest are added.
-    contentSecurityPolicy: false,
+    contentSecurityPolicy: {
+      // Ours is the whole policy, not a patch over helmet's defaults.
+      useDefaults: false,
+      directives: contentSecurityPolicy(scriptHashes),
+    },
     crossOriginEmbedderPolicy: false,
   });
 

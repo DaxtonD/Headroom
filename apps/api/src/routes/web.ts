@@ -22,6 +22,16 @@ function defaultDistDir(): string {
 }
 
 /**
+ * The same answer, for anything that needs it before the routes are set up.
+ *
+ * The Content-Security-Policy reads the built page to hash its inline script
+ * (see lib/csp.ts), and helmet is registered long before this module runs.
+ */
+export function webDistDir(env: Pick<Env, "WEB_DIST_DIR">): string {
+  return env.WEB_DIST_DIR ? resolve(env.WEB_DIST_DIR) : defaultDistDir();
+}
+
+/**
  * True for a build output whose name carries a content hash.
  *
  * Vite names these `index-BqJInBcQ.js`: the hash follows a HYPHEN and is
@@ -41,7 +51,7 @@ export interface WebAppRegistration {
 }
 
 export async function registerWebApp(app: FastifyInstance, env: Env): Promise<WebAppRegistration> {
-  const distDir = env.WEB_DIST_DIR ? resolve(env.WEB_DIST_DIR) : defaultDistDir();
+  const distDir = webDistDir(env);
 
   if (!existsSync(join(distDir, "index.html"))) {
     app.log.info(

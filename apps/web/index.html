@@ -61,7 +61,11 @@
       not recognise is left alone: an unknown data-theme matches no block in
       tokens.css, so the app falls back to Daylight on its own.
 
-      When CSP arrives with the PWA in M5 this needs a hash or a nonce.
+      This is the one inline script in the page, and the Content-Security-
+      Policy allows it by hash - computed from the BUILT file at startup,
+      so editing it here cannot leave the hash stale. See apps/api/src/lib/
+      csp.ts. A nonce would mean generating this page per request, and it
+      is served as a static file.
     -->
     <script>
       (function () {

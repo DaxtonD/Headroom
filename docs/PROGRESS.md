@@ -23,7 +23,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
 | Info button on the headline figures | done | | At Dax's request. Shows the working behind in chequing, safe to spend and left this cycle, from the engine so it cannot disagree |
 | Phone-use fixes: greeting, gear, Back button, page width | done | | Four reported from the installed app; the widest was the shell grid making the whole page grow |
-| M5 PWA + desktop polish | **in progress** | | Installable: icons from one master, manifest, shell-only offline cache, update prompt, "Update balance" shortcut, and a way out of Settings. Left: instant cached Home, the badge, desktop polish, the accessibility pass, CSP |
+| M5 PWA + desktop polish | **in progress** | | Installed and in daily use. Three shortcuts, the app badge, and a Content-Security-Policy that hashes the page it protects. Left: instant cached Home (needs a decision from Dax), desktop polish, the accessibility pass |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
 ## Last session
@@ -444,6 +444,84 @@ Dax in the running app rather than being caught here, which is the one that matt
    round - typed, sent, stored, read back, formatted - through the same engine functions the
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
+
+## M5 continued: shortcuts, the badge, and a policy (2026-11-13)
+
+Installed on a phone and working. Dax: "the shortcut was a super nice touch" - so there are
+three of them now, and the other two widget substitutes the brief asks for are in as well.
+
+### Three shortcuts
+
+**Update balance**, **Update savings** and **Add a one-off**: the two figures typed in by hand
+and the one thing added in a hurry. Android shows at most four, iOS shows none.
+
+`lib/launchAction.ts` holds what all three do, which was worth extracting at the second one.
+The parameter says how the app was *launched*, not what state it is in, so it is read once and
+then removed - read on every render it would reopen the sheet the moment somebody closed it,
+and left in the URL a reload would reopen it, the address bar would carry an instruction
+around, and Back would walk through states nobody chose. It is removed with `replaceState`, so
+it leaves no history entry of its own.
+
+The shortcut most likely to rot is one whose parameter nothing reads: it opens the right
+screen, so it looks like it worked, and the job it promised simply has not started. The test
+walks every shortcut in the manifest and insists the parameter is a declared `LaunchAction`
+*and* that some screen passes it to `useLaunchedBy`. Adding a fourth shortcut without wiring
+it turns that red - checked by adding one.
+
+### The badge
+
+`navigator.setAppBadge` with the count of bills still waiting for their real amount
+(HANDOFF section 3). That count and not money, deliberately: a badge is a small number with no
+units, so it has to mean something true whatever the figure behind it is. "Four bills are still
+guesses" is work left to do and it goes to zero when the work is done. A dollar figure on an
+icon reads as how much is left to spend, which is a number nobody should act on without seeing
+what it came from.
+
+Everything about it fails quietly, which is the hard part. iOS does not implement it; Android
+Chrome shows it only for an installed app and *rejects* the call in a tab - on every refresh.
+So every call is swallowed, and the tests cover the refusal as well as the success. Signing out
+clears it: the count is the household's work and must not sit on the icon of a phone nobody is
+signed in on.
+
+### Content-Security-Policy
+
+Held back until now because a service worker, a manifest and a set of icons all have to be
+allowed by name, and writing the policy before they existed would have meant guessing. The
+`contentSecurityPolicy: false` in `app.ts` had said "configured with the PWA in M5" since M0.
+
+Everything on these screens is the household's money, and the way a page like that leaks is a
+script that should not be running. `script-src 'self'` plus one hash means a script from
+anywhere else does not run, whatever put it on the page. `connect-src 'self'` is the line that
+says the balances are never sent anywhere else.
+
+**The hash is computed, not written down.** `index.html` carries one inline script - it applies
+the theme before first paint, so a dark theme does not start with a flash of white. It cannot
+become an external file without a round trip in front of the first paint, and it cannot use a
+nonce without generating the page per request, which is served as a static file. So it is
+allowed by hash, read out of the *built* page at startup. A hash pasted into a module goes
+stale the first time somebody edits that script by a character, and the symptom is the theme
+silently not applying on a cold load - a long way from the change that caused it.
+
+`test/csp.test.ts` hashes every inline script in the real built page and insists the policy
+names each one. Pointing the policy at the wrong file turns it red, which is the production
+failure it exists for: a misconfigured `WEB_DIST_DIR` would block the theme script and nothing
+would say so.
+
+**What is deliberately permissive.** `style-src` allows `'unsafe-inline'`, because React writes
+`style={{ ... }}` as an inline style attribute - the people's own colours on their initials,
+the theme swatches in Settings - and there is no widely supported way to allow those by hash.
+It is a real weakening and a small one: a style attribute can restyle a page, it cannot execute
+anything, and `script-src` is what stops the attack this is for.
+
+### Still to do
+
+- **Instant cached Home**, which needs a decision rather than a default: painting the last
+  figures immediately means keeping them on the device. Faster every open, against the
+  household's balances sitting in phone storage rather than only on the server. Put to Dax.
+- Desktop polish and the accessibility pass.
+- The CSP has not been seen in a browser. If it is wrong the symptom is one screen misbehaving
+  with a console message nobody is watching, so it is worth a deliberate look: the theme
+  surviving a cold load, the webfont, and the service worker registering.
 
 ## M5 started: installable, and a way out of Settings (2026-11-13)
 
