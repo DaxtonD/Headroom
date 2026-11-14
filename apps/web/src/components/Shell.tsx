@@ -105,26 +105,42 @@ export function Shell({
 }
 
 /**
- * A gear, drawn rather than loaded: one icon is not worth a font or a file.
+ * The settings gear: Lucide's `settings` icon, inlined.
  *
- * The path is generated, not hand-written. The first one was eyeballed and
- * came out lopsided, because eight teeth placed by hand means eight chances
- * to be a degree out. These are eight identical teeth at 45 degree spacing,
- * each a tip arc at r=9.5 and a valley arc at r=6.9 joined by straight
- * flanks, so every tooth is the same shape and the whole thing is symmetric
- * about both axes by construction.
+ * Standard rather than drawn here, which was the problem with the one before
+ * it - eight teeth placed by eye, and visibly lopsided. A gear is a shape
+ * everybody already recognises, so there is nothing to gain by having our own
+ * and a real cost to getting it slightly wrong.
+ *
+ * Inlined rather than installed: one icon is not worth a dependency, a font
+ * or a second request on a phone, and an icon that arrives separately is an
+ * icon that can be missing while the rest of the header is there.
+ *
+ * Lucide is ISC, which asks only that its notice travel with it; see
+ * `THIRD-PARTY-NOTICES.md`. Font Awesome Free would have been the other
+ * obvious choice, and its icons are CC BY 4.0 - an attribution requirement on
+ * anything that ships them, which is not worth taking on for a gear.
+ *
+ * Taken verbatim from lucide-static 0.456.0, including its stroke width and
+ * round joins. Changing any of it means this is no longer the icon it says
+ * it is.
  */
 function GearIcon(): React.JSX.Element {
   return (
-    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
-      <path
-        d="M21.36 10.35 A9.5 9.5 0 0 1 21.36 13.65 L18.66 13.79 A6.9 6.9 0 0 1 17.98 15.45 L19.78 17.45 A9.5 9.5 0 0 1 17.45 19.78 L15.45 17.98 A6.9 6.9 0 0 1 13.79 18.66 L13.65 21.36 A9.5 9.5 0 0 1 10.35 21.36 L10.21 18.66 A6.9 6.9 0 0 1 8.55 17.98 L6.55 19.78 A9.5 9.5 0 0 1 4.22 17.45 L6.02 15.45 A6.9 6.9 0 0 1 5.34 13.79 L2.64 13.65 A9.5 9.5 0 0 1 2.64 10.35 L5.34 10.21 A6.9 6.9 0 0 1 6.02 8.55 L4.22 6.55 A9.5 9.5 0 0 1 6.55 4.22 L8.55 6.02 A6.9 6.9 0 0 1 10.21 5.34 L10.35 2.64 A9.5 9.5 0 0 1 13.65 2.64 L13.79 5.34 A6.9 6.9 0 0 1 15.45 6.02 L17.45 4.22 A9.5 9.5 0 0 1 19.78 6.55 L17.98 8.55 A6.9 6.9 0 0 1 18.66 10.21 L21.36 10.35 Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.7"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="12" r="3.3" fill="none" stroke="currentColor" strokeWidth="1.7" />
+    <svg
+      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z" />
+      <circle cx="12" cy="12" r="3" />
     </svg>
   );
 }

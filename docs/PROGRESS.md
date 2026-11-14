@@ -465,10 +465,30 @@ it fixes the kind of mistake.
 ### The settings gear
 
 Described as "like a hand-drawn svg that isn't symmetrical", which is what it was: eight teeth
-placed by eye. It is generated now - eight identical teeth at 45 degrees, a tip arc at r=9.5
-and a valley arc at r=6.9 joined by straight flanks - and a test reads the coordinates back out
-of the shipped icon and measures them. Nudging one number by 0.2 turns three of its assertions
-red, which is the slip that produced the original.
+placed by eye.
+
+First attempt was to generate it - eight identical teeth at 45 degrees, measured by a test that
+read the coordinates back out. It was symmetric and it was still ours, which Dax then settled
+with "make the gear icon something standard". He is right: a gear is a shape everybody already
+recognises, so there is nothing to gain from having our own and a real cost to getting it
+slightly wrong.
+
+It is now **Lucide's `settings` icon**, inlined verbatim from `lucide-static` 0.456.0 and
+checked against the published file byte for byte. Inlined rather than installed: one icon is
+not worth a dependency, a font or a second request on a phone, and an icon that arrives
+separately is an icon that can be missing while the rest of the header is there.
+
+Font Awesome was what he named, and is the reason for the choice of set rather than against it.
+Font Awesome Free's icons are CC BY 4.0, an attribution requirement on anything that ships
+them. Lucide is ISC, which asks only that its notice travel with the code -
+`THIRD-PARTY-NOTICES.md`, pointed at from the component.
+
+The geometry test went with the generated gear, because the failure it guarded is no longer
+ours to make. What replaced it checks the things that are: that the icon takes its colour from
+the text around it in all five themes, hardcodes none, is hidden from a screen reader that
+reads the link instead, is still the path that was vendored, and still carries its licence
+notice. Deleting `THIRD-PARTY-NOTICES.md` turns it red, which is the point - it is the one part
+of this with a legal weight and the easiest to lose in a tidy-up.
 
 ### Android's Back button
 
