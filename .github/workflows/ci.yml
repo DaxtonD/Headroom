@@ -83,6 +83,15 @@ jobs:
         # checks the committed synthetic fixture instead.
         run: python3 seed/check_seed.py packages/core/test/fixtures/household-synthetic.json
 
+      - name: Build the web app
+        # Before the tests, not after, because some of them check it.
+        # `pwaAssets.test.ts` serves the real built app through the real
+        # server to prove the manifest, the service worker and the caching
+        # headers are right - all of which fail silently in a browser - and
+        # it skips when there is no `dist`. Left until after `pnpm test` it
+        # would skip on every run and nobody would ever see it do so.
+        run: pnpm -F @headroom/web build
+
       - name: Test
         run: pnpm test
 
