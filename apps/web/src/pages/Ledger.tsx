@@ -34,6 +34,7 @@ import {
   explainSafeToSpend,
 } from "../lib/explain.js";
 import { useBackDismiss } from "../lib/backDismiss.js";
+import { useLaunchedBy } from "../lib/launchAction.js";
 import {
   useDashboard,
   usePatchOccurrence,
@@ -62,7 +63,8 @@ export function Ledger({
   // conflict with the other phone, and the one-off form reports its own. An
   // error banner up here would be a second place to look for the same news.
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  const [addingOneOff, setAddingOneOff] = useState(false);
+  // Opened by the button below the list, or by the manifest shortcut.
+  const [addingOneOff, setAddingOneOff] = useState(useLaunchedBy("add-one-off"));
 
   // An opened row is a step, so Android's Back closes it rather than leaving
   // the ledger.

@@ -38,10 +38,18 @@ export const manifest: Partial<ManifestOptions> = {
     },
   ],
   /*
-   * The brief asks for a home-screen widget, which a PWA on Android
-   * cannot have (HANDOFF section 3). A long-press shortcut straight to
-   * the one thing done several times a day is the nearest thing that
-   * actually exists.
+   * The brief asks for a home-screen widget, which a PWA on Android cannot
+   * have (HANDOFF section 3). Long-press shortcuts are the nearest thing
+   * that actually exists, and of everything in the install they are what
+   * landed best, so there are three: the two balances that get typed in by
+   * hand, and the one thing that gets added in a hurry.
+   *
+   * Android shows at most four and iOS shows none. The order here is the
+   * order they appear in, most used first.
+   *
+   * Each `url` carries a parameter that `lib/launchAction.ts` reads once and
+   * then removes. Adding one here without handling it there opens the right
+   * screen and does nothing else, which is why the test checks both ends.
    */
   shortcuts: [
     {
@@ -49,6 +57,20 @@ export const manifest: Partial<ManifestOptions> = {
       short_name: "Balance",
       description: "Type in what the bank says and tick off what has cleared.",
       url: "/?update-balance=1",
+      icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }],
+    },
+    {
+      name: "Update savings",
+      short_name: "Savings",
+      description: "Type in what the savings account says.",
+      url: "/savings?update-savings=1",
+      icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }],
+    },
+    {
+      name: "Add a one-off",
+      short_name: "One-off",
+      description: "Something that is not on the list and happens once.",
+      url: "/?add-one-off=1",
       icons: [{ src: "icon-192.png", sizes: "192x192", type: "image/png" }],
     },
   ],

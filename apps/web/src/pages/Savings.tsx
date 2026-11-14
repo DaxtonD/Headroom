@@ -32,6 +32,7 @@ import { LumpSumForm } from "../components/LumpSumForm.js";
 import { MortgageForm } from "../components/MortgageForm.js";
 import { ReimbursementForm } from "../components/ReimbursementForm.js";
 import { SavingsBalanceSheet } from "../components/SavingsBalanceSheet.js";
+import { useLaunchedBy } from "../lib/launchAction.js";
 import { ApiError, OfflineError } from "../lib/api.js";
 import { useCreateAccount, useSetup } from "../lib/manageQueries.js";
 import {
@@ -60,7 +61,9 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const advance = useAdvanceReimbursement();
   const createAccount = useCreateAccount();
   const [error, setError] = useState<string | null>(null);
-  const [open, setOpen] = useState<Open>(null);
+  // Opened from the screen, or by the manifest shortcut straight to it.
+  const openedByShortcut = useLaunchedBy("update-savings");
+  const [open, setOpen] = useState<Open>(openedByShortcut ? { kind: "balance" } : null);
 
   if (savings.isPending) {
     return (

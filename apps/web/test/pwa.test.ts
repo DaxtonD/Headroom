@@ -11,13 +11,22 @@
  * the chance of them being regenerated on some machine and not others is
  * exactly the chance this guards against.
  */
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { manifest } from "../manifest.config.js";
 
-const PUBLIC = resolve(import.meta.dirname, "..", "public");
-const html = readFileSync(resolve(import.meta.dirname, "..", "index.html"), "utf8");
+const WEB = resolve(import.meta.dirname, "..");
+const PUBLIC = resolve(WEB, "public");
+const html = readFileSync(resolve(WEB, "index.html"), "utf8");
+
+/** The `LaunchAction` union, which every shortcut's parameter has to be in. */
+const launchActions = readFileSync(resolve(WEB, "src", "lib", "launchAction.ts"), "utf8");
+
+/** Every source file, for checking that a screen actually reads each action. */
+const sourceFiles = readdirSync(resolve(WEB, "src"), { recursive: true, encoding: "utf8" })
+  .filter((entry) => entry.endsWith(".tsx") || entry.endsWith(".ts"))
+  .map((entry) => readFileSync(resolve(WEB, "src", entry), "utf8"));
 
 /** A PNG's real size, read out of the IHDR chunk that opens every PNG. */
 function pngSize(file: string): { width: number; height: number } {
@@ -66,19 +75,42 @@ describe("the manifest", () => {
     }
   });
 
-  it("offers the one thing done several times a day", () => {
+  it("offers the jobs done by hand, in place of the widget it cannot have", () => {
     // Standing in for the home-screen widget, which a PWA on Android cannot
     // have (HANDOFF section 3).
     const shortcuts = manifest.shortcuts ?? [];
     expect(shortcuts.length).toBeGreaterThan(0);
+    // Android shows four at most; more than that is work nobody will see.
+    expect(shortcuts.length).toBeLessThanOrEqual(4);
 
-    const balance = shortcuts.find((shortcut) => shortcut.url.includes("update-balance"));
-    expect(balance, "no shortcut to update the balance").toBeDefined();
-
-    // And the app has to act on it, or the shortcut just opens the ledger.
-    const app = readFileSync(resolve(import.meta.dirname, "..", "src", "App.tsx"), "utf8");
-    expect(app).toContain("update-balance");
+    for (const shortcut of shortcuts) {
+      expect(shortcut.name.length).toBeGreaterThan(0);
+      // The launcher shows the short name under a small icon.
+      expect((shortcut.short_name ?? shortcut.name).length).toBeLessThanOrEqual(12);
+      expect(shortcut.url.startsWith("/"), `${shortcut.url} must stay in scope`).toBe(true);
+    }
   });
+
+  it.each((manifest.shortcuts ?? []).map((shortcut) => [shortcut.name, shortcut.url] as const))(
+    "%s does something when it is opened",
+    (_name, url) => {
+      /*
+       * A shortcut whose parameter nothing reads is the worst kind of dead
+       * feature: it opens the right screen, so it looks like it worked, and
+       * the job it promised to start simply has not started.
+       */
+      const action = [...new URL(url, "https://example.test").searchParams.keys()][0];
+      expect(action, `${url} carries no action`).toBeDefined();
+
+      // Declared where the actions are declared...
+      expect(launchActions, `"${action}" is not a LaunchAction`).toContain(`"${action}"`);
+      // ...and actually read by a screen.
+      expect(
+        sourceFiles.some((file) => file.includes(`useLaunchedBy("${action}")`)),
+        `nothing calls useLaunchedBy("${action}")`,
+      ).toBe(true);
+    },
+  );
 });
 
 describe("the page", () => {

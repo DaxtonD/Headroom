@@ -8,10 +8,13 @@
  * described them as three screens; the household's complaint about the result
  * was that one list had been split across three places.
  */
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { Shell } from "./components/Shell.js";
+import { AppBadge } from "./components/AppBadge.js";
 import { UpdateBalanceSheet } from "./components/UpdateBalanceSheet.js";
+import { clearAppBadge } from "./lib/appBadge.js";
+import { useLaunchedBy } from "./lib/launchAction.js";
 import { Budget } from "./pages/Budget.js";
 import { Ledger } from "./pages/Ledger.js";
 import { Manage } from "./pages/Manage.js";
@@ -27,27 +30,18 @@ import "./styles/app.css";
 export function App(): React.JSX.Element {
   const session = useSession();
   const logout = useLogout();
-  /*
-   * Opened by the manifest shortcut as well as by the button.
-   *
-   * A PWA on Android cannot have the home-screen widget the brief asks for
-   * (HANDOFF section 3), so the nearest real thing is a long-press shortcut
-   * straight to the one job done several times a day. It arrives as
-   * `/?update-balance=1`, which is read once on mount and then taken out of
-   * the URL - otherwise a reload, or a share of the address, reopens it.
-   */
-  const [balanceSheetOpen, setBalanceSheetOpen] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return new URLSearchParams(window.location.search).has("update-balance");
-  });
 
-  useEffect(() => {
-    if (!balanceSheetOpen) return;
-    const url = new URL(window.location.href);
-    if (!url.searchParams.has("update-balance")) return;
-    url.searchParams.delete("update-balance");
-    window.history.replaceState(window.history.state, "", url);
-  }, [balanceSheetOpen]);
+  /*
+   * Signing out takes the badge with it. The count is this household's work;
+   * leaving it on the icon of a phone nobody is signed in on is both wrong
+   * and a small leak of how much there is to do.
+   */
+  const signOut = (): void => {
+    void clearAppBadge();
+    logout.mutate();
+  };
+  // Opened by the button on the ledger, or by the manifest shortcut.
+  const [balanceSheetOpen, setBalanceSheetOpen] = useState(useLaunchedBy("update-balance"));
 
   // Only listen once there is someone to listen for.
   const live = useLiveUpdates(Boolean(session.data));
@@ -83,8 +77,10 @@ export function App(): React.JSX.Element {
     <Shell
       you={{ name: session.data.user.name }}
       live={live}
-      onSignOut={() => logout.mutate()}
+      onSignOut={signOut}
     >
+      <AppBadge />
+
       <Routes>
         <Route
           path="/"
@@ -116,7 +112,7 @@ export function App(): React.JSX.Element {
           Reached from the header rather than the tab bar: it is opened once in
           a while and the five tabs are already as many as a phone holds.
         */}
-        <Route path="/settings" element={<Settings onSignOut={() => logout.mutate()} />} />
+        <Route path="/settings" element={<Settings onSignOut={signOut} />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
 

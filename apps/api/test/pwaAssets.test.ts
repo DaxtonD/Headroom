@@ -71,10 +71,19 @@ describe.skipIf(!built)("the built app, as the server hands it out", () => {
     expect(manifest.icons.some((icon) => icon.purpose === "maskable")).toBe(true);
   });
 
-  it("serves the shortcut's target, and iOS's icon, which the manifest does not list", async () => {
-    const shortcut = await get("/?update-balance=1");
-    expect(shortcut.statusCode).toBe(200);
-    expect(shortcut.headers["content-type"]).toContain("text/html");
+  it("serves every shortcut's target, and iOS's icon, which the manifest does not list", async () => {
+    const manifest = JSON.parse((await get("/manifest.webmanifest")).body) as {
+      shortcuts?: { name: string; url: string }[];
+    };
+    expect(manifest.shortcuts?.length).toBeGreaterThan(0);
+
+    // A shortcut pointing at a path the server answers with a 404 is a dead
+    // entry in the launcher's long-press menu, and only a phone shows it.
+    for (const shortcut of manifest.shortcuts ?? []) {
+      const response = await get(shortcut.url);
+      expect(response.statusCode, `${shortcut.name} -> ${shortcut.url}`).toBe(200);
+      expect(response.headers["content-type"]).toContain("text/html");
+    }
 
     // iOS ignores the manifest's icons entirely and reads this one.
     const apple = await get("/apple-touch-icon.png");
