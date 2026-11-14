@@ -3,6 +3,7 @@ import globals from "globals";
 import tseslint from "typescript-eslint";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactRefresh from "eslint-plugin-react-refresh";
+import jsxA11y from "eslint-plugin-jsx-a11y";
 
 export default tseslint.config(
   {
@@ -54,10 +55,21 @@ export default tseslint.config(
   {
     files: ["apps/web/**/*.{ts,tsx}"],
     languageOptions: { globals: { ...globals.browser } },
-    plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh },
+    plugins: { "react-hooks": reactHooks, "react-refresh": reactRefresh, "jsx-a11y": jsxA11y },
     rules: {
       ...reactHooks.configs.recommended.rules,
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
+
+      /*
+       * Accessibility, as far as a static check can see it (HANDOFF section 15
+       * and the M5 criteria). These catch the things that are invisible to the
+       * person writing them and obvious to somebody using a screen reader or a
+       * keyboard: a div with an onClick that Tab skips over, an icon-only
+       * button with no name to read out, an input whose label is not attached
+       * to it. Contrast and touch targets are arithmetic and are checked by
+       * `theme-contrast.test.ts` and `touch-targets.test.ts` instead.
+       */
+      ...jsxA11y.flatConfigs.recommended.rules,
     },
   },
 

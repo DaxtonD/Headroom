@@ -23,7 +23,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
 | Info button on the headline figures | done | | At Dax's request. Shows the working behind in chequing, safe to spend and left this cycle, from the engine so it cannot disagree |
 | Phone-use fixes: greeting, gear, Back button, page width | done | | Four reported from the installed app; the widest was the shell grid making the whole page grow |
-| M5 PWA + desktop polish | **in progress** | | Installed and in daily use. Three shortcuts, the app badge, and a Content-Security-Policy that hashes the page it protects. Left: instant cached Home (needs a decision, not a default), desktop polish, the accessibility pass |
+| M5 PWA + desktop polish | **in progress** | | Installed and in daily use. Three shortcuts, the app badge, a Content-Security-Policy that hashes the page it protects, and the accessibility pass. Left: instant cached Home (needs a decision, not a default) and the desktop layouts, which are three named features rather than polish - see below |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
 ## Last session
@@ -444,6 +444,70 @@ Dax in the running app rather than being caught here, which is the one that matt
    round - typed, sent, stored, read back, formatted - through the same engine functions the
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
+
+## M5: the accessibility pass (2026-11-14)
+
+Two of the three stated criteria were already met and tested - 4.5:1 contrast across every theme
+(`theme-contrast.test.ts`) and real `<button>`/`<input>`/`<label>` throughout. The gap was the
+44px touch target, which nothing checked, and it had drifted exactly the way an unchecked number
+does.
+
+### 44px, and why it needed arithmetic
+
+Four rules were under the floor: `.manage__small` (36px, used by eleven buttons), `.savings__edit`
+(36px), `.networth__entry-edit` (36px) and `.budget__toggle-button` (38px). Two more had no floor
+at all - `.hr-checkbox` and `.networth__checkbox`, where the label is the target and a one-line
+label is as tall as its text, about 22px. `.manage__narrow` was a sub-floor rule nothing used, so
+it went.
+
+None of that is visible on the machine the CSS is written on. A 36px pill is easy to click with a
+mouse and perfectly legible in a screenshot; it is the one you miss with a thumb, standing up, and
+on these screens the button next door is "Remove this". It also drifts one way only, because a new
+small button is written by copying the nearest existing small button.
+
+`touch-targets.test.ts` now reads every `<button>`, `<input>`, `<select>`, `<textarea>` and
+`NavLink` in the app, works out which CSS rules apply to it, and insists on a 44px minimum. For a
+checkbox or radio it judges the `<label>` wrapped around it, because the input is 22px on purpose
+and the label is what you actually tap. Checked by putting one of the old numbers back: thirteen
+named failures.
+
+It reads declared minimums, not rendered boxes - there is no browser in the suite - so it proves a
+floor exists rather than that the result measures 44px on a given phone. That is the regression it
+is for.
+
+### One way out of a sheet
+
+`eslint-plugin-jsx-a11y` is now part of `pnpm lint`. It found six things, all one shape: a
+`<div>` with a click handler. Chasing them down turned up a real bug rather than a lint
+preference.
+
+A sheet has to close four ways - Cancel, Escape, Android's Back, a tap outside - and all four have
+to refuse while a save is in flight, because closing then does not cancel the save, it just hides
+whether it worked. Three sheets, four behaviours each, written out per sheet. The retirement
+assumptions sheet on Net worth had the tap-outside and nothing else: Escape did nothing, Back left
+the screen altogether, and a tap outside threw the form away while its own save was still running.
+The other two had all four, which is why nobody noticed - the pattern looked established.
+
+`lib/overlayDismissal.ts` is now the single copy, and all three sheets ask it. The guard in
+`dismissal.test.ts` is deliberately not "each sheet does these four things", which is what drifted;
+it is "each sheet asks the one place that does them", found by looking for the backdrop rather than
+from a list that would need maintaining.
+
+Two smaller things fell out of it. The `onClick={stopPropagation}` on each dialog was dead - the
+backdrop only closes on a click whose target *is* the backdrop, so a click inside never reached
+it. And the backdrop keeps its `role="presentation"` with an explanation rather than a suppression:
+a screen reader should find the dialog inside it, not a full-screen button to tab past, and the
+keyboard way out exists - it is just not on that element.
+
+### Still to do in M5
+
+- **Instant cached Home**, still waiting on the one decision (below).
+- **The desktop layouts, which are not polish.** HANDOFF section 7 names four: the left nav at
+  >=1024px (done), the Home summary beside the Upcoming timeline, Budget as full tables like her
+  sheet, and dragging flexible bills between pay periods on desktop, where the phone has move
+  buttons. The last of those is an interaction that wants a browser and a keyboard
+  equivalent, not a stylesheet. The 880px cap on the content column also has to rise before
+  anything can be two columns. Worth agreeing the order before building it.
 
 ## M5 continued: shortcuts, the badge, and a policy (2026-11-13)
 

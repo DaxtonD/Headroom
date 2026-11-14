@@ -11,7 +11,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Amount } from "./Badges.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
 import { useClearableCandidates, useUpdateBalance } from "../lib/queries.js";
-import { useBackDismiss } from "../lib/backDismiss.js";
+import { useOverlayDismissal } from "../lib/overlayDismissal.js";
 import "./Sheet.css";
 import "./UpdateBalanceSheet.css";
 
@@ -23,21 +23,6 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
   const amountId = useId();
   const titleId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
-
-/**
- * Did this click's press begin on the backdrop itself?
- *
- * A `click` is dispatched on the nearest common ancestor of where the pointer
- * went down and where it came up. Select some text in the sheet, drag past its
- * edge and release, and that ancestor is the backdrop - so a plain
- * `onClick={onClose}` threw the form away mid-selection, losing whatever had
- * been typed. `stopPropagation` on the sheet cannot help: the sheet is not in
- * that event's path at all.
- *
- * So the press has to have started on the backdrop too. A deliberate click
- * outside still closes; a selection that merely ends outside does not.
- */
-  const pressedBackdrop = useRef(false);
 
   const [amountText, setAmountText] = useState("");
   const [ticked, setTicked] = useState<Set<string>>(new Set());
@@ -75,17 +60,8 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
     inputRef.current?.focus();
   }, []);
 
-  // Android's Back closes it, rather than leaving the ledger behind.
-  useBackDismiss(true, onClose, updateBalance.isPending);
-
-  // Escape closes, as it should for anything modal.
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  // Cancel, Escape, Back and a tap outside - all four inert while saving.
+  const backdrop = useOverlayDismissal(onClose, updateBalance.isPending);
 
   const submit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
@@ -129,25 +105,25 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
   };
 
   return (
+    /*
+     * A div, not a button: this is the dark area around the sheet, and a
+     * screen reader should find the dialog inside it rather than a
+     * full-screen control to tab past. Tapping outside is a pointer
+     * convenience on top of Cancel, Escape and Back, so nothing here is the
+     * only way to do anything - which is why it does not need to be
+     * reachable by keyboard itself.
+     */
     <div
       className="sheet-backdrop"
-      onPointerDown={(event) => {
-        pressedBackdrop.current = event.target === event.currentTarget;
-      }}
-      onClick={(event) => {
-        const fromBackdrop =
-          pressedBackdrop.current && event.target === event.currentTarget;
-        pressedBackdrop.current = false;
-        if (fromBackdrop) onClose();
-      }}
       role="presentation"
+      onPointerDown={backdrop.onPointerDown}
+      onClick={backdrop.onClick}
     >
       <div
         className="sheet"
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
-        onClick={(event) => event.stopPropagation()}
       >
         <form onSubmit={(event) => void submit(event)}>
           <h2 className="sheet__title" id={titleId}>

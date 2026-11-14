@@ -9,8 +9,7 @@
  * Deliberately a real `<form>` wrapping real inputs, so Enter submits and a
  * screen reader announces the dialog and its name.
  */
-import { useEffect, useRef } from "react";
-import { useBackDismiss } from "../lib/backDismiss.js";
+import { useOverlayDismissal } from "../lib/overlayDismissal.js";
 import "./Sheet.css";
 
 export function Sheet({
@@ -35,56 +34,29 @@ export function Sheet({
   /** A destructive action, kept away from the Cancel/Save pair. */
   footer?: React.ReactNode;
 }): React.JSX.Element {
-/**
- * Did this click's press begin on the backdrop itself?
- *
- * A `click` is dispatched on the nearest common ancestor of where the pointer
- * went down and where it came up. Select some text in the sheet, drag past its
- * edge and release, and that ancestor is the backdrop - so a plain
- * `onClick={onClose}` threw the form away mid-selection, losing whatever had
- * been typed. `stopPropagation` on the sheet cannot help: the sheet is not in
- * that event's path at all.
- *
- * So the press has to have started on the backdrop too. A deliberate click
- * outside still closes; a selection that merely ends outside does not.
- */
-  const pressedBackdrop = useRef(false);
-
-  // Android's Back closes the sheet rather than leaving the screen. Inert
-  // while saving, for the same reason Escape is: a request is in flight.
-  useBackDismiss(true, onClose, saving);
-
-  // Escape closes, as it does for any dialog. Not registered while saving: a
-  // request is already in flight and closing would hide its outcome.
-  useEffect(() => {
-    if (saving) return undefined;
-    const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [saving, onClose]);
+  // Cancel, Escape, Back and a tap outside - all four inert while saving.
+  const backdrop = useOverlayDismissal(onClose, saving);
 
   return (
+    /*
+     * A div, not a button: this is the dark area around the sheet, and a
+     * screen reader should find the dialog inside it rather than a
+     * full-screen control to tab past. Tapping outside is a pointer
+     * convenience on top of Cancel, Escape and Back, so nothing here is the
+     * only way to do anything - which is why it does not need to be
+     * reachable by keyboard itself.
+     */
     <div
       className="sheet-backdrop"
-      onPointerDown={(event) => {
-        pressedBackdrop.current = event.target === event.currentTarget;
-      }}
-      onClick={(event) => {
-        const fromBackdrop =
-          pressedBackdrop.current && event.target === event.currentTarget;
-        pressedBackdrop.current = false;
-        if (fromBackdrop && !saving) onClose();
-      }}
       role="presentation"
+      onPointerDown={backdrop.onPointerDown}
+      onClick={backdrop.onClick}
     >
       <div
         className="sheet"
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        onClick={(event) => event.stopPropagation()}
       >
         <form
           onSubmit={(event) => {

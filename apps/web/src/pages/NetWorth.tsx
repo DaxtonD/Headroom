@@ -17,6 +17,7 @@ import { Link } from "react-router";
 import { AssetForm } from "../components/AssetForm.js";
 import { Amount } from "../components/Badges.js";
 import { ApiError, OfflineError } from "../lib/api.js";
+import { useOverlayDismissal } from "../lib/overlayDismissal.js";
 import {
   useNetWorth,
   useSaveRetirement,
@@ -301,6 +302,10 @@ function AssumptionsForm({
   const save = useSaveRetirement();
   const [error, setError] = useState<string | null>(null);
 
+  // Cancel, Escape, Back and a tap outside - all four inert while saving.
+  // This sheet had only the tap, which is what the shared hook is for.
+  const backdrop = useOverlayDismissal(onClose, save.isPending);
+
   // Money starts as a human-readable amount; it is converted to integer cents
   // only on submit, which is the one place that conversion belongs.
   const [money, setMoney] = useState<Record<string, string>>(() => ({
@@ -362,13 +367,25 @@ function AssumptionsForm({
   };
 
   return (
-    <div className="sheet-backdrop" onClick={onClose} role="presentation">
+    /*
+     * A div, not a button: this is the dark area around the sheet, and a
+     * screen reader should find the dialog inside it rather than a
+     * full-screen control to tab past. Tapping outside is a pointer
+     * convenience on top of Cancel, Escape and Back, so nothing here is the
+     * only way to do anything - which is why it does not need to be
+     * reachable by keyboard itself.
+     */
+    <div
+      className="sheet-backdrop"
+      role="presentation"
+      onPointerDown={backdrop.onPointerDown}
+      onClick={backdrop.onClick}
+    >
       <div
         className="sheet"
         role="dialog"
         aria-modal="true"
         aria-label="Retirement assumptions"
-        onClick={(event) => event.stopPropagation()}
       >
         <form onSubmit={(event) => void submit(event)}>
           <h2 className="sheet__title">Retirement assumptions</h2>
