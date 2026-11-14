@@ -10,14 +10,9 @@
  * it later is the failure this design exists to prevent (section 16.2 rule 2).
  */
 import { NavLink } from "react-router";
-import { InitialBubble, type Person } from "./Badges.js";
+import { firstNameOf } from "../lib/people.js";
 import type { LiveStatus } from "../lib/useLiveUpdates.js";
 import "./Shell.css";
-
-export interface ShellMember extends Person {
-  readonly colorFg: string;
-  readonly colorBg: string;
-}
 
 const TABS = [
   // The balance, every event with its running balance, and the per-cheque
@@ -35,12 +30,13 @@ const TABS = [
 ] as const;
 
 export function Shell({
-  members,
+  you,
   live,
   onSignOut,
   children,
 }: {
-  members: readonly ShellMember[];
+  /** Whoever is signed in on this phone. */
+  you: { readonly name: string };
   live: LiveStatus;
   onSignOut: () => void;
   children: React.ReactNode;
@@ -51,13 +47,13 @@ export function Shell({
         <p className="shell-header__wordmark">Headroom</p>
 
         <div className="shell-header__right">
-          <ul className="shell-header__people" aria-label="Household">
-            {members.map((member) => (
-              <li key={member.id}>
-                <InitialBubble person={member} colorFg={member.colorFg} colorBg={member.colorBg} />
-              </li>
-            ))}
-          </ul>
+          {/*
+            Who is signed in on this phone, not who is in the household.
+            Two initials side by side answered a question nobody was asking -
+            and read as a pair of avatars, so the obvious guess was that one
+            of them was a button.
+          */}
+          <p className="shell-header__greeting">Hi {firstNameOf(you.name)}</p>
           {/*
             Settings lives here rather than in the tab bar: five tabs is
             already as many as a phone holds, and this is opened once in a
@@ -108,23 +104,27 @@ export function Shell({
   );
 }
 
-/** A gear, drawn rather than loaded: one icon is not worth a font or a file. */
+/**
+ * A gear, drawn rather than loaded: one icon is not worth a font or a file.
+ *
+ * The path is generated, not hand-written. The first one was eyeballed and
+ * came out lopsided, because eight teeth placed by hand means eight chances
+ * to be a degree out. These are eight identical teeth at 45 degree spacing,
+ * each a tip arc at r=9.5 and a valley arc at r=6.9 joined by straight
+ * flanks, so every tooth is the same shape and the whole thing is symmetric
+ * about both axes by construction.
+ */
 function GearIcon(): React.JSX.Element {
   return (
     <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true" focusable="false">
       <path
-        d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"
+        d="M21.36 10.35 A9.5 9.5 0 0 1 21.36 13.65 L18.66 13.79 A6.9 6.9 0 0 1 17.98 15.45 L19.78 17.45 A9.5 9.5 0 0 1 17.45 19.78 L15.45 17.98 A6.9 6.9 0 0 1 13.79 18.66 L13.65 21.36 A9.5 9.5 0 0 1 10.35 21.36 L10.21 18.66 A6.9 6.9 0 0 1 8.55 17.98 L6.55 19.78 A9.5 9.5 0 0 1 4.22 17.45 L6.02 15.45 A6.9 6.9 0 0 1 5.34 13.79 L2.64 13.65 A9.5 9.5 0 0 1 2.64 10.35 L5.34 10.21 A6.9 6.9 0 0 1 6.02 8.55 L4.22 6.55 A9.5 9.5 0 0 1 6.55 4.22 L8.55 6.02 A6.9 6.9 0 0 1 10.21 5.34 L10.35 2.64 A9.5 9.5 0 0 1 13.65 2.64 L13.79 5.34 A6.9 6.9 0 0 1 15.45 6.02 L17.45 4.22 A9.5 9.5 0 0 1 19.78 6.55 L17.98 8.55 A6.9 6.9 0 0 1 18.66 10.21 L21.36 10.35 Z"
         fill="none"
         stroke="currentColor"
-        strokeWidth="1.8"
-      />
-      <path
-        d="M19.4 13.5a7.6 7.6 0 0 0 0-3l1.7-1.3-1.8-3.1-2 .8a7.6 7.6 0 0 0-2.6-1.5L14.4 2h-3.6l-.3 2.4a7.6 7.6 0 0 0-2.6 1.5l-2-.8L4.1 8.2l1.7 1.3a7.6 7.6 0 0 0 0 3L4.1 13.8l1.8 3.1 2-.8a7.6 7.6 0 0 0 2.6 1.5l.3 2.4h3.6l.3-2.4a7.6 7.6 0 0 0 2.6-1.5l2 .8 1.8-3.1-1.7-1.3Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.8"
+        strokeWidth="1.7"
         strokeLinejoin="round"
       />
+      <circle cx="12" cy="12" r="3.3" fill="none" stroke="currentColor" strokeWidth="1.7" />
     </svg>
   );
 }

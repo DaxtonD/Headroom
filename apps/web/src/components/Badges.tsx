@@ -10,11 +10,16 @@
  */
 import type { Cents } from "@headroom/core";
 import { formatCents } from "@headroom/core";
+import { initialOf } from "../lib/people.js";
 import "./Badges.css";
 
 export interface Person {
   readonly id: string;
   readonly name: string;
+  /**
+   * Kept because the API sends it and the CLI prints it, and deliberately not
+   * used for display: see `initialOf` in `lib/people.ts`.
+   */
   readonly initial: string;
 }
 
@@ -73,7 +78,7 @@ export function VerificationBadge({
       </svg>
       {verifiedBy ? (
         <span className="badge__initial" aria-hidden="true">
-          {verifiedBy.initial}
+          {initialOf(verifiedBy)}
         </span>
       ) : null}
     </span>
@@ -109,7 +114,7 @@ export function InitialBubble({
       style={{ color: colorFg ?? "var(--hr-neutral-fg)", background: colorBg ?? "var(--hr-neutral-bg)" }}
       title={person.name}
     >
-      <span aria-hidden="true">{person.initial}</span>
+      <span aria-hidden="true">{initialOf(person)}</span>
       <span className="hr-visually-hidden">{person.name}</span>
     </span>
   );

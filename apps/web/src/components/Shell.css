@@ -1,3 +1,19 @@
+/*
+ * `minmax(0, 1fr)`, not the `auto` a single-column grid gets by default, and
+ * the whole reason is the `0`.
+ *
+ * A grid track sized `auto` is at least as wide as the widest min-content
+ * inside it, so one control that could not be made narrower did not overflow
+ * its own row - it widened the track, and with it the header, the tab bar and
+ * the page. Reported from use: opening a row on the ledger "causes the window
+ * to expand horizontally and overflow. I have to pinch-zoom out to see the
+ * whole UI again." Nothing on the ledger looked wrong, because the thing that
+ * had grown was the page.
+ *
+ * A zero minimum caps the track at the viewport instead. Anything that still
+ * will not fit then overflows its own box, which is a visible, local bug in
+ * one component rather than a silent change to the size of the app.
+ */
 .shell-layout {
   min-height: 100dvh;
   display: grid;
@@ -6,7 +22,16 @@
     "offline"
     "main"
     "nav";
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto auto 1fr auto;
+}
+
+/* Grid items default to a min-content floor of their own, for the same reason. */
+.shell-header,
+.shell-offline,
+.shell-nav,
+.shell-main {
+  min-width: 0;
 }
 
 /* ---- Header ---- */
@@ -38,12 +63,19 @@
   gap: var(--hr-space-3);
 }
 
-.shell-header__people {
-  display: flex;
-  gap: var(--hr-space-1);
-  list-style: none;
-  margin: 0;
-  padding: 0;
+/*
+ * Who is signed in, where the two initials used to be.
+ *
+ * It truncates rather than wrapping: the header is one line, and a long name
+ * must not be allowed to push the gear and Sign out off the edge.
+ */
+.shell-header__greeting {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+  color: var(--hr-text-secondary);
 }
 
 .shell-header__signout {
@@ -136,7 +168,8 @@
       "header header"
       "offline offline"
       "nav main";
-    grid-template-columns: 220px 1fr;
+    /* `minmax(0, …)` here too: `1fr` alone still has a min-content floor. */
+    grid-template-columns: 220px minmax(0, 1fr);
     grid-template-rows: auto auto 1fr;
   }
 

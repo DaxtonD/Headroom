@@ -61,13 +61,7 @@ export function App(): React.JSX.Element {
 
   return (
     <Shell
-      members={session.data.members.map((member) => ({
-        id: member.id,
-        name: member.name,
-        initial: member.initial,
-        colorFg: member.colorFg,
-        colorBg: member.colorBg,
-      }))}
+      you={{ name: session.data.user.name }}
       live={live}
       onSignOut={() => logout.mutate()}
     >
