@@ -108,6 +108,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--hr-space-3);
+  min-width: 0;
 }
 
 .row__note {
@@ -153,22 +154,49 @@
   gap: var(--hr-space-4);
 }
 
+/*
+ * The field and its Save button, which wrap onto two lines rather than
+ * squeezing each other.
+ *
+ * A row of two that cannot wrap is as wide as both of them: a date field has
+ * a width below which the phone's own date control will not go, and Save
+ * will not go below its label, so on a narrow phone the pair set a floor for
+ * everything above them. Letting Save drop underneath costs a line of height
+ * in a case that rarely happens and removes the floor entirely.
+ */
 .row__amount-input,
 .row__date-input {
   display: flex;
+  flex-wrap: wrap;
   gap: var(--hr-space-2);
+  min-width: 0;
 }
 
 .row__amount-input .hr-input,
 .row__date-input .hr-input {
-  flex: 1;
+  /* Wrap before going narrower than about ten characters. */
+  flex: 1 1 10ch;
   min-width: 0;
+  max-width: 100%;
 }
 
 .row__buttons {
   display: flex;
   flex-wrap: wrap;
   gap: var(--hr-space-2);
+  min-width: 0;
+}
+
+/*
+ * A button in the panel may break its own label rather than set a floor for
+ * the page. Two lines inside a pill is not pretty; it beats a phone that has
+ * to be pinched to read a balance. It takes a narrow phone, or a browser base
+ * text size turned well up, to reach it at all.
+ */
+.row__panel .hr-button {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .row__move-buttons {

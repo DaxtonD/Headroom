@@ -444,6 +444,90 @@ Dax in the running app rather than being caught here, which is the one that matt
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
 
+## Four things found by using it on a phone (2026-11-13)
+
+All four reported from the installed app, with screenshots. None of them was visible from
+here - there is no browser in this environment - and two were invisible to every existing
+check as well.
+
+### The two initials in the header
+
+Both people's badges showed the same letter, so the pair said nothing about who was who, and
+showing the household at all answered a question nobody had asked. The header now greets
+whoever is signed in on this phone instead.
+
+The letter itself came from an `initial` column typed in separately when the account is made,
+which is how it managed to disagree with the name. It is derived from the name now
+(`lib/people.ts`), on every badge. The column stays - the API sends it, the CLI prints it -
+and nothing displays it. Changing it in the database would have fixed one household; deriving
+it fixes the kind of mistake.
+
+### The settings gear
+
+Described as "like a hand-drawn svg that isn't symmetrical", which is what it was: eight teeth
+placed by eye. It is generated now - eight identical teeth at 45 degrees, a tip arc at r=9.5
+and a valley arc at r=6.9 joined by straight flanks - and a test reads the coordinates back out
+of the shipped icon and measures them. Nudging one number by 0.2 turns three of its assertions
+red, which is the slip that produced the original.
+
+### Android's Back button
+
+> "In the manage screen if I edit something and press the back button I'm returned to the
+> ledger. The back button should behave as expected in android."
+
+Correct, and worse in an installed PWA, where there is no browser chrome to show what Back is
+about to do - so a half-typed form and the screen under it both went at once.
+
+`lib/backDismiss.ts`: while something is open it owns a history entry, Back pops that entry and
+closes it, and closing any other way takes the entry back out so Back never needs two presses.
+The URL never changes, because a modal is a step and not a route - a reload or an installed
+shortcut has to land on a real screen.
+
+Two details are load-bearing:
+
+- **The callback is held in a ref**, so the effect depends only on "is something open". An
+  `onClose` written inline is a new function on every render, and re-running the effect means a
+  `history.back()` and a `pushState` racing over the one entry the whole thing depends on,
+  several times a second.
+- **The cleanup only pops an entry that is still the current one.** If a route change is what
+  unmounted the overlay, the router has already pushed its own entry, and going back would undo
+  the navigation. A stranded entry costs one extra Back press; undoing a navigation loses the
+  screen.
+
+Applied to `Sheet` (so every editing form has it), the balance sheet, an opened ledger row and
+the working behind a headline figure.
+
+### The window got wider when a ledger row was opened
+
+> "Causes the window to expand horizontally and overflow. I have to pinch-zoom out to see the
+> whole UI again."
+
+The cause was not on the ledger. `.shell-layout` is a grid, and a track sized `auto` - which is
+what a single-column grid gets by default, and what `1fr` still falls back to for its minimum -
+is never narrower than the widest min-content inside it. So a control that could not be
+squeezed did not overflow its own row: it widened the track, and with it the header, the tab
+bar and the page.
+
+`grid-template-columns: minmax(0, 1fr)` caps it at the viewport, with `min-width: 0` on the
+grid items, which have an automatic minimum of their own. Then the controls themselves were
+made able to shrink, so nothing has to be clipped for that cap to hold: the field and its Save
+button wrap onto two lines rather than squeezing each other, and a button in the panel may
+break its own label rather than set a floor for the page.
+
+`test/layout-width.test.ts` states the rule, because `minmax(0, 1fr)` reads like a long-winded
+`1fr` to anybody who has not been bitten by it and is exactly the kind of thing that gets
+tidied back out.
+
+### Still to do
+
+- Nothing here has been seen rendered. The greeting, the gear and the wrapping are reasoned and
+  tested at the level the environment allows.
+- The back-button hook has no test. It is a React effect over the real history stack, and the
+  web suite has no DOM - adding one would mean jsdom and a renderer, which is a bigger decision
+  than this change.
+- Back does not close the inline states on Manage (renaming an account, an armed "remove"
+  confirmation). Only the modals and the ledger row.
+
 ## Bug 17: the fix for bug 13 put the pay on the ledger twice (2026-11-13, reported from production)
 
 Reported with a screenshot: pressing **Put X's pay on the ledger** did put it on the ledger,
