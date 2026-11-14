@@ -23,7 +23,7 @@
  *    what turns a third paycheque from "silently absorbed" into a decision.
  */
 import { formatCents, formatDateShort } from "@headroom/core";
-import { useId, useMemo, useState } from "react";
+import { useCallback, useId, useMemo, useState } from "react";
 import { Amount, Chip, CoveragePill } from "../components/Badges.js";
 import { ExplainButton, ExplainPanel } from "../components/Explain.js";
 import { OccurrenceRow, type MoveTarget } from "../components/OccurrenceRow.js";
@@ -33,6 +33,7 @@ import {
   explainLeftThisCycle,
   explainSafeToSpend,
 } from "../lib/explain.js";
+import { useBackDismiss } from "../lib/backDismiss.js";
 import {
   useDashboard,
   usePatchOccurrence,
@@ -63,6 +64,11 @@ export function Ledger({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [addingOneOff, setAddingOneOff] = useState(false);
 
+  // An opened row is a step, so Android's Back closes it rather than leaving
+  // the ledger.
+  const collapseRow = useCallback(() => setExpandedId(null), []);
+  useBackDismiss(expandedId !== null, collapseRow);
+
   /*
    * Which figure's working is open, if any.
    *
@@ -78,6 +84,10 @@ export function Ledger({
   const toggleExplain = (which: "chequing" | "safe" | "left") => () => {
     setExplaining(explaining === which ? null : which);
   };
+
+  // And Back closes the working, for the same reason.
+  const closeExplain = useCallback(() => setExplaining(null), []);
+  useBackDismiss(explaining !== null, closeExplain);
 
   if (dashboard.isPending) {
     return (

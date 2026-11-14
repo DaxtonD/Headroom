@@ -11,6 +11,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { Amount } from "./Badges.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
 import { useClearableCandidates, useUpdateBalance } from "../lib/queries.js";
+import { useBackDismiss } from "../lib/backDismiss.js";
 import "./Sheet.css";
 import "./UpdateBalanceSheet.css";
 
@@ -73,6 +74,9 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  // Android's Back closes it, rather than leaving the ledger behind.
+  useBackDismiss(true, onClose, updateBalance.isPending);
 
   // Escape closes, as it should for anything modal.
   useEffect(() => {

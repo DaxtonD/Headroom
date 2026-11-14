@@ -10,6 +10,7 @@
  * screen reader announces the dialog and its name.
  */
 import { useEffect, useRef } from "react";
+import { useBackDismiss } from "../lib/backDismiss.js";
 import "./Sheet.css";
 
 export function Sheet({
@@ -48,6 +49,10 @@ export function Sheet({
  * outside still closes; a selection that merely ends outside does not.
  */
   const pressedBackdrop = useRef(false);
+
+  // Android's Back closes the sheet rather than leaving the screen. Inert
+  // while saving, for the same reason Escape is: a request is in flight.
+  useBackDismiss(true, onClose, saving);
 
   // Escape closes, as it does for any dialog. Not registered while saving: a
   // request is already in flight and closing would hide its outcome.
