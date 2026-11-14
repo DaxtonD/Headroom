@@ -23,7 +23,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
 | Info button on the headline figures | done | | At Dax's request. Shows the working behind in chequing, safe to spend and left this cycle, from the engine so it cannot disagree |
 | Phone-use fixes: greeting, gear, Back button, page width | done | | Four reported from the installed app; the widest was the shell grid making the whole page grow |
-| M5 PWA + desktop polish | **in progress** | | Installed and in daily use. Three shortcuts, the app badge, and a Content-Security-Policy that hashes the page it protects. Left: instant cached Home (needs a decision from Dax), desktop polish, the accessibility pass |
+| M5 PWA + desktop polish | **in progress** | | Installed and in daily use. Three shortcuts, the app badge, and a Content-Security-Policy that hashes the page it protects. Left: instant cached Home (needs a decision, not a default), desktop polish, the accessibility pass |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
 ## Last session
@@ -447,8 +447,9 @@ Dax in the running app rather than being caught here, which is the one that matt
 
 ## M5 continued: shortcuts, the badge, and a policy (2026-11-13)
 
-Installed on a phone and working. Dax: "the shortcut was a super nice touch" - so there are
-three of them now, and the other two widget substitutes the brief asks for are in as well.
+Installed on a phone and working. The first shortcut landed well - "a super nice touch" -
+so there are three of them now, and the other two widget substitutes the brief asks for
+are in as well.
 
 ### Three shortcuts
 
@@ -517,7 +518,7 @@ anything, and `script-src` is what stops the attack this is for.
 
 - **Instant cached Home**, which needs a decision rather than a default: painting the last
   figures immediately means keeping them on the device. Faster every open, against the
-  household's balances sitting in phone storage rather than only on the server. Put to Dax.
+  household's balances sitting in phone storage rather than only on the server. Asked, not assumed.
 - Desktop polish and the accessibility pass.
 - The CSP has not been seen in a browser. If it is wrong the symptom is one screen misbehaving
   with a console message nobody is watching, so it is worth a deliberate look: the theme
