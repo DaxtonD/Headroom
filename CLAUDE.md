@@ -66,6 +66,9 @@ Keep this list current as you build.
   today or later only - the database's own clock is not faked.
 - `python3 seed/check_seed.py [path]`: verify a seed file's expected values. With no path it checks the local real seed and skips cleanly when absent.
 - `python3 seed/make_synthetic_fixture.py`: regenerate the committed synthetic fixture.
+- `python3 scripts/make_icons.py`: regenerate every icon under `apps/web/public/` from the one
+  master at `assets/headroom-icon.png` (favicon, the manifest's icons, the maskable one and
+  Apple's). Needs Pillow. Run it after changing the logo, never edit the generated files.
 - `pnpm check:figures`: fail if a real household figure has reached a tracked file. Reads the
   git-ignored seed for what to look for, so it only works on Dax's machine and skips cleanly
   elsewhere (CI has no seed by design). Catches distinctive amounts - the ones with odd cents -
