@@ -11,15 +11,31 @@
  * judge a theme or a text size is to look at it.
  */
 import { TEXT_SIZES, THEMES, useAppearance } from "../lib/appearance.js";
+import { useSettingsRoute } from "../lib/settingsRoute.js";
 import "./Settings.css";
 
 export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.Element {
   const [appearance, setAppearance] = useAppearance();
+  const settings = useSettingsRoute();
 
   return (
     <div className="settings">
       <header className="settings__head">
-        <h1 className="settings__title">Settings</h1>
+        <div className="settings__head-row">
+          <h1 className="settings__title">Settings</h1>
+          {/*
+            The way out, said in words. The gear in the header closes this
+            too, but a gear is a symbol for "open settings" everywhere else,
+            so nobody tries it to leave - and there was nothing else to try.
+          */}
+          <button
+            className="hr-button hr-button--secondary settings__close"
+            type="button"
+            onClick={settings.close}
+          >
+            Close settings
+          </button>
+        </div>
         <p className="settings__intro">
           How Headroom looks on this phone or computer. These are not shared, so you and anyone
           else in the household can each have your own.

@@ -43,11 +43,17 @@ describe("the gear", () => {
     expect(literals.test(icon), `a literal colour in the icon: ${icon}`).toBe(false);
   });
 
-  it("is hidden from a screen reader, which reads the link instead", () => {
-    // The link around it carries aria-label="Settings"; the drawing itself
-    // would otherwise be announced twice or as nothing useful.
+  it("is hidden from a screen reader, which reads the button instead", () => {
+    // The button around it carries the name; the drawing itself would
+    // otherwise be announced twice or as nothing useful.
     expect(icon).toContain('aria-hidden="true"');
-    expect(shell).toContain('aria-label="Settings"');
+
+    // And the name says what pressing it does now, because it is a toggle:
+    // a button called "Settings" that closes Settings is a lie to anyone
+    // who cannot see which screen they are on.
+    expect(shell).toContain('"Close settings"');
+    expect(shell).toContain('"Settings"');
+    expect(shell).toContain("aria-pressed=");
   });
 
   it("is still the icon that was vendored", () => {

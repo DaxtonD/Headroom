@@ -213,6 +213,11 @@
   /* A 44px target around a 22px icon, which is the M5 minimum. */
   min-width: var(--hr-touch-min);
   min-height: var(--hr-touch-min);
+  /* It is a button now, so the browser's own chrome has to go. */
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: pointer;
   border-radius: var(--hr-radius-pill);
   color: var(--hr-text-secondary);
 }

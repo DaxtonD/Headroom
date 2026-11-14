@@ -11,6 +11,7 @@
  */
 import { NavLink } from "react-router";
 import { firstNameOf } from "../lib/people.js";
+import { useSettingsRoute } from "../lib/settingsRoute.js";
 import type { LiveStatus } from "../lib/useLiveUpdates.js";
 import "./Shell.css";
 
@@ -41,6 +42,8 @@ export function Shell({
   onSignOut: () => void;
   children: React.ReactNode;
 }): React.JSX.Element {
+  const settings = useSettingsRoute();
+
   return (
     <div className="shell-layout">
       <header className="shell-header">
@@ -59,16 +62,23 @@ export function Shell({
             already as many as a phone holds, and this is opened once in a
             while rather than several times a day. Sign out stays beside it,
             where it has always been.
+
+            A button rather than a link, because it is a toggle: a second tap
+            closes Settings and goes back to what was open. As a link it was
+            a one-way trip, since a link to the page you are already on does
+            nothing at all.
           */}
-          <NavLink
-            className={({ isActive }) =>
-              `shell-header__settings ${isActive ? "shell-header__settings--active" : ""}`
-            }
-            to="/settings"
-            aria-label="Settings"
+          <button
+            className={`shell-header__settings ${
+              settings.isOpen ? "shell-header__settings--active" : ""
+            }`}
+            type="button"
+            aria-pressed={settings.isOpen}
+            aria-label={settings.isOpen ? "Close settings" : "Settings"}
+            onClick={settings.toggle}
           >
             <GearIcon />
-          </NavLink>
+          </button>
           <button className="shell-header__signout" type="button" onClick={onSignOut}>
             Sign out
           </button>

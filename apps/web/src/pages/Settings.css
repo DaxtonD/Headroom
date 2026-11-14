@@ -4,8 +4,27 @@
   gap: var(--hr-space-4);
 }
 
+/*
+ * The title and the way out, side by side.
+ *
+ * It wraps rather than shrinking the button: "Close settings" said in full is
+ * the point of it, and a 44px target has to stay a 44px target.
+ */
+.settings__head-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  min-width: 0;
+}
+
 .settings__title {
   font-size: 1.5rem;
+}
+
+.settings__close {
+  flex: 0 0 auto;
 }
 
 .settings__intro {
