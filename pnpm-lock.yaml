@@ -133,6 +133,9 @@ importers:
       vitest:
         specifier: ^4.1.12
         version: 4.1.12(@types/node@20.19.43)(vite@7.3.7(@types/node@20.19.43)(jiti@2.7.0)(lightningcss@1.33.0)(terser@5.51.2)(tsx@4.23.15))
+      workbox-window:
+        specifier: 7.4.1
+        version: 7.4.1
 
   packages/core:
     dependencies:

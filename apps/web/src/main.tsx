@@ -3,6 +3,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { BrowserRouter } from "react-router";
 import { App } from "./App.js";
+import { UpdateReady } from "./components/UpdateReady.js";
 import { ApiError } from "./lib/api.js";
 import "./styles/global.css";
 
@@ -39,5 +40,12 @@ createRoot(container).render(
         <App />
       </BrowserRouter>
     </QueryClientProvider>
+    {/*
+      Outside the router and outside the session, because registering the
+      service worker is not something to do only once somebody is signed in -
+      the shell has to be cached before the first offline open, and a new
+      version has to be offerable on the sign-in screen too.
+    */}
+    <UpdateReady />
   </StrictMode>,
 );

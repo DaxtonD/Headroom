@@ -8,7 +8,7 @@
  * described them as three screens; the household's complaint about the result
  * was that one list had been split across three places.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { Shell } from "./components/Shell.js";
 import { UpdateBalanceSheet } from "./components/UpdateBalanceSheet.js";
@@ -27,7 +27,27 @@ import "./styles/app.css";
 export function App(): React.JSX.Element {
   const session = useSession();
   const logout = useLogout();
-  const [balanceSheetOpen, setBalanceSheetOpen] = useState(false);
+  /*
+   * Opened by the manifest shortcut as well as by the button.
+   *
+   * A PWA on Android cannot have the home-screen widget the brief asks for
+   * (HANDOFF section 3), so the nearest real thing is a long-press shortcut
+   * straight to the one job done several times a day. It arrives as
+   * `/?update-balance=1`, which is read once on mount and then taken out of
+   * the URL - otherwise a reload, or a share of the address, reopens it.
+   */
+  const [balanceSheetOpen, setBalanceSheetOpen] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return new URLSearchParams(window.location.search).has("update-balance");
+  });
+
+  useEffect(() => {
+    if (!balanceSheetOpen) return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("update-balance")) return;
+    url.searchParams.delete("update-balance");
+    window.history.replaceState(window.history.state, "", url);
+  }, [balanceSheetOpen]);
 
   // Only listen once there is someone to listen for.
   const live = useLiveUpdates(Boolean(session.data));

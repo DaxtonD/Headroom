@@ -21,6 +21,23 @@
     <meta name="robots" content="noindex, nofollow" />
     <meta name="referrer" content="same-origin" />
 
+    <!--
+      Icons. Everything here is generated from assets/headroom-icon.png by
+      scripts/make_icons.py; the manifest's own icons are declared in
+      vite.config.ts.
+
+      iOS ignores the manifest's icons entirely and reads apple-touch-icon,
+      which is why it is listed separately and why it is the one drawn on a
+      solid background - iOS composites transparency onto black.
+    -->
+    <link rel="icon" href="/favicon.ico" sizes="16x16 32x32 48x48" />
+    <link rel="icon" type="image/png" href="/icon-192.png" sizes="192x192" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Installed on iOS: no browser chrome, and a status bar that blends. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="Headroom" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
     <title>Headroom</title>
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />

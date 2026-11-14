@@ -22,7 +22,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Undo for received/paid | done | | Bug 15, found in testing. A cleared cheque is no longer re-projected, archiving the pay stops the ghost, and the ledger offers an undo |
 | "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
 | Info button on the headline figures | done | | At Dax's request. Shows the working behind in chequing, safe to spend and left this cycle, from the engine so it cannot disagree |
-| M5 PWA + desktop polish | not started | | |
+| Phone-use fixes: greeting, gear, Back button, page width | done | | Four reported from the installed app; the widest was the shell grid making the whole page grow |
+| M5 PWA + desktop polish | **in progress** | | Installable: icons from one master, manifest, shell-only offline cache, update prompt, "Update balance" shortcut, and a way out of Settings. Left: instant cached Home, the badge, desktop polish, the accessibility pass, CSP |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
 ## Last session
@@ -443,6 +444,99 @@ Dax in the running app rather than being caught here, which is the one that matt
    round - typed, sent, stored, read back, formatted - through the same engine functions the
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
+
+## M5 started: installable, and a way out of Settings (2026-11-13)
+
+### A way out of Settings
+
+Reported: the gear opens Settings and nothing closes it. Both halves were true. A second tap
+did nothing, because a link to the page you are already on is a no-op, and there was no close
+button either - the only way back was the tab bar, which does not return you to what you were
+looking at.
+
+The gear is a button now, and `lib/settingsRoute.ts` holds the open/close decision so the gear
+and the button on the screen cannot disagree about where "back" is. Closing goes back through
+history rather than to a fixed screen, so it returns to the ledger scrolled where it was. That
+only works when this app is what put Settings there, which the location state records; opened
+cold by a reload or a shortcut, there is nothing behind it and going back would leave the app,
+so it replaces with the ledger instead.
+
+The button's name changes with it - "Settings" or "Close settings" - because a button called
+Settings that closes Settings is a lie to anyone who cannot see which screen they are on.
+
+### The icon
+
+Dax drew one. `assets/headroom-icon.png` is the master and everything under `apps/web/public/`
+is generated from it by `scripts/make_icons.py`; the generated files are never edited by hand.
+Icons drift otherwise - a new logo lands in the favicon and not in the maskable one, and nobody
+notices for months because the maskable only shows on an Android home screen.
+
+Three things the script handles that are easy to get wrong:
+
+- **Trimming.** The master's transparent margins are uneven - the arrow reaches the left edge
+  while the top has 69px of nothing - so scaling the canvas would centre the empty space rather
+  than the logo.
+- **The maskable safe zone.** Android crops a maskable icon to its launcher's shape, which may
+  be a circle, so that one is drawn smaller again than the middle 80% and on a solid
+  background. A maskable icon with transparent corners gets them filled with something that is
+  not our choosing.
+- **Apple.** iOS composites transparency onto black and reads none of the manifest's icons, so
+  `apple-touch-icon.png` is separate and on the same solid background.
+
+The background for both is `--hr-ground` from the default theme, so an icon on a solid
+background is the colour of the app behind it.
+
+### Installable
+
+`vite-plugin-pwa`, which was already a dependency and unused. `workbox-window` had to be added:
+the React register module imports it, and pnpm's strict layout means it is not there by
+accident.
+
+**The manifest** lives in `apps/web/manifest.config.ts` rather than inside the Vite config,
+because it is data and it is worth testing. Every field in it fails silently when wrong: Chrome
+checks it before offering to install, and when something does not add up it simply declines -
+no error, no console warning, just an install button that never appears.
+
+**Offline is a read-only cache and nothing more** (HANDOFF 16.2 rule 2). The worker precaches
+the shell and the fonts; `/api` has no caching rule at all, so every request for data reaches
+the server or fails. That is what keeps the offline banner honest - the app says these are the
+last numbers it had, and it is not quietly serving a cached answer behind that. It also means
+no household figure is ever written to the Cache Storage API, so signing out leaves nothing
+behind to purge.
+
+**Updates prompt rather than apply themselves.** `autoUpdate` activates a new worker the moment
+it downloads, which can swap the code under a form somebody is halfway through typing a balance
+into. A bar they tap when ready is the same principle as everything else here - nothing about
+their money happens without them saying so. The cost is that a version nobody taps never lands,
+so the worker re-checks whenever the app comes back to the foreground.
+
+**The shortcut.** A PWA on Android cannot have the home-screen widget the brief asks for
+(HANDOFF section 3). The manifest offers a long-press shortcut straight to "Update balance",
+which is the one job done several times a day. It arrives as `/?update-balance=1`, read once on
+mount and then taken out of the URL so a reload does not reopen it.
+
+**The server needed no changes**, which was worth finding out rather than assuming:
+`apps/api/src/routes/web.ts` was already written for this - `sw.js` and `manifest.webmanifest`
+served `no-cache`, fingerprinted assets immutable, deep links falling through to the shell.
+`apps/api/test/pwaAssets.test.ts` now proves it against the real built app, and skips when
+there is no `dist` the way the golden seed tests skip without the seed. Each of those is silent
+when it breaks: a manifest served as text is ignored, a `sw.js` answered with the HTML shell
+fails to register, and a cached worker pins a phone to an old build.
+
+### What is left in M5
+
+- **Instant cached Home.** The brief asks for the last known numbers painted immediately, then
+  refreshed. Nothing persists the query cache yet, so a cold start still waits for the network.
+  This is the next piece, and it is where the decision about storing figures on the device
+  has to be made deliberately rather than by default.
+- **The badge.** `navigator.setAppBadge` with the count of bills still estimates.
+- **Desktop polish and the accessibility pass.** Both partly done already - there are 1024px
+  layouts, 44px targets throughout and a contrast test across all five themes - but neither has
+  been gone through deliberately.
+- **CSP.** `index.html` carries an inline script that sets the theme before first paint, and
+  the note in it says this needs a hash or a nonce when CSP arrives with the PWA.
+- Nothing here has been seen on a phone. The install, the splash screen, the maskable crop and
+  the update bar are all reasoned and tested as far as this environment allows.
 
 ## Four things found by using it on a phone (2026-11-13)
 

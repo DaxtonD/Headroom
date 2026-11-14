@@ -1,0 +1,46 @@
+/*
+ * Above the tab bar rather than at the top: the balance is the first thing
+ * the eye lands on and must not be pushed down the screen by a notice about
+ * the app itself.
+ */
+.update-ready {
+  position: fixed;
+  z-index: 20;
+  left: var(--hr-space-4);
+  right: var(--hr-space-4);
+  /* Clear of the phone's tab bar, and of its gesture area under that. */
+  bottom: calc(64px + var(--hr-space-4) + env(safe-area-inset-bottom, 0px));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  min-width: 0;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-card);
+  background: var(--hr-card);
+  color: var(--hr-ink);
+  box-shadow: var(--hr-shadow-hero);
+}
+
+.update-ready__words {
+  flex: 1 1 14ch;
+  min-width: 0;
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.update-ready__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hr-space-2);
+}
+
+@media (min-width: 1024px) {
+  .update-ready {
+    bottom: var(--hr-space-5);
+  }
+}
