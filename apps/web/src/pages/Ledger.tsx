@@ -23,9 +23,9 @@
  *    what turns a third paycheque from "silently absorbed" into a decision.
  */
 import { formatCents, formatDateShort } from "@headroom/core";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { Amount, Chip, CoveragePill } from "../components/Badges.js";
-import { Explain } from "../components/Explain.js";
+import { ExplainButton, ExplainPanel } from "../components/Explain.js";
 import { OccurrenceRow, type MoveTarget } from "../components/OccurrenceRow.js";
 import { OneOffForm } from "../components/OneOffForm.js";
 import {
@@ -62,6 +62,22 @@ export function Ledger({
   // error banner up here would be a second place to look for the same news.
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [addingOneOff, setAddingOneOff] = useState(false);
+
+  /*
+   * Which figure's working is open, if any.
+   *
+   * One at a time, and the state lives here rather than in each button,
+   * because the panel is not rendered where its button is: "safe to spend"
+   * and "left this cycle" share a two-column row, and a panel rendered inside
+   * one of those columns is half the width of the screen. Each panel gets a
+   * full-width slot instead, and only the open one is mounted.
+   */
+  const explainId = useId();
+  const [explaining, setExplaining] = useState<"chequing" | "safe" | "left" | null>(null);
+  const panelId = (which: string): string => `${explainId}-${which}`;
+  const toggleExplain = (which: "chequing" | "safe" | "left") => () => {
+    setExplaining(explaining === which ? null : which);
+  };
 
   if (dashboard.isPending) {
     return (
@@ -111,13 +127,11 @@ export function Ledger({
       <section className="ledger__hero" aria-labelledby="ledger-balance-label">
         <p className="ledger__hero-label" id="ledger-balance-label">
           In chequing
-          <Explain
-            working={explainInChequing({
-              cents: data.balance.cents,
-              snapshotCents: data.balance.snapshotCents,
-              asOf: data.balance.asOf,
-              enteredBy: data.balance.enteredBy,
-            })}
+          <ExplainButton
+            figure="in chequing"
+            panelId={panelId("chequing")}
+            open={explaining === "chequing"}
+            onToggle={toggleExplain("chequing")}
           />
         </p>
         <p className="ledger__hero-amount hr-amount">{formatCents(data.balance.cents)}</p>
@@ -125,6 +139,18 @@ export function Ledger({
           Updated {updatedLabel}
           {data.balance.enteredBy ? ` by ${data.balance.enteredBy.name}` : ""}
         </p>
+
+        {explaining === "chequing" ? (
+          <ExplainPanel
+            id={panelId("chequing")}
+            working={explainInChequing({
+              cents: data.balance.cents,
+              snapshotCents: data.balance.snapshotCents,
+              asOf: data.balance.asOf,
+              enteredBy: data.balance.enteredBy,
+            })}
+          />
+        ) : null}
         <button className="hr-button ledger__update" type="button" onClick={onUpdateBalance}>
           Update balance
         </button>
@@ -139,14 +165,11 @@ export function Ledger({
                 arrives before it goes out the answer is the whole balance -
                 which looks like a mistake until you see the working.
               */}
-              <Explain
-                working={explainSafeToSpend({
-                  safeToSpendNowCents: data.safeToSpendNowCents,
-                  cushionCents: data.cushionCents,
-                  lowest: data.lowest,
-                  lowestAfterName: data.breakdown.lowestAfterName,
-                  horizonEnd: data.horizonEnd,
-                })}
+              <ExplainButton
+                figure="safe to spend now"
+                panelId={panelId("safe")}
+                open={explaining === "safe"}
+                onToggle={toggleExplain("safe")}
               />
             </p>
             <p className="ledger__hero-subamount hr-amount">
@@ -156,17 +179,40 @@ export function Ledger({
           <div>
             <p className="ledger__hero-sublabel">
               Left this cycle
-              <Explain
-                working={explainLeftThisCycle({
-                  breakdown: data.breakdown,
-                  horizonEnd: data.horizonEnd,
-                })}
+              <ExplainButton
+                figure="left this cycle"
+                panelId={panelId("left")}
+                open={explaining === "left"}
+                onToggle={toggleExplain("left")}
               />
             </p>
             <p className="ledger__hero-subamount hr-amount">
               {formatCents(data.leftThisCycleCents)}
             </p>
           </div>
+
+          {/* Full width, under both: see .ledger__hero-split in the stylesheet. */}
+          {explaining === "safe" ? (
+            <ExplainPanel
+              id={panelId("safe")}
+              working={explainSafeToSpend({
+                safeToSpendNowCents: data.safeToSpendNowCents,
+                cushionCents: data.cushionCents,
+                lowest: data.lowest,
+                lowestAfterName: data.breakdown.lowestAfterName,
+                horizonEnd: data.horizonEnd,
+              })}
+            />
+          ) : null}
+          {explaining === "left" ? (
+            <ExplainPanel
+              id={panelId("left")}
+              working={explainLeftThisCycle({
+                breakdown: data.breakdown,
+                horizonEnd: data.horizonEnd,
+              })}
+            />
+          ) : null}
         </div>
         <p className="ledger__hero-note">
           {data.lowest.date

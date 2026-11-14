@@ -444,6 +444,82 @@ Dax in the running app rather than being caught here, which is the one that matt
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
 
+## Bug 17: the fix for bug 13 put the pay on the ledger twice (2026-11-13, reported from production)
+
+Reported with a screenshot: pressing **Put X's pay on the ledger** did put it on the ledger,
+beside the income that was already there. Income double-counted on every payday; safe-to-spend
+and left-this-cycle both overstated until the restored entry was archived again.
+
+### What was wrong
+
+The checklist asked a question too narrow for the conclusion it drew. `paydaysWithLivePay`
+answers "is a **paycheque template** bound to this payday", and the warning turned that into
+"this payday is not putting any money on the ledger". For a household who had entered both
+people's pay by hand - one as a deposit on the day, one as an item a day after the payday -
+the first was true and the second was false. They were looking at the money while being told
+it was missing.
+
+The button then acted on the narrow answer too, so it added a paycheque on top of income that
+was already arriving. Worse, when nothing was bound to the payday it fell back to "any archived
+cheque owned by this person", and that household had five archived entries, three of them the
+same person's and two of those sharing a name - so which one came back was whichever the
+database returned first.
+
+### The fix
+
+A second, wider question, `paydaysWithNoIncomeArriving`, answered from the generated rows
+instead of from the shape of a template: *is money arriving around this payday?* A household
+may enter their pay however suits them, and every shape ends as a dated row.
+
+The two questions have to stay separate. `computePayPeriods` needs the narrow one: silencing a
+payday whose money arrives some other way would make it project a phantom cheque on top of the
+real income and count the pay twice - the same bug by another road.
+
+Three details carry the weight:
+
+- **A window of three days either side.** Pay is not always entered as landing on the payday.
+  Paydays are fourteen days apart, so one monthly item can fall inside at most one window.
+- **All three upcoming paydays, not the next one.** Otherwise a child benefit that happens to
+  land near one payday answers for somebody's pay - which is the bug the per-payday check was
+  introduced to fix in the first place (bug 13).
+- **Each arrival is claimed, not merely matched.** Two people paid on the same day with one
+  cheque between them are not both covered by it. `computePayPeriods` places projected cheques
+  the same way, for the same reason. Their own cheque is claimed first, then one belonging to
+  nobody in particular.
+
+The button now asks the wide question, so it cannot add income to a payday that already has
+some, and its fallback to an archived cheque of the right person's applies only when there is
+exactly one of them.
+
+### What this cost in tests
+
+Four existing tests went red, and all four were setting up a state the API cannot produce:
+they archived a template with a raw Prisma write, which leaves the rows it had already put on
+the ledger exactly where they were. Archiving through `PATCH /api/templates/:id` reconciles
+those away in the same request - the test directly above one of them asserts that. Since the
+checklist now reads the ledger, rows left behind mean the money is still arriving. They clear
+the occurrences too now, with a note saying why.
+
+One of the four was more than an artefact: "refuses to guess when two people are paid on the
+same day" expected the checklist to complain, and the first version of this check silenced it,
+because an unowned cheque answered for both paydays. That is what the claiming is for.
+
+### Still to do
+
+- The ledger has not been seen rendered - there is no browser here.
+- `restorePaycheque` returning `false` is not reported in the UI. It is now only reachable by
+  pressing the button twice in the same instant, and the checklist item disappears either way.
+
+## The info panel was a column of single words (2026-11-13, reported from production)
+
+The working behind "safe to spend now" opened inside the half of the hero its button was in,
+so four lines of arithmetic became a page of one-word lines that had to be scrolled past.
+
+`Explain` is now two components. The button stays beside its figure; the panel is rendered by
+the page, at full width, in a slot of its own - a grid item spanning both columns for the two
+figures that share a row. The open figure is one piece of state on the page, so only one panel
+is ever mounted. A `<div>` inside a `<p>` went away with it.
+
 ## Bug 13: a payday was not money (2026-11-09, found in production)
 
 The worst one so far, and the only one that made the app actively lie. Dax had entered every

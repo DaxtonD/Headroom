@@ -73,6 +73,19 @@
   border-top: 1px solid var(--hr-hero-divider);
 }
 
+/*
+ * The working behind either of the two figures takes the whole row.
+ *
+ * It opens below both of them rather than inside the column its button is in:
+ * half of a phone is about 150 characters of card, which turned four lines of
+ * arithmetic into a column of single words that had to be scrolled past.
+ */
+.ledger__hero-split > .explain__panel {
+  grid-column: 1 / -1;
+  /* The grid's own gap already separates it from the two figures. */
+  margin-top: 0;
+}
+
 .ledger__hero-sublabel {
   color: var(--hr-hero-muted);
   font-size: 0.8125rem;

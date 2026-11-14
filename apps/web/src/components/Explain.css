@@ -5,6 +5,11 @@
  * surface on top of it, so its text contrast is the same contrast every other
  * card has - already checked against all five themes - instead of a new pair
  * of colours that would have to be checked again.
+ *
+ * It is always laid out at the full width of whatever holds it, and the two
+ * figures that share a row hand it a full-width slot of their own. A panel
+ * that inherits a half-width column gives one word per line and a page of
+ * scrolling for four lines of arithmetic.
  */
 
 .explain__button {
@@ -45,6 +50,8 @@
 .explain__panel {
   margin-top: var(--hr-space-3);
   padding: var(--hr-space-4);
+  /* Whatever it is placed in; the slots it is given are full width. */
+  width: 100%;
   text-align: left;
   color: var(--hr-ink);
 }
