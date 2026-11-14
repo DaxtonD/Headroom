@@ -27,10 +27,13 @@
  * off a paycheque and needs its row to exist, on its final date, first.
  */
 import {
+  addDays,
   compareDates,
   computeHorizonEnd,
+  daysBetween,
   generateOccurrences,
   generationWindow,
+  nextPaydays,
   type GeneratedOccurrence,
   type PaySchedule,
   type PlainDate,
@@ -944,6 +947,178 @@ export async function paydaysWithLivePay(
 }
 
 /**
+ * How far either side of a payday money may land and still be that payday's
+ * pay.
+ *
+ * Pay is not always entered as arriving exactly on the payday. One real
+ * household has one person's entered as a deposit on the day and the other's
+ * as an item "one day after a payday", because that is when the money shows
+ * up. Three days is wide enough for any of those arrangements and far too
+ * narrow for an unrelated monthly deposit to masquerade as pay: paydays are
+ * fourteen days apart, so one monthly item can fall inside at most one of the
+ * windows below.
+ */
+const PAY_LANDS_WITHIN_DAYS = 3;
+
+/** How many paydays ahead have to have money before the pay counts as real. */
+const PAYDAYS_LOOKED_AT = 3;
+
+/**
+ * Which paydays have no money arriving on the ledger at all.
+ *
+ * This is the wider of the two questions in this file, and the distinction
+ * matters enough to spell out.
+ *
+ * `paydaysWithLivePay` asks the narrow one - "will a paycheque ROW be
+ * projected for this payday" - and the pay-period projection needs exactly
+ * that. Silencing a payday whose money arrives some other way would make the
+ * projection add a phantom cheque on top of the real income and count the
+ * same pay twice.
+ *
+ * The setup checklist needs this one. It used the narrow answer, and told a
+ * household that had entered both people's pay by hand - one as a deposit,
+ * one as an item a day after the payday - that their paydays were "not
+ * putting any money on the ledger". Both were on the ledger. The statement was
+ * true of paycheque templates and false of the thing it was describing, and
+ * the button it offered restored an archived paycheque on top of income that
+ * was already there, so the ledger then counted every cheque twice.
+ *
+ * So this asks what somebody reading the ledger would ask: is money arriving
+ * around this payday? It is answered from the generated rows rather than from
+ * the shape of a template, because a household may enter their pay however
+ * suits them and every shape ends as a dated row.
+ */
+export async function paydaysWithNoIncomeArriving(
+  tx: Pick<Prisma.TransactionClient, "template" | "household" | "paySchedule" | "occurrence">,
+  householdId: string,
+  now: Date = new Date(),
+): Promise<Set<string>> {
+  const live = await paydaysWithLivePay(tx, householdId);
+
+  const [household, schedules] = await Promise.all([
+    tx.household.findUniqueOrThrow({
+      where: { id: householdId },
+      select: { timezone: true, horizonPaychequeCount: true },
+    }),
+    tx.paySchedule.findMany({
+      where: { deletedAt: null, user: { householdId, deletedAt: null } },
+      select: { id: true, userId: true, anchorDate: true, defaultCents: true },
+      orderBy: { anchorDate: "asc" },
+    }),
+  ]);
+
+  const unpaid = schedules.filter((schedule) => !live.has(schedule.id));
+  if (unpaid.length === 0) return new Set();
+
+  const paySchedules: PaySchedule[] = schedules.map((schedule) => ({
+    id: schedule.id,
+    ownerId: schedule.userId,
+    anchorDate: toPlainDate(schedule.anchorDate),
+    defaultCents: schedule.defaultCents,
+  }));
+
+  /*
+   * Only paydays that have been generated can be judged. Past the end of the
+   * generation window there are no rows for anything, so "no money arriving"
+   * would be true of every payday and of every household.
+   */
+  const today = todayInZone(household.timezone, now);
+  const generatedThrough = generationWindow(
+    today,
+    computeHorizonEnd({
+      today,
+      paySchedules,
+      paychequeCount: household.horizonPaychequeCount,
+    }),
+  ).to;
+
+  const checking = new Map<string, { paydays: PlainDate[]; ownerId: string }>();
+  let furthest = today;
+
+  for (const schedule of unpaid) {
+    const paydays = nextPaydays(toPlainDate(schedule.anchorDate), today, PAYDAYS_LOOKED_AT).filter(
+      (payday) => compareDates(payday, generatedThrough) <= 0,
+    );
+    if (paydays.length === 0) continue;
+
+    checking.set(schedule.id, { paydays, ownerId: schedule.userId });
+    for (const payday of paydays) {
+      if (compareDates(payday, furthest) > 0) furthest = payday;
+    }
+  }
+  if (checking.size === 0) return new Set();
+
+  /*
+   * Everything coming in between now and the last payday being looked at.
+   * Cleared rows count: a cheque that has already been received and folded
+   * into the balance has left the timeline, but the money did arrive, and
+   * reporting that payday as empty would be plainly wrong.
+   */
+  const arriving = await tx.occurrence.findMany({
+    where: {
+      householdId,
+      deletedAt: null,
+      kind: { in: ["paycheque", "deposit"] },
+      cents: { gt: 0n },
+      date: {
+        gte: fromPlainDate(addDays(today, -PAY_LANDS_WITHIN_DAYS)),
+        lte: fromPlainDate(addDays(furthest, PAY_LANDS_WITHIN_DAYS)),
+      },
+    },
+    select: { date: true, ownerUserId: true },
+  });
+
+  const landings = arriving
+    .filter((row): row is { date: Date; ownerUserId: string | null } => row.date !== null)
+    .map((row) => ({ date: toPlainDate(row.date), ownerId: row.ownerUserId, claimed: false }))
+    .sort((a, b) => compareDates(a.date, b.date));
+
+  /**
+   * Claim one arrival for this payday, if there is one going spare.
+   *
+   * Claimed, not merely matched, and that is the point. Two people paid on
+   * the same day with one cheque between them are not both covered by it:
+   * their pay is being counted once, which is exactly the under-counting this
+   * checklist exists to catch. `computePayPeriods` places projected cheques
+   * the same way, for the same reason.
+   *
+   * Their own cheque first, then one belonging to nobody in particular -
+   * which is what the form under Money coming in produces unless a person is
+   * picked, so it could be anyone's and should not be spent on the wrong
+   * payday while its owner's payday goes without.
+   */
+  const claim = (payday: PlainDate, ownerId: string): boolean => {
+    const near = (landing: (typeof landings)[number]): boolean => {
+      if (landing.claimed) return false;
+      const gap = daysBetween(payday, landing.date);
+      return gap >= -PAY_LANDS_WITHIN_DAYS && gap <= PAY_LANDS_WITHIN_DAYS;
+    };
+
+    const theirs =
+      landings.find((landing) => near(landing) && landing.ownerId === ownerId) ??
+      landings.find((landing) => near(landing) && landing.ownerId === null);
+
+    if (theirs === undefined) return false;
+    theirs.claimed = true;
+    return true;
+  };
+
+  const without = new Set<string>();
+  for (const [scheduleId, { paydays, ownerId }] of checking) {
+    // Every payday, not just the next one: a monthly deposit falls near at
+    // most one of them, so asking about one payday would let a child benefit
+    // answer for somebody's pay.
+    let covered = true;
+    for (const payday of paydays) {
+      if (!claim(payday, ownerId)) covered = false;
+    }
+    if (!covered) without.add(scheduleId);
+  }
+
+  return without;
+}
+
+/**
  * Put a payday's pay back on the ledger.
  *
  * The checklist could say a payday had no paycheque and leave no way to act on
@@ -956,16 +1131,25 @@ export async function paydaysWithLivePay(
  *
  * So this is the deliberate opposite of archiving, asked for explicitly:
  * restore the archived cheque for this payday if there is one, otherwise make
- * one. Returns the template, or null if the payday already has live pay.
+ * one. Returns the template, or null if the payday already has money.
+ *
+ * "Already has money" is the wide question, not the narrow one, and that is
+ * the whole safety of this function. It used to ask only whether a paycheque
+ * template was bound to the payday, so for a household who had entered their
+ * pay by hand it answered "no" while the pay sat on the ledger in front of
+ * them - and the button added a second one beside it. Income is the thing
+ * that must not be duplicated; a paycheque template is only one way of
+ * entering it.
  */
 export async function restorePaycheque(
   tx: Prisma.TransactionClient,
   householdId: string,
   payScheduleId: string,
   userId: string,
+  now: Date = new Date(),
 ): Promise<{ id: string; version: number; name: string } | null> {
-  const live = await paydaysWithLivePay(tx, householdId);
-  if (live.has(payScheduleId)) return null;
+  const without = await paydaysWithNoIncomeArriving(tx, householdId, now);
+  if (!without.has(payScheduleId)) return null;
 
   const schedule = await tx.paySchedule.findFirst({
     where: { id: payScheduleId, deletedAt: null, user: { householdId, deletedAt: null } },
@@ -989,18 +1173,28 @@ export async function restorePaycheque(
     select: { id: true, version: true, name: true, ownerUserId: true, scheduleJson: true },
   });
 
-  // Bound to this payday by id, or failing that owned by the person whose
-  // payday it is - which is how a cheque entered by hand before paydays
-  // brought their own would look.
-  const archived =
-    candidates.find((candidate) => {
-      const parsed = scheduleSchema.safeParse(candidate.scheduleJson);
-      return (
-        parsed.success &&
-        parsed.data.type === "biweekly" &&
-        parsed.data.payScheduleId === payScheduleId
-      );
-    }) ?? candidates.find((candidate) => candidate.ownerUserId === schedule.userId);
+  const bound = candidates.find((candidate) => {
+    const parsed = scheduleSchema.safeParse(candidate.scheduleJson);
+    return (
+      parsed.success &&
+      parsed.data.type === "biweekly" &&
+      parsed.data.payScheduleId === payScheduleId
+    );
+  });
+
+  /*
+   * Failing that, one owned by the person whose payday it is - which is how a
+   * cheque entered by hand before paydays brought their own would look.
+   *
+   * Only when there is exactly one. It used to take the first of however many
+   * there were, which reads as helpful and is a lottery: a household testing
+   * the app had five archived entries, three of them the same person's and
+   * two of those sharing a name, so which one came back was whichever the
+   * database happened to return first. When it is ambiguous, making a new
+   * cheque is the answer somebody can predict.
+   */
+  const owned = candidates.filter((candidate) => candidate.ownerUserId === schedule.userId);
+  const archived = bound ?? (owned.length === 1 ? owned[0] : undefined);
 
   if (archived) {
     return await tx.template.update({

@@ -6,12 +6,18 @@
  *
  * Both halves of that were real. The message named no person, so with two
  * entries in the list there was no way to tell which was wrong. And what the
- * checklist asks for is a `paycheque` bound to that payday - while the only
- * button on the screen adds a `deposit`, which sits in the same list, looks
- * like income, and does none of the things a paycheque does: it anchors no
- * flexible bill and claims no payday. So whatever was entered by hand, the
- * checklist went on complaining and said to restore something from a section
- * it was not in.
+ * checklist asked for was a `paycheque` bound to that payday - while the only
+ * button on the screen adds a `deposit`, which sits in the same list and
+ * looks like income. So whatever was entered by hand, the checklist went on
+ * complaining and said to restore something from a section it was not in.
+ *
+ * The first fix made that worse. Naming the person and offering a button to
+ * restore the cheque left the underlying question too narrow, and a household
+ * who had entered both people's pay by hand - one as a deposit, one as an
+ * item a day after the payday - were told their paydays put nothing on the
+ * ledger while they were looking at it, and pressing the button put a second
+ * copy of the pay there. Income is the thing that must not be duplicated, so
+ * the question is now about money arriving, not about template kinds.
  *
  * Every amount here is invented.
  */
@@ -97,6 +103,21 @@ function paycheques() {
   });
 }
 
+/**
+ * Take the rows a template had already produced off the ledger.
+ *
+ * Only for the tests below that reach past the API to archive or remove a
+ * template. Going through `PATCH /api/templates/:id` reconciles the ledger as
+ * part of the same request, so the rows go with it - the test above this one
+ * asserts exactly that. A raw write leaves them behind, and since the
+ * checklist now reads the ledger rather than the shape of a template, leaving
+ * them behind means the money is still arriving and there is nothing to
+ * complain about. Which is correct, and not the situation being set up.
+ */
+async function takeOffTheLedger(): Promise<void> {
+  await harness.db.prisma.occurrence.deleteMany({ where: { householdId } });
+}
+
 describe("the checklist item", () => {
   it("says whose payday it is", async () => {
     const schedule = await addPayday(firstMemberId);
@@ -123,15 +144,19 @@ describe("the checklist item", () => {
     expect(body.paydaysWithoutPay.map((payday) => payday.person).sort()).toEqual(["Carol", "Dax"]);
   });
 
-  it("is not satisfied by a deposit entered by hand", async () => {
+  it("is satisfied by a deposit landing on the paydays", async () => {
     /*
-     * Exactly what happened: the pay was archived, income was re-entered
-     * through the only button available - which makes a deposit - and the
-     * checklist went on complaining about something the list appeared to show.
+     * The one that did the damage. The pay was archived and re-entered
+     * through the only button available - which makes a deposit - so the
+     * money was on the ledger, on the right dates, and the checklist went on
+     * saying it was not. Whoever pressed the button then had two.
      */
     const schedule = await addPayday(firstMemberId);
     const template = (await paycheques())[0] as { id: string; version: number };
     await patch(`/api/templates/${template.id}`, template.version, { active: false });
+    expect((await setup()).paydaysWithoutPay.map((payday) => payday.scheduleId)).toEqual([
+      schedule.id,
+    ]);
 
     const deposit = await post("/api/templates", {
       name: "My pay",
@@ -144,7 +169,74 @@ describe("the checklist item", () => {
     expect(deposit.statusCode).toBe(201);
 
     const body = await setup();
-    expect(body.paydaysWithoutPay.map((payday) => payday.scheduleId)).toEqual([schedule.id]);
+    expect(body.paydaysWithoutPay).toEqual([]);
+    expect(body.missing).not.toContain("income_on_ledger");
+  });
+
+  it("is satisfied by pay entered as arriving a day after the payday", async () => {
+    // The other half of the same report: entered as "1 day after a payday",
+    // because that is when the money actually shows up.
+    const schedule = await addPayday(firstMemberId);
+    const template = (await paycheques())[0] as { id: string; version: number };
+    await patch(`/api/templates/${template.id}`, template.version, { active: false });
+
+    const deposit = await post("/api/templates", {
+      name: "My pay",
+      kind: "deposit",
+      section: "income",
+      defaultCents: "210000",
+      withdrawal: "auto",
+      schedule: { type: "relative_to_pay", payScheduleId: schedule.id, offsetDays: 1 },
+    });
+    expect(deposit.statusCode).toBe(201);
+
+    expect((await setup()).paydaysWithoutPay).toEqual([]);
+  });
+
+  it("is still not satisfied by an unrelated monthly deposit", async () => {
+    /*
+     * The reason the question is asked per payday rather than as "is any
+     * money coming in at all". A child benefit arrives once a month and can
+     * fall near at most one of the paydays looked at, so it must not silence
+     * a payday whose pay is genuinely missing - which is what the first
+     * version of this check did.
+     */
+    const schedule = await addPayday(firstMemberId);
+    const template = (await paycheques())[0] as { id: string; version: number };
+    await patch(`/api/templates/${template.id}`, template.version, { active: false });
+
+    const benefit = await post("/api/templates", {
+      name: "Child benefit",
+      kind: "deposit",
+      section: "income",
+      defaultCents: "42000",
+      withdrawal: "auto",
+      schedule: { type: "monthly", day: Number(nextThursday().slice(8, 10)) },
+    });
+    expect(benefit.statusCode).toBe(201);
+
+    expect((await setup()).paydaysWithoutPay.map((payday) => payday.scheduleId)).toEqual([
+      schedule.id,
+    ]);
+  });
+
+  it("does not let one person's cheque cover the other person's payday", async () => {
+    // Two people paid on the same day, and only one of them with pay on the
+    // ledger. Dates alone cannot tell the two paydays apart, so the owner is
+    // what keeps one person's cheque from answering for the other's.
+    const first = await addPayday(firstMemberId);
+    const second = await addPayday(secondMemberId);
+
+    for (const template of await paycheques()) {
+      if (template.ownerUserId === secondMemberId) {
+        await patch(`/api/templates/${template.id}`, template.version, { active: false });
+      }
+    }
+
+    expect((await setup()).paydaysWithoutPay.map((payday) => payday.scheduleId)).toEqual([
+      second.id,
+    ]);
+    expect(first.id).not.toBe(second.id);
   });
 });
 
@@ -182,6 +274,7 @@ describe("putting the pay back", () => {
         data: { deletedAt: new Date(), deletedById: firstMemberId },
       });
     }
+    await takeOffTheLedger();
     expect((await setup()).missing).toContain("income_on_ledger");
 
     const restored = await post(`/api/pay-schedules/${schedule.id}/paycheque`, {});
@@ -207,6 +300,7 @@ describe("putting the pay back", () => {
         },
       });
     }
+    await takeOffTheLedger();
 
     const restored = await post(`/api/pay-schedules/${schedule.id}/paycheque`, {});
     expect(restored.statusCode).toBe(200);

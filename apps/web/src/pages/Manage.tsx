@@ -142,15 +142,23 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             {/*
               The one that caused a real wrong answer in production: paydays
               entered, no income on the ledger, so every bill looked uncovered.
+
+              It has also caused the opposite. It used to fire whenever a
+              payday had no PAYCHEQUE, which is not the same as having no
+              money, so a household who had entered their pay by hand were
+              told it was missing while they were looking at it - and the
+              button then put a second copy of it on the ledger. It now fires
+              only when nothing is arriving, and says that and nothing more.
             */}
             {data.paydaysWithoutPay.map((payday) => (
               <li key={payday.scheduleId}>
-                <strong>{payday.person}&rsquo;s payday is not putting any money on the ledger.</strong>{" "}
-                A payday sets the dates everything hangs off; a <em>paycheque</em> is what puts the
-                money on the timeline, anchors the flexible bills and stops every withdrawal
-                looking uncovered. Anything added under <em>Money coming in</em> by hand is a
-                deposit, which sits in the same list but does none of that — so this is the button
-                that fixes it.
+                <strong>
+                  Nothing is arriving on the ledger for {payday.person}&rsquo;s payday.
+                </strong>{" "}
+                A payday sets the dates everything hangs off, but puts no money on the timeline
+                by itself, so the balance only falls and every automatic withdrawal looks
+                uncovered. Either add the pay under <em>Money coming in</em>, or use this button,
+                which puts a paycheque on the payday for the flexible bills to hang from.
                 <span className="manage__checklist-action">
                   <button
                     className="hr-button manage__checklist-button"

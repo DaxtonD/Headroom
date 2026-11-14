@@ -314,6 +314,13 @@ describe("the setup checklist", () => {
       where: { householdId, kind: "paycheque" },
       data: { active: false },
     });
+    /*
+     * And its cheques off the ledger with it, which is what archiving through
+     * the API does for itself: the checklist asks whether money is arriving,
+     * not whether a template exists, so rows left behind by a raw write mean
+     * the pay is still there and there is nothing to speak up about.
+     */
+    await harness.db.prisma.occurrence.deleteMany({ where: { householdId } });
 
     expect(await missing()).toContain("income_on_ledger");
   });
@@ -363,6 +370,10 @@ describe("the setup checklist", () => {
     await harness.db.prisma.template.update({
       where: { id: (forFirst as { id: string }).id },
       data: { active: false },
+    });
+    // And its cheques, which archiving through the API would have removed.
+    await harness.db.prisma.occurrence.deleteMany({
+      where: { householdId, templateId: (forFirst as { id: string }).id },
     });
 
     expect(await missing()).toContain("income_on_ledger");

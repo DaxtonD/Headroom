@@ -377,6 +377,9 @@ describe("the whole first-run path, in order", () => {
       where: { householdId, kind: "paycheque" },
       data: { active: false },
     });
+    // And the cheques it had already put on the ledger. Archiving through the
+    // API reconciles those away in the same request; this reaches past it.
+    await harness.db.prisma.occurrence.deleteMany({ where: { householdId } });
 
     const setup = await get("/api/setup").then((response) => response.json());
     expect(setup.missing).toContain("income_on_ledger");

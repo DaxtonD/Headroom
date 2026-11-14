@@ -12,7 +12,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
 import {
-  paydaysWithLivePay,
+  paydaysWithNoIncomeArriving,
   regenerateQuietly,
   restorePaycheque,
   syncPaychequeDefault,
@@ -98,7 +98,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
 
-    const [household, schedules, accounts, members, payrolled] = await Promise.all([
+    const [household, schedules, accounts, members, withoutIncome] = await Promise.all([
       app.db.prisma.household.findUniqueOrThrow({
         where: { id: user.householdId },
         select: {
@@ -128,10 +128,10 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         select: { id: true, name: true, initial: true, colorFg: true, colorBg: true },
         orderBy: { name: "asc" },
       }),
-      // Which paydays actually put a cheque on the ledger. Shared with the
-      // pay-period projection, which must not expect a cheque from a payday
-      // whose pay has been turned off.
-      paydaysWithLivePay(app.db.prisma, user.householdId),
+      // Which paydays have nothing arriving on the ledger around them - not
+      // "which have a paycheque template", which is a different and much
+      // narrower question. See the note on the function.
+      paydaysWithNoIncomeArriving(app.db.prisma, user.householdId),
     ]);
 
     // What still has to be filled in before the app can work properly. The
@@ -144,25 +144,24 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     if (schedules.length === 0) missing.push("pay_schedule");
     if (household.netMonthlyIncomeCents === 0n) missing.push("income");
     /**
-     * A payday whose cheque is not reaching the ledger.
+     * A payday with nothing arriving on the ledger around it.
      *
      * A pay schedule gives the DATES everything hangs off, and an amount used
-     * for the pay-period totals - but nothing on the timeline. Only a
-     * paycheque template puts an actual row there, and the running balance,
-     * the lowest point, safe-to-spend and coverage all read that row. Without
-     * it the ledger is pure outgoings: a balance that only falls and every
-     * automatic withdrawal reported as uncovered.
+     * for the pay-period totals - but nothing on the timeline. Without a row
+     * for the money the ledger is pure outgoings: a balance that only falls,
+     * and every automatic withdrawal reported as uncovered.
      *
-     * Adding a payday now creates its paycheque, so this should only ever
-     * fire for one that was archived on purpose and then forgotten.
-     *
-     * Asked per schedule, not as "is there any income at all". It used to be
+     * Asked per payday, not as "is there any income at all". It used to be
      * the latter, and a single unrelated deposit - a child benefit - was
-     * enough to answer yes while neither person's pay was on the ledger. The
-     * checklist stayed silent through exactly the setup it existed to catch.
+     * enough to answer yes while neither person's pay was on the ledger. It
+     * is also not asked as "does a paycheque template exist", which was the
+     * other extreme and the one that did real damage: a household who had
+     * entered their pay by hand got told it was not on the ledger while they
+     * were looking at it, and the button offered here then put a second copy
+     * of it there.
      */
     const paydaysWithoutPay = schedules
-      .filter((schedule) => !payrolled.has(schedule.id))
+      .filter((schedule) => withoutIncome.has(schedule.id))
       .map((schedule) => ({
         scheduleId: schedule.id,
         // Named, because "a payday has no paycheque" left someone looking at
