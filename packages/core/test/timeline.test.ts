@@ -7,7 +7,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { computeHorizonEnd, computePayPeriods, payPeriodWindows } from "../src/payPeriods.js";
-import { computeTimeline, effectiveBalance, orderTimeline } from "../src/timeline.js";
+import { computeTimeline, effectiveBalance, orderTimeline,
+  summariseTimeline,
+} from "../src/timeline.js";
 import type { PaySchedule, TimelineInput } from "../src/types.js";
 
 const DAX: PaySchedule = {
@@ -724,5 +726,105 @@ describe("the windows cover the horizon", () => {
     });
 
     expect(covered.flatMap((period) => period.rowIds)).toContain("far");
+  });
+});
+
+describe("explaining a figure", () => {
+  /*
+   * The working behind the headline numbers, for the info button.
+   *
+   * The reason this is in the engine and not written out in the UI: an
+   * explanation that can disagree with the figure it explains is worse than no
+   * explanation. Both come off the same rows.
+   */
+  const pay = (id: string, date: string, cents: bigint) => ({
+    id,
+    name: "Pay",
+    cents,
+    kind: "paycheque" as const,
+    placement: "auto" as const,
+    date,
+  });
+
+  const bill = (id: string, name: string, date: string, cents: bigint) => ({
+    id,
+    name,
+    cents,
+    kind: "bill" as const,
+    placement: "auto" as const,
+    date,
+  });
+
+  it("splits the horizon into what comes in and what goes out", () => {
+    const result = computeTimeline({
+      events: [
+        pay("p1", "2026-11-16", 210_000n),
+        bill("b1", "Rent", "2026-11-17", -90_000n),
+        bill("b2", "Power", "2026-11-20", -18_600n),
+      ],
+      startBalanceCents: 200_000n,
+    });
+
+    const working = summariseTimeline(result);
+
+    expect(working.startBalanceCents).toBe(200_000n);
+    expect(working.inCents).toBe(210_000n);
+    expect(working.inCount).toBe(1);
+    // A magnitude, because "less $1,086.00 going out" reads better than a
+    // double negative.
+    expect(working.outCents).toBe(108_600n);
+    expect(working.outCount).toBe(2);
+
+    // And it adds up to the figure the headline shows.
+    expect(working.endCents).toBe(result.leftThisCycleCents);
+    expect(working.endCents).toBe(301_400n);
+  });
+
+  it("names the row the balance is lowest after", () => {
+    const result = computeTimeline({
+      events: [
+        bill("b1", "Rent", "2026-11-17", -90_000n),
+        pay("p1", "2026-11-20", 210_000n),
+      ],
+      startBalanceCents: 200_000n,
+    });
+
+    // The dip is after the rent, before the pay arrives.
+    expect(summariseTimeline(result).lowestAfterName).toBe("Rent");
+    expect(result.lowest.cents).toBe(110_000n);
+  });
+
+  it("says the lowest point is the opening balance when nothing dips below it", () => {
+    /*
+     * The case that confuses people, and the reason the button is wanted:
+     * "safe to spend" equals the whole balance because the pay arrives before
+     * anything goes out, so the balance never falls below where it starts.
+     * There is no row to blame, and the explanation has to say so.
+     */
+    const result = computeTimeline({
+      events: [
+        pay("p1", "2026-11-16", 210_000n),
+        bill("b1", "Rent", "2026-11-17", -90_000n),
+      ],
+      startBalanceCents: 200_000n,
+    });
+
+    expect(result.lowest.cents).toBe(200_000n);
+    expect(summariseTimeline(result).lowestAfterName).toBeNull();
+  });
+
+  it("holds up with nothing on the ledger at all", () => {
+    const result = computeTimeline({ events: [], startBalanceCents: 200_000n });
+    const working = summariseTimeline(result);
+
+    expect(working).toEqual({
+      startBalanceCents: 200_000n,
+      inCents: 0n,
+      inCount: 0,
+      outCents: 0n,
+      outCount: 0,
+      endCents: 200_000n,
+      lowestAfterName: null,
+    });
   });
 });

@@ -15,7 +15,7 @@ import {
   loadTimelineContext,
   type OccurrenceDecoration,
 } from "../lib/timelineService.js";
-import type { TimelineRow } from "@headroom/core";
+import { summariseTimeline, type TimelineRow } from "@headroom/core";
 
 /**
  * One timeline row, as every screen receives it.
@@ -97,6 +97,15 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
       },
 
       estimatesCount: timeline.estimatesCount,
+
+      /*
+       * The working behind the three headline figures, for the info button.
+       *
+       * Served rather than worked out in the browser, and taken straight off
+       * the engine: "where did that number come from?" is only worth answering
+       * if the answer cannot drift from the number itself.
+       */
+      breakdown: summariseTimeline(timeline),
 
       nextAutoWithdrawals: autoRows.slice(0, HOME_AUTO_COUNT).map((row) => {
         const decoration = decorations.get(row.event.id);

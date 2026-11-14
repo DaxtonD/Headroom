@@ -21,6 +21,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Settings: themes + text size | done | | At Dax's request. Five themes plus match-my-device, five text sizes. Per device, not in the database. Contrast checked by test |
 | Undo for received/paid | done | | Bug 15, found in testing. A cleared cheque is no longer re-projected, archiving the pay stops the ghost, and the ledger offers an undo |
 | "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
+| Info button on the headline figures | done | | At Dax's request. Shows the working behind in chequing, safe to spend and left this cycle, from the engine so it cannot disagree |
 | M5 PWA + desktop polish | not started | | |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
@@ -34,8 +35,9 @@ Claude Code updates this file at the end of every milestone and every work sessi
   second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
   engine, schema and migration, the savings and mortgage API, the Year screen, the Savings screen,
   and Home + Upcoming + Pay plan merged into one Ledger.
-- **780 tests green** as of 2026-11-11: 311 engine, 345 API against a real Postgres, 124 web
-  source, token, contrast and appearance checks. Lint, typecheck and `pnpm build` clean.
+- **796 tests green** as of 2026-11-14: 315 engine, 345 API against a real Postgres, 136 web
+  source, token, contrast, appearance and explanation checks. Lint, typecheck and `pnpm build`
+  clean.
 - The screens are now: **Ledger, Year, Budget, Savings, Manage**, with Net worth reached from
   Savings. Seven tabs became five.
 
@@ -900,6 +902,59 @@ is the one false positive seen, and it is the harness rather than the app.
   generation or the horizon.
 - Nothing pins the clock in CI, so CI still tests only the day it runs on. A matrix of two or
   three fixed dates would make this class of bug impossible to reintroduce.
+
+## An info button on the three headline figures (2026-11-14, at Dax's request)
+
+> "If Carol is like, 'wait, where did that number come from?' - she could click the info and see
+> how the number was obtained."
+
+The question behind it was his own: marking a bill paid moved "safe to spend" by an amount that
+was not the bill. Measuring it showed why, and showed that the figure is widely misread.
+
+### What the three numbers are
+
+- **In chequing** - the balance last read off the bank, plus anything settled since.
+- **Left this cycle** - the running balance at the end of the ledger.
+- **Safe to spend now** - the **lowest** the balance gets between now and the horizon, less the
+  cushion. *Not* "balance minus the bills", which is what everybody assumes.
+
+With no income in the window the lowest point IS the end, so safe-to-spend and left-this-cycle
+are the same number and the misreading goes unnoticed. Add paydays and they separate hard:
+measured at $2,000 in chequing with $1,500 of bills, safe-to-spend was **$2,000** - because the
+cheque lands before the bills, so the balance never dips below where it starts.
+
+That also explains the odd movement he saw. Clearing a bill lowers every balance *before* it and
+leaves later ones alone, so if that shifts *which* row is the lowest, the figure moves by the gap
+between two rows - a number unrelated to the bill, and unreadable from the screen.
+
+### Where the working comes from
+
+`summariseTimeline` in `packages/core`, served on `/api/dashboard` as `breakdown`.
+
+Deliberately not computed in the browser. An explanation that can disagree with the figure it
+explains is worse than no explanation, because the person opens it precisely when they do not
+trust the number. Both now come off the same rows.
+
+The wording lives in `apps/web/src/lib/explain.ts` as pure functions, separate from the component
+so that file exports only a component (fast refresh needs that) and so the copy can be tested
+without rendering. Twelve tests, each checking the lines add up to the figure named.
+
+The panel is an ordinary card below the hero rather than a translucent surface on top of it, so
+its contrast is the contrast every other card already has - checked across all five themes -
+rather than a new pair of colours needing their own check.
+
+### The cushion
+
+Dax's is set to $0.00, which means safe-to-spend permits spending to exactly zero at the lowest
+point - and it is counting on a cheque that has not arrived yet. The panel now says so in his own
+figures rather than leaving it to be discovered. Left as his decision; not changed.
+
+### Still to do
+
+- Nobody has seen it rendered - no browser here. The panel content was printed from live server
+  data and reads correctly; the layout is reasoned.
+- The button is on the three hero figures only. The coverage banner and the "lowest it gets" line
+  could use the same treatment.
 
 ## Git history and attribution (2026-11-09)
 

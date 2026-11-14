@@ -37,6 +37,16 @@ interface ShortfallWire {
   readonly runningCents: string;
 }
 
+interface BreakdownWire {
+  readonly startBalanceCents: string;
+  readonly inCents: string;
+  readonly inCount: number;
+  readonly outCents: string;
+  readonly outCount: number;
+  readonly endCents: string;
+  readonly lowestAfterName: string | null;
+}
+
 interface DashboardWire {
   readonly today: string;
   readonly horizonEnd: string;
@@ -56,6 +66,7 @@ interface DashboardWire {
     readonly firstShortfall: ShortfallWire | null;
   };
   readonly estimatesCount: number;
+  readonly breakdown: BreakdownWire;
   readonly nextAutoWithdrawals: readonly {
     readonly id: string;
     readonly name: string;
@@ -131,6 +142,7 @@ export interface Dashboard {
   readonly lowest: Lowest;
   readonly coverage: Coverage;
   readonly estimatesCount: number;
+  readonly breakdown: Breakdown;
   readonly nextAutoWithdrawals: readonly {
     readonly id: string;
     readonly name: string;
@@ -164,6 +176,22 @@ export interface TimelineRow {
   readonly requiresCoverage: boolean;
   readonly runningCents: Cents;
   readonly version: number;
+}
+
+/**
+ * The working behind the headline figures.
+ *
+ * Comes from the engine rather than being recomputed here: an explanation that
+ * could disagree with the figure it explains would be worse than none.
+ */
+export interface Breakdown {
+  readonly startBalanceCents: Cents;
+  readonly inCents: Cents;
+  readonly inCount: number;
+  readonly outCents: Cents;
+  readonly outCount: number;
+  readonly endCents: Cents;
+  readonly lowestAfterName: string | null;
 }
 
 /** A cheque a window counts but which is not on the timeline yet. */
@@ -253,6 +281,13 @@ export function useDashboard() {
         leftThisCycleCents: toCents(wire.leftThisCycleCents),
         lowest: parseLowest(wire.lowest),
         coverage: parseCoverage(wire.coverage),
+        breakdown: {
+          ...wire.breakdown,
+          startBalanceCents: toCents(wire.breakdown.startBalanceCents),
+          inCents: toCents(wire.breakdown.inCents),
+          outCents: toCents(wire.breakdown.outCents),
+          endCents: toCents(wire.breakdown.endCents),
+        },
         nextAutoWithdrawals: wire.nextAutoWithdrawals.map((row) => ({
           ...row,
           cents: toCents(row.cents),

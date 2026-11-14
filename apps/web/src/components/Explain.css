@@ -1,0 +1,108 @@
+/*
+ * The info button sits on the dark hero; the panel it opens does not.
+ *
+ * The panel is an ordinary card below the hero rather than a translucent
+ * surface on top of it, so its text contrast is the same contrast every other
+ * card has - already checked against all five themes - instead of a new pair
+ * of colours that would have to be checked again.
+ */
+
+.explain__button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* A 44px target around a small mark, which is the M5 minimum. */
+  min-width: var(--hr-touch-min);
+  min-height: var(--hr-touch-min);
+  margin-left: calc(-1 * var(--hr-space-2));
+  padding: 0;
+  border: none;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* The mark itself: a small ringed "i", so it reads as information. */
+.explain__button > span {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1.5px solid currentColor;
+  border-radius: var(--hr-radius-pill);
+  font-family: var(--hr-font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  line-height: 1;
+  opacity: 0.75;
+}
+
+.explain__button:hover > span,
+.explain__button[aria-expanded="true"] > span {
+  opacity: 1;
+}
+
+.explain__panel {
+  margin-top: var(--hr-space-3);
+  padding: var(--hr-space-4);
+  text-align: left;
+  color: var(--hr-ink);
+}
+
+.explain__title {
+  font-family: var(--hr-font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.explain__meaning {
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  color: var(--hr-text-secondary);
+  line-height: 1.45;
+}
+
+.explain__lines {
+  margin: var(--hr-space-4) 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-2);
+}
+
+.explain__line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-4);
+  font-size: 0.875rem;
+}
+
+.explain__line dt {
+  color: var(--hr-text-secondary);
+  /* The label wraps; the amount never does. */
+  min-width: 0;
+}
+
+.explain__line dd {
+  margin: 0;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.explain__line--total {
+  margin-top: var(--hr-space-1);
+  padding-top: var(--hr-space-2);
+  border-top: 1px solid var(--hr-card-border);
+  font-weight: 700;
+}
+
+.explain__line--total dt {
+  color: var(--hr-ink);
+}
+
+.explain__note {
+  margin-top: var(--hr-space-3);
+  font-size: 0.8125rem;
+  color: var(--hr-text-muted);
+  line-height: 1.45;
+}

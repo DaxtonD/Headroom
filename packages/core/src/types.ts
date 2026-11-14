@@ -217,6 +217,32 @@ export interface PayPeriodOptions {
   readonly paydaysWithoutPay?: readonly string[];
 }
 
+/**
+ * The working behind the headline figures, for showing somebody where a number
+ * came from.
+ *
+ * Every part of this is taken from the rows the headline was computed from,
+ * not worked out again: an explanation that could disagree with the figure it
+ * explains would be worse than no explanation at all.
+ */
+export interface TimelineBreakdown {
+  readonly startBalanceCents: Cents;
+  /** Everything arriving, as a positive magnitude, and how many items. */
+  readonly inCents: Cents;
+  readonly inCount: number;
+  /** Everything leaving, as a positive magnitude, and how many items. */
+  readonly outCents: Cents;
+  readonly outCount: number;
+  /** `startBalanceCents + inCents - outCents`, which is "left this cycle". */
+  readonly endCents: Cents;
+  /**
+   * The name of the row the balance is at its lowest after, or null when the
+   * lowest point is the balance it starts from - which is what happens when
+   * money arrives before anything goes out.
+   */
+  readonly lowestAfterName: string | null;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Horizon                                                                   */
 /* -------------------------------------------------------------------------- */

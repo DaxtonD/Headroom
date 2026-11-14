@@ -16,6 +16,7 @@ import type {
   Coverage,
   LowestPoint,
   Shortfall,
+  TimelineBreakdown,
   TimelineInput,
   TimelineOptions,
   TimelineResult,
@@ -238,6 +239,53 @@ export function computeTimeline(options: TimelineOptions): TimelineResult {
     safeToSpendNowCents: lowest.cents - cushionCents,
     coverage,
     estimatesCount,
+  };
+}
+
+/**
+ * Break a computed timeline into the parts that explain its headline figures.
+ *
+ * For an info button: "where did that number come from?" is a fair question
+ * about a figure nobody can check by hand, and the honest answer is the same
+ * arithmetic the app did. So this decomposes what `computeTimeline` already
+ * produced rather than computing anything again - the explanation and the
+ * figure cannot drift apart, because there is only one set of rows behind
+ * both.
+ *
+ * `outCents` is a positive magnitude, because an explanation reads better as
+ * "less $3,000.00 going out" than as "plus minus three thousand".
+ */
+export function summariseTimeline(result: TimelineResult): TimelineBreakdown {
+  let inCents = 0n;
+  let inCount = 0;
+  let outCents = 0n;
+  let outCount = 0;
+
+  for (const row of result.rows) {
+    const cents = row.event.cents;
+    if (cents > 0n) {
+      inCents += cents;
+      inCount += 1;
+    } else if (cents < 0n) {
+      outCents -= cents;
+      outCount += 1;
+    }
+  }
+
+  const lowestAfterName =
+    result.lowest.afterEventId === null
+      ? null
+      : (result.rows.find((row) => row.event.id === result.lowest.afterEventId)?.event.name ??
+        null);
+
+  return {
+    startBalanceCents: result.startBalanceCents,
+    inCents,
+    inCount,
+    outCents,
+    outCount,
+    endCents: result.startBalanceCents + inCents - outCents,
+    lowestAfterName,
   };
 }
 

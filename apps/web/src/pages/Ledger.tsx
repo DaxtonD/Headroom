@@ -25,8 +25,14 @@
 import { formatCents, formatDateShort } from "@headroom/core";
 import { useMemo, useState } from "react";
 import { Amount, Chip, CoveragePill } from "../components/Badges.js";
+import { Explain } from "../components/Explain.js";
 import { OccurrenceRow, type MoveTarget } from "../components/OccurrenceRow.js";
 import { OneOffForm } from "../components/OneOffForm.js";
+import {
+  explainInChequing,
+  explainLeftThisCycle,
+  explainSafeToSpend,
+} from "../lib/explain.js";
 import {
   useDashboard,
   usePatchOccurrence,
@@ -105,6 +111,14 @@ export function Ledger({
       <section className="ledger__hero" aria-labelledby="ledger-balance-label">
         <p className="ledger__hero-label" id="ledger-balance-label">
           In chequing
+          <Explain
+            working={explainInChequing({
+              cents: data.balance.cents,
+              snapshotCents: data.balance.snapshotCents,
+              asOf: data.balance.asOf,
+              enteredBy: data.balance.enteredBy,
+            })}
+          />
         </p>
         <p className="ledger__hero-amount hr-amount">{formatCents(data.balance.cents)}</p>
         <p className="ledger__hero-meta">
@@ -117,13 +131,38 @@ export function Ledger({
 
         <div className="ledger__hero-split">
           <div>
-            <p className="ledger__hero-sublabel">Safe to spend now</p>
+            <p className="ledger__hero-sublabel">
+              Safe to spend now
+              {/*
+                The one most worth explaining. It is not "balance less the
+                bills", which is what everybody assumes, and when money
+                arrives before it goes out the answer is the whole balance -
+                which looks like a mistake until you see the working.
+              */}
+              <Explain
+                working={explainSafeToSpend({
+                  safeToSpendNowCents: data.safeToSpendNowCents,
+                  cushionCents: data.cushionCents,
+                  lowest: data.lowest,
+                  lowestAfterName: data.breakdown.lowestAfterName,
+                  horizonEnd: data.horizonEnd,
+                })}
+              />
+            </p>
             <p className="ledger__hero-subamount hr-amount">
               {formatCents(data.safeToSpendNowCents)}
             </p>
           </div>
           <div>
-            <p className="ledger__hero-sublabel">Left this cycle</p>
+            <p className="ledger__hero-sublabel">
+              Left this cycle
+              <Explain
+                working={explainLeftThisCycle({
+                  breakdown: data.breakdown,
+                  horizonEnd: data.horizonEnd,
+                })}
+              />
+            </p>
             <p className="ledger__hero-subamount hr-amount">
               {formatCents(data.leftThisCycleCents)}
             </p>
