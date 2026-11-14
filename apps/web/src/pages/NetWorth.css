@@ -133,7 +133,8 @@
 }
 
 .networth__entry-edit {
-  min-height: 36px;
+  /* Small pill, full-size target. See `.manage__small`. */
+  min-height: var(--hr-touch-min);
   padding: 0 var(--hr-space-3);
   border: 1px solid var(--hr-card-border);
   border-radius: var(--hr-radius-pill);
@@ -258,9 +259,11 @@
 }
 
 .networth__checkbox {
+  /* Same floor as `.hr-checkbox`, and for the same reason. */
   display: flex;
   align-items: flex-start;
   gap: var(--hr-space-3);
+  min-height: var(--hr-touch-min);
   margin-top: var(--hr-space-5);
   font-size: 0.9375rem;
   cursor: pointer;

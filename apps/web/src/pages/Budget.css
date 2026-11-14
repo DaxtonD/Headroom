@@ -15,7 +15,9 @@
 }
 
 .budget__toggle-button {
-  min-height: 38px;
+  /* The 44px floor the brief sets, not the 38px that looked right on a
+     monitor: this is a tab, and the two sit side by side. */
+  min-height: var(--hr-touch-min);
   padding: 0 var(--hr-space-5);
   border: none;
   border-radius: var(--hr-radius-pill);

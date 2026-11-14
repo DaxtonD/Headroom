@@ -203,9 +203,16 @@ select.hr-input {
 
 /* A checkbox with its explanation beside it, big enough for a thumb. */
 .hr-checkbox {
+  /*
+   * A checkbox is 22px and the label around it is what you actually tap, so
+   * the floor belongs here rather than on the input. `flex-start` keeps the
+   * box beside the first line when the text wraps; `min-height` is what
+   * stops a one-line label being a 22px target.
+   */
   display: flex;
   align-items: flex-start;
   gap: var(--hr-space-3);
+  min-height: var(--hr-touch-min);
   margin-top: var(--hr-space-5);
   font-size: 0.9375rem;
   font-weight: 600;

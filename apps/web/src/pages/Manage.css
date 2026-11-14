@@ -194,7 +194,13 @@
 }
 
 .manage__small {
-  min-height: 36px;
+  /*
+   * 44px even though these are the small buttons in a dense row - that is
+   * where a miss costs most, because the neighbours are "Remove this" and
+   * the buttons that change an amount. The pill looks small; the target is
+   * not. (HANDOFF accessibility rules.)
+   */
+  min-height: var(--hr-touch-min);
   padding: 0 var(--hr-space-3);
   border: 1px solid var(--hr-card-border);
   border-radius: var(--hr-radius-pill);
@@ -213,13 +219,6 @@
 .manage__small:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-.manage__narrow {
-  width: 110px;
-  min-height: 36px;
-  padding: 0 var(--hr-space-2);
-  font-size: 0.875rem;
 }
 
 /* ---- Actions and inline forms ---- */
