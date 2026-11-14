@@ -837,6 +837,70 @@ today.
   row, the checklist button and the pre-ticked balance sheet are verified by tests and by HTTP
   against a real Postgres, not by eye.
 
+## The suite was keeping time, badly (2026-11-13)
+
+Reverting to the version on git left two tests red. They had passed the day before, on the same
+code: the only thing that had changed was the date. Fixing those two turned up two more the next
+morning, which is when it became clear this was a class of bug rather than two mistakes.
+
+### Why it happens
+
+Every figure in the ledger is built out of "today". Generation runs from today, the horizon is
+the day before the Nth upcoming paycheque, and the pay-period windows start today. So a test
+with a hardcoded date is not testing the app - it is testing one arrangement of today, and it
+passes or fails by the calendar.
+
+Six were found, every one of them having passed for weeks:
+
+- **A monthly bill on a fixed day** lands past the horizon for most of any month, so the row
+  generates correctly and never reaches the timeline the test asserts on. (`day: 15`, `day: 9`.)
+- **A hardcoded pay anchor** stops arriving before the bill it is meant to cover, once today
+  moves past it. `anchorDate: "2026-11-12"` with a bill on the 17th passed until the 12th and
+  failed from the 13th.
+- **Two occurrences of a monthly bill** only fit inside the window early in the month, so a test
+  needing two rows had one.
+- **Counts of rows** differ legitimately between two schedules, because which months fall inside
+  the window depends on today. Asserted equal; not equal on about half of all days.
+
+A seventh was not a date at all but a **millisecond race**: `effectiveBalance` counts what
+cleared strictly after the snapshot, because anything cleared as part of a snapshot carries that
+snapshot's own timestamp and must not be counted against it twice. Two requests in a test land
+within the same millisecond often enough to fail one run in three.
+
+### What changed
+
+Only tests. No product behaviour was touched.
+
+- Dates that matter to an assertion are now relative: `dateIn(2)`, `dayOfMonthIn(5)`.
+- Assertions on **counts** became assertions on the **guarantee** - one row per period, the same
+  row id kept where the period overlaps - which is what "moved rather than duplicated" actually
+  means and is true on any date.
+- A test needing two rows uses a fortnightly bill, which always gives two.
+- The snapshot in the race test is inserted with an explicit `asOf` a second earlier. Not
+  posted and then back-dated: snapshots are append-only by database trigger, and the UPDATE is
+  refused, which is the rule working.
+
+### The tool, which is the durable part
+
+`apps/api/test/helpers/pinclock.ts` runs the suite as if it were another day:
+
+    PIN_DATE=2026-12-21 pnpm -F @headroom/api test
+
+Off unless `PIN_DATE` is set. It found four of the six; the other two were already failing. The
+fix was then swept across a full month of dates and a full week of weekdays.
+
+**Only pin to today or later.** The database writes its own `now()` for default timestamps and
+that clock is not faked, so a past date makes the two disagree and session expiry misreads. That
+is the one false positive seen, and it is the harness rather than the app.
+
+### Still to do
+
+- 100 hardcoded dates remain in the API tests. Most are harmless - a date used as data, or a
+  constraint check - and the sweep is the way to tell. Worth running after any change to
+  generation or the horizon.
+- Nothing pins the clock in CI, so CI still tests only the day it runs on. A matrix of two or
+  three fixed dates would make this class of bug impossible to reintroduce.
+
 ## Git history and attribution (2026-11-09)
 
 Dax asked for **no attribution lines in any commit** - no `Co-Authored-By`, no "Generated with

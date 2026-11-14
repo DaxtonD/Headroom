@@ -168,11 +168,22 @@ describe("a correction under Manage", () => {
 
   it("leaves a verified row alone, and a row marked paid", async () => {
     await addPayday();
+    /*
+     * Fortnightly, because this test needs two rows to work with.
+     *
+     * A monthly bill only reliably gives one: the window runs about five weeks
+     * from today, so late in the month the next-but-one occurrence is outside
+     * it. Every fourteen days always gives at least two.
+     */
+    const anchor = new Date();
+    anchor.setUTCHours(0, 0, 0, 0);
+    anchor.setUTCDate(anchor.getUTCDate() + 2);
+
     const bill = await addBill({
       name: "Water",
       defaultCents: "14400",
       withdrawal: "auto",
-      schedule: { type: "monthly", day: 18 },
+      schedule: { type: "biweekly", anchorDate: anchor.toISOString().slice(0, 10) },
     });
 
     const generated = await rowsOf(bill.id);
@@ -212,8 +223,24 @@ describe("a correction under Manage", () => {
     expect(moved.statusCode).toBe(200);
 
     const after = await rowsOf(bill.id);
-    expect(after.length).toBe(before.length);
+    expect(after.length).toBeGreaterThan(0);
     for (const row of after) expect(row.date?.toISOString().slice(8, 10)).toBe("22");
+
+    /*
+     * Moved, not duplicated - which is the thing worth protecting, and not the
+     * same as "the same number of rows". How many fall inside the window
+     * depends on where today sits: the 5th and the 22nd of the same month are
+     * not always both inside it, so the counts differ legitimately on some
+     * days and asserting they match failed on those days.
+     */
+    const keys = after.map((row) => row.periodKey);
+    expect(new Set(keys).size).toBe(keys.length);
+
+    const idsBefore = new Map(before.map((row) => [row.periodKey, row.id]));
+    for (const row of after) {
+      const was = idsBefore.get(row.periodKey);
+      if (was !== undefined) expect(row.id).toBe(was);
+    }
   });
 
   it("changes who a bill belongs to", async () => {
@@ -346,7 +373,7 @@ describe("every month, but I choose when to pay it", () => {
 
     // Taking the day away sends it back to hanging off a paycheque, on the
     // same rows rather than a second set.
-    const before = (await rowsOf(visa.id)).length;
+    const before = await rowsOf(visa.id);
     const freed = await patch(
       `/api/templates/${visa.id}`,
       (moved.json().template as { version: number }).version,
@@ -355,10 +382,27 @@ describe("every month, but I choose when to pay it", () => {
     expect(freed.statusCode).toBe(200);
 
     const after = await rowsOf(visa.id);
-    expect(after.length).toBe(before);
     for (const row of after) {
       expect(row.date).toBeNull();
       expect(row.anchorOccurrenceId).not.toBeNull();
+    }
+
+    /*
+     * One row per month, and the months that already had one kept the SAME
+     * row - which is what "moved rather than added" means.
+     *
+     * Deliberately not a count. How many months fall inside the window
+     * depends on where today sits: a day-26 bill can be outside it while an
+     * anchored one in the same month is inside, so the two counts differ
+     * legitimately and asserting they match failed on about half of all days.
+     */
+    const keys = after.map((row) => row.periodKey);
+    expect(new Set(keys).size).toBe(keys.length);
+
+    const idsBefore = new Map(before.map((row) => [row.periodKey, row.id]));
+    for (const row of after) {
+      const was = idsBefore.get(row.periodKey);
+      if (was !== undefined) expect(row.id).toBe(was);
     }
   });
 

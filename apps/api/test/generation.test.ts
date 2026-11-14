@@ -110,7 +110,10 @@ describe("generation happens on its own", () => {
         kind: "bill",
         defaultCents: "4500",
         withdrawal: "auto",
-        schedule: { type: "monthly", day: 15 },
+        // A few days out, so it is inside the horizon whatever today is. A
+        // fixed day sits past the horizon for most of any month, and the row
+        // then generates without ever reaching the timeline this asserts on.
+        schedule: { type: "monthly", day: dayInAFewDays() },
         section: "fixed",
       },
     });

@@ -32,6 +32,7 @@ let carolCookie: string;
 let daxCookie: string;
 let householdId: string;
 let carolId: string;
+let accountId: string;
 
 beforeAll(async () => {
   migrateTestDatabase();
@@ -47,6 +48,7 @@ beforeEach(async () => {
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
   carolId = seeded.carol.id;
+  accountId = seeded.account.id;
   carolCookie = await signIn(harness, "carol@example.test", seeded.password);
   daxCookie = await signIn(harness, "dax@example.test", seeded.password);
 });
@@ -499,11 +501,26 @@ describe("balance snapshots", () => {
   });
 
   it("counts anything cleared since the snapshot towards the current balance", async () => {
-    await harness.app.inject({
-      method: "POST",
-      url: "/api/balance",
-      headers: { cookie: carolCookie, "idempotency-key": randomUUID() },
-      payload: { cents: "41000" },
+    /*
+     * The snapshot is written straight to the table with an `asOf` a second
+     * ago, rather than posted and then back-dated: snapshots are append-only
+     * by database trigger, which is the rule working, and an UPDATE is refused.
+     *
+     * A second matters because the comparison is deliberately strict. Anything
+     * cleared as PART of a snapshot carries that snapshot's own timestamp and
+     * must not be counted against it again, so two timestamps landing on the
+     * same millisecond decide between counting and not - and two requests in a
+     * test are easily that close, which made this fail about one run in three.
+     * A person typing a balance and then marking a bill paid is never within a
+     * millisecond of themselves.
+     */
+    await harness.db.prisma.balanceSnapshot.create({
+      data: {
+        accountId,
+        cents: 41_000n,
+        asOf: new Date(Date.now() - 1000),
+        enteredById: carolId,
+      },
     });
 
     const bill = await makeBill(-15_000n);

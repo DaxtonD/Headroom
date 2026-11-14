@@ -60,6 +60,10 @@ Keep this list current as you build.
 - `pnpm lint`, `pnpm typecheck`, `pnpm build`.
 - `pnpm -F @headroom/api db:generate | db:migrate | db:deploy`: Prisma client and migrations.
 - `node scripts/testdb.mjs up | down`: throwaway Postgres for tests, never the real database.
+- `PIN_DATE=2026-12-21 pnpm -F @headroom/api test`: run the API suite as if it were another
+  day. Every figure is built from "today", so a test with a hardcoded date tests one
+  arrangement of today and goes red by the calendar; this is how that is caught. Pin to
+  today or later only - the database's own clock is not faked.
 - `python3 seed/check_seed.py [path]`: verify a seed file's expected values. With no path it checks the local real seed and skips cleanly when absent.
 - `python3 seed/make_synthetic_fixture.py`: regenerate the committed synthetic fixture.
 - `pnpm check:figures`: fail if a real household figure has reached a tracked file. Reads the

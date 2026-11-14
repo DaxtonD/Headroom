@@ -121,28 +121,48 @@ describe("marking a cheque as received", () => {
   it("does not leave a projected copy of it behind", async () => {
     await addPayday();
 
+    // A balance has to exist for clearing to have anywhere to put the money:
+    // the effective balance is the snapshot plus what cleared after it, and
+    // with no snapshot there is nothing to add to. Every real household has
+    // typed one in.
+    expect((await post("/api/balance", { cents: "50000" })).statusCode).toBe(201);
+
     const before = await cheques();
     expect(before.length).toBeGreaterThan(0);
     const received = before[0] as { id: string; version: number };
 
     // Nothing is projected while the real cheque is on the ledger.
     expect((await windows()).flatMap((window) => window.projectedPaycheques)).toEqual([]);
-    const inBefore = (await windows())[0]?.inCents;
+
+    /*
+     * The figure to hold steady is the end of the horizon, not a window's
+     * "coming in".
+     *
+     * Clearing moves money from a row into the opening balance, so which
+     * window's total changes depends on whether the cheque fell in the first
+     * window - which depends on what day it is. What must never change is the
+     * total: money is not created or destroyed by saying it has arrived.
+     */
+    const endBefore = await get("/api/dashboard")
+      .then((response) => response.json())
+      .then((body) => BigInt(body.leftThisCycleCents as string));
 
     const marked = await patch(`/api/occurrences/${received.id}`, received.version, {
       cleared: true,
     });
     expect(marked.statusCode).toBe(200);
 
-    const after = await windows();
-
     /*
      * The money is in the balance now, so projecting the cheque as well counts
-     * the same pay twice in "coming in" - and puts an "Expected" row on the
-     * ledger that cannot be opened, exactly where the real row used to be.
+     * the same pay twice - and puts an "Expected" row on the ledger that
+     * cannot be opened, exactly where the real row used to be.
      */
-    expect(after.flatMap((window) => window.projectedPaycheques)).toEqual([]);
-    expect(after[0]?.inCents).toBe(inBefore);
+    expect((await windows()).flatMap((window) => window.projectedPaycheques)).toEqual([]);
+
+    const endAfter = await get("/api/dashboard")
+      .then((response) => response.json())
+      .then((body) => BigInt(body.leftThisCycleCents as string));
+    expect(endAfter).toBe(endBefore);
   });
 
   it("is not how a row is ticked off any more", async () => {

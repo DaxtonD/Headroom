@@ -88,6 +88,40 @@ function get(url: string) {
   return harness.app.inject({ method: "GET", url, headers: { cookie } });
 }
 
+/**
+ * Dates relative to today, for tests that assert an ORDER.
+ *
+ * A hardcoded anchor is harmless for a biweekly series - every date is as good
+ * as any other - but it is a time bomb the moment a test also asserts
+ * something about where today falls. `anchorDate: "2026-11-12"` with a bill on
+ * the 17th passed while today was the 12th or earlier and failed from the 13th
+ * onwards, because the first cheque had moved to the 26th and the bill now
+ * came out before it. The same test, the same code, a different day.
+ *
+ * Both of these return a date a known number of days ahead, so "the pay lands
+ * before the bills" is true whatever today is.
+ */
+function dateIn(days: number): string {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+/**
+ * The day of the month that falls `days` from now.
+ *
+ * A monthly schedule asked for that day produces exactly that date as its next
+ * occurrence, including across a month end: on the 28th, four days out is the
+ * 1st, and the 1st next happens in three days' time.
+ */
+function dayOfMonthIn(days: number): number {
+  const date = new Date();
+  date.setUTCHours(0, 0, 0, 0);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.getUTCDate();
+}
+
 function post(url: string, payload: unknown) {
   return harness.app.inject({ method: "POST", url, headers: headers(), payload });
 }
@@ -302,9 +336,11 @@ describe("the whole first-run path, in order", () => {
      * checks that instead: the same steps, and nothing to complain about.
      */
     await post("/api/accounts", { name: "Chequing", kind: "chequing" });
+    // The pay arrives before the bill comes out, whatever today is: that is
+    // the point of the test, so it cannot be left to the calendar.
     await post("/api/pay-schedules", {
       userId: daxId,
-      anchorDate: "2026-11-12",
+      anchorDate: dateIn(2),
       defaultCents: "212500",
     });
     await post("/api/templates", {
@@ -312,7 +348,7 @@ describe("the whole first-run path, in order", () => {
       kind: "bill",
       defaultCents: "9800",
       withdrawal: "auto",
-      schedule: { type: "monthly", day: 17 },
+      schedule: { type: "monthly", day: dayOfMonthIn(5) },
       section: "fixed",
     });
     // Less in the account than the bill, so being covered has to come from
@@ -354,7 +390,7 @@ describe("the whole first-run path, in order", () => {
     await post("/api/accounts", { name: "Chequing", kind: "chequing" });
     await post("/api/pay-schedules", {
       userId: daxId,
-      anchorDate: "2026-11-12",
+      anchorDate: dateIn(2),
       defaultCents: "212500",
     });
     await post("/api/templates", {
@@ -362,14 +398,16 @@ describe("the whole first-run path, in order", () => {
       kind: "paycheque",
       defaultCents: "212500",
       withdrawal: "auto",
-      schedule: { type: "biweekly", anchorDate: "2026-11-12" },
+      schedule: { type: "biweekly", anchorDate: dateIn(2) },
       section: "income",
     });
+    // Three, four, five and six days out, so every bill follows the pay on
+    // the second - which is what this test is about.
     for (const [name, day] of [
-      ["Hydro", 13],
-      ["Phone", 17],
-      ["Water", 18],
-      ["Internet", 19],
+      ["Hydro", dayOfMonthIn(3)],
+      ["Phone", dayOfMonthIn(4)],
+      ["Water", dayOfMonthIn(5)],
+      ["Internet", dayOfMonthIn(6)],
     ] as const) {
       await post("/api/templates", {
         name,
