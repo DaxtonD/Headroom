@@ -269,6 +269,21 @@ export function Ledger({
         <p className="ledger__loading" aria-busy="true">
           Working out what is coming up…
         </p>
+      ) : payPeriods.isError ? (
+        /*
+         * Not the same as having none, and the difference matters: the empty
+         * message below tells someone to go and add a pay schedule, which on
+         * a failed fetch is both untrue and actively harmful - they already
+         * have one, and adding a second puts every cheque on the ledger twice.
+         * The balance above comes from a different query, which succeeded.
+         */
+        <div className="hr-card ledger__error">
+          <h2>Could not load what is coming up</h2>
+          <p>
+            The server did not answer. The balance above is current; nothing has been changed.
+            Reload to try again.
+          </p>
+        </div>
       ) : periods.length === 0 ? (
         <div className="hr-card ledger__error">
           <h2>No pay periods yet</h2>

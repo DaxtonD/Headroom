@@ -450,6 +450,83 @@ the owner in the running app rather than being caught here, which is the one tha
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
 
+## Bug 18: two sections vanished from Savings (2026-11-15, reported from production)
+
+Reported as: "I don't see banked hours or reimbursements at all, anywhere in
+the UI anymore." My fault, same day, and the way it failed was worse than the
+mistake.
+
+**The mistake.** Splitting the work-expenses list renamed
+`reimbursements.items` to `outstanding` / `paid` on the API response. The
+previous bundle reads `wire.reimbursements.items.map(...)`. With `items` gone
+that is `undefined.map`, which throws inside the query function, so the one
+query behind both sections errored.
+
+**Why an old bundle was running at all, and always will be.** The service
+worker is deliberately `registerType: "prompt"` with `skipWaiting: false`, so
+a new build never swaps itself in under someone halfway through typing a
+balance - they get a bar and tap it when ready. That is the right call and it
+is not changing. It also means **every deploy leaves clients one version
+behind**, by design. A breaking change to a response field is therefore not an
+edge case here; it is a guarantee of breakage. I had written that policy's own
+comment and still shipped against it.
+
+**Why it vanished instead of complaining.** Both sections were
+`{overview.data ? ( ... ) : null}` and nothing else. No `isError` branch, so a
+failed query rendered *nothing* - no message, no empty state, no gap. On a
+screen where "there is nothing here" is also a legitimate answer, the absence
+was unreadable. `savings.isError` was handled; `overview.isError` had never
+been.
+
+### Fixed in three places
+
+1. **`items` is back**, carrying the same rows as the two new lists, so it
+   stays bounded: an older client now shows outstanding plus the recent
+   history rather than everything ever. A test fails if it disappears again,
+   and says why in its own text.
+2. **The client reads either shape.** `outstanding`, `paid`, `paidCount` and
+   `entries` are all optional, derived from `items` when absent, so this
+   bundle also survives talking to an *older* API - a rolled-back image, say.
+   The break was symmetrical and only one direction had been considered.
+3. **A failed section says so.** Each one keeps its heading and reports that
+   it could not load.
+
+### The same shape was in three other places
+
+Found by the guard written for this, not by looking:
+
+- **Manage**'s category, goal and net-worth sections fall back to an empty
+  message, so a failed query printed "No categories yet." - stating as a fact
+  that the household owns nothing, on the screen they would open to add
+  something. `Section` now takes `failed`.
+- **The ledger** printed "No pay periods yet - pay periods come from each
+  person's pay schedule. Add those on Manage." That is advice, it is wrong,
+  and following it adds a second schedule and puts every cheque on the ledger
+  twice. The worst of the four: a misleading error that prescribes a harmful
+  action.
+- **The mortgage form** told anyone whose fetch had failed that "nobody has a
+  payday set yet. Add one on Manage", for the same reason. It now distinguishes
+  "could not load" from "there are none".
+
+### The guard
+
+`apps/web/test/query-failures.test.ts`, with two rules:
+
+- Broad: a page that reads `something.data` must mention `something.isError`.
+  Mutations are exempt and are recognised by having a `mutateAsync`.
+- Narrow: a section rendered as `{something.data ? (` must carry that query's
+  error branch in the few lines above it.
+
+The broad rule alone was not enough, and the mutation check is what showed it:
+removing one of the two Savings branches left the other mention in the file
+and the test still passed. The narrow rule fails on either one, naming the
+line. Both rules only prove a page knows the state exists, not that it renders
+it well - but all four bugs above would have failed one of them.
+
+**The lesson worth keeping:** a response field is a published interface in this
+app, because of the update policy. Adding fields is free; renaming or removing
+one is a breaking change that lands on a client that cannot be upgraded first.
+
 ## Banked hours could not be taken out (2026-11-15, reported from use)
 
 Reported plainly: "I can add hours but I don't have a way to deduct hours."

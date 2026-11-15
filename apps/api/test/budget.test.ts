@@ -509,6 +509,66 @@ describe("GET /api/goals-overview", () => {
     expect(body.reimbursements.totalCents).toBe(String(PAID * 1000 + 5000));
   });
 
+  it("still sends `items`, which older bundles read", async () => {
+    /*
+     * This field was removed when the list was split, and that took both
+     * sections of the Savings screen off the air for anyone still running the
+     * previous bundle: the old client did `reimbursements.items.map(...)`,
+     * `items` was undefined, the read threw inside the query function, and the
+     * sections rendered as nothing at all.
+     *
+     * That is not an edge case in this app. The service worker is set to
+     * `registerType: "prompt"` with `skipWaiting: false` precisely so a new
+     * build never swaps itself in under someone mid-edit, which guarantees
+     * that clients one version behind exist every time anything ships.
+     *
+     * So `items` stays. It carries the same rows as the two split lists, which
+     * keeps it bounded: an older client shows outstanding plus the recent
+     * history rather than everything ever, and is not a blank screen.
+     */
+    for (const purchase of ["Owed now", "Also owed"]) {
+      await harness.app.inject({
+        method: "POST",
+        url: "/api/reimbursements",
+        headers: headers(),
+        payload: { purchase, cents: "4000", boughtOn: "2026-11-04" },
+      });
+    }
+
+    const settled = await harness.app
+      .inject({
+        method: "POST",
+        url: "/api/reimbursements",
+        headers: headers(),
+        payload: { purchase: "Settled", cents: "1500", boughtOn: "2026-11-03" },
+      })
+      .then((response) => response.json());
+    await harness.app.inject({
+      method: "PATCH",
+      url: `/api/reimbursements/${settled.reimbursement.id}`,
+      headers: { ...headers(), "if-match": '"1"' },
+      payload: { paid: true },
+    });
+
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/goals-overview", headers: { cookie } })
+      .then((response) => response.json());
+
+    expect(Array.isArray(body.reimbursements.items)).toBe(true);
+
+    // Everything the two split lists carry, and nothing they do not.
+    const split = [...body.reimbursements.outstanding, ...body.reimbursements.paid]
+      .map((item: { id: string }) => item.id)
+      .sort();
+    expect(body.reimbursements.items.map((item: { id: string }) => item.id).sort()).toEqual(split);
+
+    // The shape an older client needs off each row, not just the ids.
+    const first = body.reimbursements.items[0];
+    expect(Object.keys(first)).toEqual(
+      expect.arrayContaining(["id", "purchase", "cents", "boughtOn", "status", "version"]),
+    );
+  });
+
   it("re-marking an expense is a no-op", async () => {
     const created = await harness.app
       .inject({

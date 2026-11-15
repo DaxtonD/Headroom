@@ -45,6 +45,31 @@ import {
 import { useSavings, type Earmark, type LumpSum, type MortgagePanel } from "../lib/savingsQueries.js";
 import "./Savings.css";
 
+/**
+ * A section whose data did not load.
+ *
+ * Both sections below used to render `{overview.data ? ... : null}` and
+ * nothing else, so when that one query failed they did not fail - they
+ * silently were not there. That is how a renamed field on the API took work
+ * expenses and banked hours off the screen altogether with no message, on a
+ * screen where "there is nothing here" is also a legitimate answer.
+ *
+ * A section that cannot load now says so in its own place, keeping its
+ * heading, so the screen still has the shape the reader expects.
+ */
+function SectionUnavailable({ title }: { title: string }): React.JSX.Element {
+  return (
+    <section className="hr-card savings__section">
+      <header className="savings__section-head">
+        <h2 className="savings__section-title">{title}</h2>
+      </header>
+      <p className="savings__empty">
+        Could not load this section. Nothing has been changed; reload to try again.
+      </p>
+    </section>
+  );
+}
+
 /** Which sheet is open. */
 type Open =
   | { readonly kind: "balance" }
@@ -320,6 +345,7 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       />
 
       {/* ---- Work expenses ---- */}
+      {overview.isError ? <SectionUnavailable title="Work expenses" /> : null}
       {overview.data ? (
         <section className="hr-card savings__section">
           <header className="savings__section-head">
@@ -434,6 +460,7 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       ) : null}
 
       {/* ---- Banked hours ---- */}
+      {overview.isError ? <SectionUnavailable title="Banked hours" /> : null}
       {overview.data ? (
         <section className="hr-card savings__section">
           <header className="savings__section-head">
@@ -541,6 +568,7 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
         <MortgageForm
           existing={data.mortgage}
           paySchedules={setup.data?.paySchedules ?? []}
+          schedulesUnavailable={setup.isError}
           onClose={() => setOpen(null)}
         />
       ) : null}

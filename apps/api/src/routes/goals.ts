@@ -171,6 +171,22 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
     const serialisedReimbursements = reimbursements.map(serialiseReimbursement);
     const outstandingItems = serialisedReimbursements.filter((item) => item.status !== "paid");
     const paidItems = serialisedReimbursements.filter((item) => item.status === "paid");
+    const shownPaid = paidItems.slice(0, PAID_HISTORY_LIMIT);
+
+    /*
+     * `items` is the shape every client before 2026-11-15 reads, and removing
+     * it took both sections of the Savings screen off the air for anyone still
+     * running that bundle - which, with `registerType: "prompt"`, is everyone
+     * who has not accepted the update yet. That is not an edge case here; it
+     * is the deliberate update policy.
+     *
+     * So it stays, carrying the same rows in the same order as the two lists
+     * below, which keeps it bounded. An old client therefore shows outstanding
+     * plus the recent history instead of everything ever - a smaller list than
+     * it used to draw, and not a broken screen.
+     */
+    const shownIds = new Set([...outstandingItems, ...shownPaid].map((item) => item.id));
+    const items = serialisedReimbursements.filter((item) => shownIds.has(item.id));
 
     const summary = computeReimbursements(
       reimbursements.map((item) => ({
@@ -214,8 +230,9 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
          * screen can say how many it is not showing. The totals below are
          * still computed over every row.
          */
+        items,
         outstanding: outstandingItems,
-        paid: paidItems.slice(0, PAID_HISTORY_LIMIT),
+        paid: shownPaid,
         paidCount: paidItems.length,
         boughtCents: summary.boughtCents,
         submittedCents: summary.submittedCents,

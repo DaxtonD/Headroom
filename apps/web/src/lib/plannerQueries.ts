@@ -205,9 +205,17 @@ export function useGoalsOverview() {
           remainingCents: string | null;
         })[];
         reimbursements: {
-          outstanding: (Omit<Reimbursement, "cents"> & { cents: string })[];
-          paid: (Omit<Reimbursement, "cents"> & { cents: string })[];
-          paidCount: number;
+          /*
+           * All three are optional so that this bundle also survives talking
+           * to an older API than itself - a rolled-back image, say. The split
+           * lists are preferred; `items` is the fallback they were derived
+           * from. Reading a field that is not there is what took this screen
+           * down in the first place, in the other direction.
+           */
+          outstanding?: (Omit<Reimbursement, "cents"> & { cents: string })[];
+          paid?: (Omit<Reimbursement, "cents"> & { cents: string })[];
+          paidCount?: number;
+          items?: (Omit<Reimbursement, "cents"> & { cents: string })[];
           boughtCents: string;
           submittedCents: string;
           paidCents: string;
@@ -215,11 +223,20 @@ export function useGoalsOverview() {
           totalCents: string;
         };
         bankedHours: {
-          entries: BankedHoursEntry[];
+          entries?: BankedHoursEntry[];
           perPerson: BankedHoursPerson[];
           total: string;
         };
       }>("/api/goals-overview");
+
+      /*
+       * Either shape: the split lists when the server sends them, otherwise
+       * derived from the single list older servers send.
+       */
+      const allWire = wire.reimbursements.items ?? [];
+      const outstandingWire =
+        wire.reimbursements.outstanding ?? allWire.filter((item) => item.status !== "paid");
+      const paidWire = wire.reimbursements.paid ?? allWire.filter((item) => item.status === "paid");
 
       return {
         goals: wire.goals.map((goal) => ({
@@ -229,19 +246,16 @@ export function useGoalsOverview() {
           remainingCents: goal.remainingCents === null ? null : toCents(goal.remainingCents),
         })),
         reimbursements: {
-          outstanding: wire.reimbursements.outstanding.map((item) => ({
-            ...item,
-            cents: toCents(item.cents),
-          })),
-          paid: wire.reimbursements.paid.map((item) => ({ ...item, cents: toCents(item.cents) })),
-          paidCount: wire.reimbursements.paidCount,
+          outstanding: outstandingWire.map((item) => ({ ...item, cents: toCents(item.cents) })),
+          paid: paidWire.map((item) => ({ ...item, cents: toCents(item.cents) })),
+          paidCount: wire.reimbursements.paidCount ?? paidWire.length,
           boughtCents: toCents(wire.reimbursements.boughtCents),
           submittedCents: toCents(wire.reimbursements.submittedCents),
           paidCents: toCents(wire.reimbursements.paidCents),
           outstandingCents: toCents(wire.reimbursements.outstandingCents),
           totalCents: toCents(wire.reimbursements.totalCents),
         },
-        bankedHours: wire.bankedHours,
+        bankedHours: { ...wire.bankedHours, entries: wire.bankedHours.entries ?? [] },
       };
     },
   });

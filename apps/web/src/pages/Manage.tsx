@@ -336,6 +336,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
         empty="No categories yet."
         isEmpty={(categories.data?.length ?? 0) === 0}
         pending={categories.isPending}
+        failed={categories.isError}
         actions={
           <>
             <button
@@ -376,6 +377,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
         empty="No goals yet."
         isEmpty={(goals.data?.goals.length ?? 0) === 0}
         pending={goals.isPending}
+        failed={goals.isError}
         actions={
           <>
             <button
@@ -416,6 +418,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
         empty="Nothing entered yet."
         isEmpty={(netWorth.data?.assets.length ?? 0) === 0}
         pending={netWorth.isPending}
+        failed={netWorth.isError}
         actions={
           <button
             className="hr-button"
@@ -446,6 +449,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
         empty="Nothing entered yet."
         isEmpty={(netWorth.data?.liabilities.length ?? 0) === 0}
         pending={netWorth.isPending}
+        failed={netWorth.isError}
         actions={
           <>
             <button
@@ -570,6 +574,7 @@ function Section({
   empty,
   isEmpty,
   pending,
+  failed,
   actions,
   children,
 }: {
@@ -579,6 +584,16 @@ function Section({
   empty: string;
   isEmpty: boolean;
   pending?: boolean;
+  /**
+   * The query behind this section failed.
+   *
+   * Without this, a failed query left `data` undefined and `isPending` false,
+   * so the section printed its empty message: "No categories yet." A screen
+   * that cannot reach the server was telling the reader, as a fact, that they
+   * have nothing - on the screen they would go to in order to add something.
+   * "Could not load" and "there is nothing" are different answers.
+   */
+  failed?: boolean;
   actions?: React.ReactNode;
   children: React.ReactNode;
 }): React.JSX.Element {
@@ -592,6 +607,8 @@ function Section({
 
       {pending ? (
         <p className="manage__empty">Loading…</p>
+      ) : failed ? (
+        <p className="manage__empty">Could not load this. Reload to try again.</p>
       ) : isEmpty ? (
         <p className="manage__empty">{empty}</p>
       ) : (

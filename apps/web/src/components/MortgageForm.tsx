@@ -52,10 +52,19 @@ function formatBasisPoints(basisPoints: number): string {
 export function MortgageForm({
   existing,
   paySchedules,
+  schedulesUnavailable = false,
   onClose,
 }: {
   existing: MortgagePanel | null;
   paySchedules: readonly PayScheduleEntry[];
+  /**
+   * The schedules could not be fetched, as opposed to there being none.
+   *
+   * Without the distinction this form told anyone whose connection had just
+   * dropped that "nobody has a payday set yet. Add one on Manage" - advice
+   * that is wrong, and that leads somewhere worse than where they started.
+   */
+  schedulesUnavailable?: boolean;
   onClose: () => void;
 }): React.JSX.Element {
   const create = useCreateMortgage();
@@ -114,7 +123,11 @@ export function MortgageForm({
     setError(null);
 
     if (anchoring === "payday" && paySchedules.length === 0) {
-      setError("Nobody has a payday set yet. Add one on Manage, or give this its own dates.");
+      setError(
+        schedulesUnavailable
+          ? "Could not load who gets paid when. Reload and try again, or give this its own dates."
+          : "Nobody has a payday set yet. Add one on Manage, or give this its own dates.",
+      );
       return;
     }
     if (anchoring === "own" && anchorDate === "") {
