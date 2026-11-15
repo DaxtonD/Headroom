@@ -1,6 +1,6 @@
 # Headroom
 
-Household budget web app / PWA for Dax and Carol that replaces Carol's budget spreadsheet. Carol opens it several times a day; the home screen must show the chequing balance and how much is safe to spend, instantly.
+Household budget web app / PWA for a two-person household, replacing the spreadsheet it was run from. It is opened several times a day; the home screen must show the chequing balance and how much is safe to spend, instantly.
 
 - Full spec: `docs/HANDOFF.md`. Read all of it before writing code.
 - Running log: `docs/PROGRESS.md`. **If you are resuming (new session or after context compaction), read it first** and continue from the first unfinished item.
@@ -9,19 +9,19 @@ Household budget web app / PWA for Dax and Carol that replaces Carol's budget sp
 
 ## Operating mode
 
-**Superseded on 2026-11-07: this build is NOT autonomous.** Dax is available and answering
-questions, so ask rather than guess whenever an answer would change the work. Two standing
-instructions from him override what follows:
+**Superseded on 2026-11-07: this build is NOT autonomous.** The owner is available and
+answering questions, so ask rather than guess whenever an answer would change the work. Two
+standing instructions from them override what follows:
 
-1. **Never push without his explicit OK.** Commit and tag locally as usual; pushing waits.
+1. **Never push without their explicit OK.** Commit and tag locally as usual; pushing waits.
 2. **No real financial data in git, ever** - broader than the private-repo allowance below.
    See `docs/PROGRESS.md` for what is git-ignored as a result.
 
 The rest of this section still describes the intended rhythm: build the whole app, milestone by
 milestone (HANDOFF section 13), keeping each one green before starting the next.
 
-- Unclear? Use the default in HANDOFF section 14, or the most conservative reasonable choice. Make it an editable household setting where that makes sense. Record it in `docs/PROGRESS.md` under "Decisions made without asking" (and under "Questions for Carol" if she should confirm). Keep going.
-- Only stop work on an item if it needs a credential you don't have, touches Dax's Unraid server or any machine other than this one, or is irreversible outside this repo. Log it under "Blocked / needs Dax" and move on to other work.
+- Unclear? Use the default in HANDOFF section 14, or the most conservative reasonable choice. Make it an editable household setting where that makes sense. Record it in `docs/PROGRESS.md` under "Decisions made without asking" (and under "Questions for the household" if it needs confirming). Keep going.
+- Only stop work on an item if it needs a credential you don't have, touches the owner's Unraid server or any machine other than this one, or is irreversible outside this repo. Log it under "Blocked / needs the owner" and move on to other work.
 - Never weaken the integrity rules or the money rules below to get something working.
 - Finish each milestone fully (tests green, PROGRESS.md updated, committed, pushed, tagged) before starting the next.
 
@@ -70,19 +70,35 @@ Keep this list current as you build.
   master at `assets/headroom-icon.png` (favicon, the manifest's icons, the maskable one and
   Apple's). Needs Pillow. Run it after changing the logo, never edit the generated files.
 - `pnpm check:figures`: fail if a real household figure has reached a tracked file. Reads the
-  git-ignored seed for what to look for, so it only works on Dax's machine and skips cleanly
-  elsewhere (CI has no seed by design). Catches distinctive amounts - the ones with odd cents -
-  not round ones, so it is a safety net and not a substitute for the rule.
+  git-ignored seed for what to look for, so it only works on the owner's machine and skips
+  cleanly elsewhere (CI has no seed by design). Catches distinctive amounts - the ones with odd
+  cents - not round ones. A hand audit on 2026-11-15 found three real round figures it had let
+  through, so treat it as a safety net and never as a substitute for the rule.
 - `node scripts/backup.mjs dump | verify <file> | list | restore <file> --yes`: back up the
   database and prove the dump restores. `verify` restores into a throwaway database and counts
   what came back, so "I have a dump" and "I can get my data back" are the same claim. Runs
   `pg_dump` in a container, so nothing has to be installed. Dumps go in `backups/`, which is
   git-ignored because they contain the household's real figures.
-- `docker compose up -d --build`: run against the Postgres Dax already has.
+- `docker compose up -d --build`: run against the Postgres the owner already has. Kept for a
+  local run only - compose is not how this is deployed (see Definition of done).
 - `docker compose --profile with-db up -d --build`: run with a bundled Postgres.
 - `docker compose exec app node apps/api/dist/cli.js create-user | list-users | reset-password`.
-- (still to add: import-seed in M6)
+  In production these run through Unraid's console on the container, not through compose.
 
 ## Definition of done
 
-M0 to M6 complete and tagged, CI green, `docker compose up --build` works from a clean clone with only `.env` filled in, the GHCR image is published, `docs/DEPLOY.md` gives Dax copy-paste Unraid steps, and `docs/PROGRESS.md` lists every decision made and every question for Carol.
+Revised 2026-11-15, because three of the original gates described work the owner has since
+retired and one described a thing that was already finished. What is actually required:
+
+- **M0 to M5 complete and tagged.** Done and tagged through `m4`; M5 is complete and awaiting
+  its tag. **M6 is empty** - its three items were backups, `docs/DEPLOY.md` and a verified
+  compose run, and the owner took all three over or dropped them on 2026-11-14.
+- **CI green**, with the GHCR image published only when lint, typecheck and every test pass.
+- **The app runs from the GHCR image**, added as a plain container through Unraid's Docker
+  Manager and pulling `latest`. This replaces the old gate of `docker compose up --build` from
+  a clean clone: compose is not part of the owner's workflow and never will be. `docs/DEPLOY.md`
+  is written and keeps both routes documented anyway.
+- **Backups are the owner's own Duplicati job to Backblaze.** `scripts/backup.mjs` stays
+  available for a dump whose restore has actually been proven, and Duplicati should be pointed
+  at a folder of those dumps rather than at a live Postgres data directory.
+- **`docs/PROGRESS.md` lists every decision made and every open question for the household.**

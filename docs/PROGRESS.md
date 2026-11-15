@@ -1,8 +1,8 @@
 # Headroom progress log
 
-Claude Code updates this file at the end of every milestone and every work session. Dax reads it to see where things stand without asking.
+Claude Code updates this file at the end of every milestone and every work session. The owner reads it to see where things stand without asking.
 
-> **No real financial figures in this file.** Per Dax's decision on 2026-11-07, no household financial data is committed to git. This log refers to items by name only, never by amount.
+> **No real financial figures in this file.** Per the owner's decision on 2026-11-07, no household financial data is committed to git. This log refers to items by name only, never by amount.
 
 ## Status
 
@@ -14,14 +14,14 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | M2 Home + Upcoming + integrity layer | done | m2 | All section 16.8 integrity tests pass against a real Postgres |
 | M3 Recurrence + Pay plan | done | m3 | Generation follows a template edit and never undoes a person's; flexible bills move between periods |
 | M4 Budget, Goals, Net worth | done | m4 | Every retirement assumption editable; shares are of the section |
-| Manage screen + expense model | done | | Added at Dax's request, before M5. One entry feeds timeline and budget. Second pass: every section editable |
-| Biweekly/monthly redesign | done | | Agreed with Dax 2026-11-08. Engine, schema, API, Year screen, Savings screen, and Home+Upcoming+Pay plan merged into one Ledger |
-| Biweekly expenses | done | | At Dax's request. Any expense can be every two weeks on its own dates; the mortgage can be anchored either way |
+| Manage screen + expense model | done | | Added at the owner's request, before M5. One entry feeds timeline and budget. Second pass: every section editable |
+| Biweekly/monthly redesign | done | | Agreed with the owner 2026-11-08. Engine, schema, API, Year screen, Savings screen, and Home+Upcoming+Pay plan merged into one Ledger |
+| Biweekly expenses | done | | At the owner's request. Any expense can be every two weeks on its own dates; the mortgage can be anchored either way |
 | Manage edits reach the ledger | done | | Bug 14, reported from production. Generation reconciles untouched rows; "I choose when to pay it" takes a planned day |
-| Settings: themes + text size | done | | At Dax's request. Five themes plus match-my-device, five text sizes. Per device, not in the database. Contrast checked by test |
+| Settings: themes + text size | done | | At the owner's request. Five themes plus match-my-device, five text sizes. Per device, not in the database. Contrast checked by test |
 | Undo for received/paid | done | | Bug 15, found in testing. A cleared cheque is no longer re-projected, archiving the pay stops the ghost, and the ledger offers an undo |
 | "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
-| Info button on the headline figures | done | | At Dax's request. Shows the working behind in chequing, safe to spend and left this cycle, from the engine so it cannot disagree |
+| Info button on the headline figures | done | | At the owner's request. Shows the working behind in chequing, safe to spend and left this cycle, from the engine so it cannot disagree |
 | Phone-use fixes: greeting, gear, Back button, page width | done | | Four reported from the installed app; the widest was the shell grid making the whole page grow |
 | M5 PWA + desktop polish | **done** | | Installed and in daily use. Three shortcuts, the app badge, a Content-Security-Policy that hashes the page it protects, and the accessibility pass. Cached Home dropped and the desktop layouts deferred, both on request - see "Scope settled" |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
@@ -29,8 +29,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
 ## Last session
 
 - Date: 2026-11-08
-- **Pushed on 2026-11-09**, on Dax's OK: `main` and the tags `m0`-`m4` are on
-  `github.com/DaxtonD/Headroom`, which he made **public**. The repository had been empty until
+- **Pushed on 2026-11-09**, on the owner's OK: `main` and the tags `m0`-`m4` are on
+  `github.com/DaxtonD/Headroom`, which the owner made **public**. The repository had been empty until
   then, so nothing was rewritten out from under anyone.
 - Done: the handoff, then M0 through M4, then the Manage screen and the expense model, then a
   second pass making every section of Manage editable, then the whole biweekly/monthly redesign:
@@ -49,8 +49,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
 - **M2 Home + Upcoming + integrity** - done, tagged `m2`. Every HANDOFF section 16.8 test passes.
 - **M3 recurrence + Pay plan** - done, tagged `m3`. Generation never undoes an edit.
 - **M4 Budget, Goals, Net worth** - done, tagged `m4`.
-- **Manage screen + expense model** - done, untagged. Built at Dax's request before M5, then
-  revised after he found that three of its sections were read-only.
+- **Manage screen + expense model** - done, untagged. Built at the owner's request before M5, then
+  revised after they found that three of its sections were read-only.
 - **Biweekly/monthly redesign** - done, untagged. The whole of the agreed plan: engine, schema,
   API, the Year screen, the Savings screen, and the ledger merge.
 - **M5, M6** - not started.
@@ -64,7 +64,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
    both Node versions, and the image smoke test. Check the **package's** visibility after the
    first publish: it is separate from the repository's, and Unraid's Docker Manager cannot pull a
    private package without registry credentials.
-4. **Dax is setting up the real household** through Unraid's Docker Manager, entering the
+4. **The owner is setting up the real household** through Unraid's Docker Manager, entering the
    environment variables by hand so no real value is in a file. `docs/DEPLOY.md` has the runbook.
    Only three variables have no default: `APP_ORIGIN`, `DATABASE_URL`, `SESSION_SECRET`.
 5. The redesign is finished, so **M5 next**: PWA and polish. `vite-plugin-pwa` is a dependency but is not wired up, so
@@ -74,13 +74,13 @@ Claude Code updates this file at the end of every milestone and every work sessi
    "Update balance" manifest shortcut, desktop layouts, and the accessibility pass
    (44px targets, 4.5:1 contrast).
 6. Then M6: backup sidecar with a tested restore, `import-seed` for the real figures, and
-   finishing `docs/DEPLOY.md`. The GHCR image is done early, since Dax needed something to pull;
+   finishing `docs/DEPLOY.md`. The GHCR image is done early, since the owner needed something to pull;
    `scripts/backup.mjs` covers dump/verify/restore by hand, so M6's remaining job there is the
    scheduled sidecar.
 
-**Constraint on `import-seed`, found 2026-11-08 while answering a question from Dax.** It must
+**Constraint on `import-seed`, found 2026-11-08 while answering a question from the owner.** It must
 create **templates** and then run generation - never insert occurrences directly. Most of the demo
-data was seeded as bare occurrences with no `templateId`, and the symptom is exactly what Dax
+data was seeded as bare occurrences with no `templateId`, and the symptom is exactly what the owner
 spotted: a row sits on the ledger, is absent from Manage, and never regenerates for the next
 period. A real household imported that way would look right for a fortnight and then quietly stop
 producing bills.
@@ -88,14 +88,14 @@ producing bills.
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
 
-## The expense model (added before M5, at Dax's request)
+## The expense model (added before M5, at the owner's request)
 
-Dax pointed out that the app could display and adjust money but could not be **set up or
+The owner pointed out that the app could display and adjust money but could not be **set up or
 maintained**, and that it was hard to make sense of. He was right, and the gap was wide: bills,
 budget lines, goals, assets, work expenses, banked hours and income all had APIs with no UI,
 and pay schedules and the household settings had no API at all.
 
-Decisions taken with him on 2026-11-08:
+Decisions taken with the owner on 2026-11-08:
 
 1. **One entry per expense.** A bill used to exist twice - as a timeline item with an amount
    and a recurrence, and again as a budget line with a monthly amount. Now it is entered once
@@ -113,9 +113,9 @@ Decisions taken with him on 2026-11-08:
 
 ### Second pass: everything on Manage is editable (2026-11-08)
 
-Dax tried the first version and said: *"Nothing is editable on the manage screen. I can only
+The owner tried the first version and said: *"Nothing is editable on the manage screen. I can only
 add new expenses. If this is the management screen, everything should be editable here,
-correct?"* Correct, and he had found a real hole rather than a preference.
+correct?"* Correct, and they had found a real hole rather than a preference.
 
 What had happened: the mutation hooks for categories, goals and assets were **written,
 typechecked, exported and wired to nothing**. `useCreateCategory`, `useDeleteCategory`,
@@ -157,29 +157,34 @@ Two pieces of tidying that the above exposed:
 
 A throwaway container is on this machine for looking at the UI:
 `docker ps` shows `headroom-demo` on <http://localhost:8484>, with `headroom-test-db` behind it.
-Sign in as `carol@headroom.local` / `headroom-demo-password`. Invented amounts.
+Sign in with the demo account at `headroom.local` / `headroom-demo-password`. Invented amounts.
 Remove with `docker rm -f headroom-demo` and `node scripts/testdb.mjs down`.
+
+**Stale as of 2026-11-15:** that container last ran on 2026-11-10 and is stopped. The real app
+on Unraid is what gets looked at now.
 
 ### Not yet verified
 
-- **The screens have never been looked at.** There was no browser tooling in the session that
-  built them, so Home and Upcoming are verified by typecheck, build, and the API's numbers
-  matching the engine - not by eye. Worth a careful look before building more on their patterns.
-- CI has never run, because nothing is pushed.
+- **Superseded 2026-11-15.** Both bullets here said the screens had never been looked at and
+  that CI had never run. The app has been in daily use on a phone since 2026-11-09 and CI has
+  run on every push since; several of the bugs logged below were found by using it. What is
+  still true is narrower, and lives under "Blocked / needs the owner": no browser and no DOM
+  test environment exist in this repository, so the Content-Security-Policy and the four ways
+  out of a sheet are proven by use rather than by a test here.
 
-## The biweekly/monthly mismatch (2026-11-08, after a long discussion with Dax)
+## The biweekly/monthly mismatch (2026-11-08, after a long discussion with the owner)
 
-Dax stopped the build to explain how Carol actually uses the spreadsheet, and the gap was
-conceptual, not cosmetic. His words:
+The owner stopped the build to explain how the household actually uses the spreadsheet, and the gap was
+conceptual, not cosmetic. In their words:
 
 > "our pay periods are biweekly but most of our bills are monthly. so, sometimes I get 3
-> paychecks per month and sometimes carol does. also, our mortgage is biweekly, not monthly.
-> ... the data is too spread out for Carol. she can't easily see everything."
+> paychecks per month and sometimes [the other] does. also, our mortgage is biweekly, not monthly.
+> ... the data is too spread out for [the main user]. she can't easily see everything."
 
 And the purpose of the whole app, which was not written down anywhere:
 
 > "we are actively trying to save as much as possible to pay off our mortgage early with annual
-> lump sum payments." / "This app is trying to do 2 things: 1. make Carol feel at home using the
+> lump sum payments." / "This app is trying to do 2 things: 1. make [the main user] feel at home using the
 > app instead of the spreadsheet. 2. allow me to understand what the heck she's doing."
 
 ### What was wrong
@@ -187,27 +192,27 @@ And the purpose of the whole app, which was not written down anywhere:
 1. **The third cheque was computed away, not surfaced.** The spec said in three places - twice in
    engine comments - that a month with a third cheque "needs no special handling". True of the
    arithmetic, false of the decision: the running balance absorbs it silently, which is exactly
-   why nobody can see it coming. Finding those months is Carol's entire monthly ritual.
+   why nobody can see it coming. Finding those months is the household's entire monthly ritual.
 2. **Worse, the mortgage is `relative_to_pay` (the day after a payday).** That one-day offset
    makes third-cheque months and third-mortgage-payment months drift apart, so a windfall month
    can sit directly beside a squeeze month for no reason anyone would guess from a calendar.
    Verified against the real schedules, and reproduced in a committed test with synthetic anchors.
-3. **Savings was modelled as a bill.** Dax: "The savings of $1300 is a goal we set. She decides
-   when and how much we allocate." So it is the residual, not an obligation - and the lump sum it
-   feeds was nowhere in the app at all.
+3. **Savings was modelled as a bill.** From the owner: the regular savings transfer "is a goal
+   we set", and the household decides when and how much to allocate. So it is the residual,
+   not an obligation - and the lump sum it feeds was nowhere in the app at all.
 4. **Targets were mandatory.** `Goal.targetCents` is non-null and Goals draws a bar against it.
-   Dax: "Trips never have a set date or set cost." An app that demands a target makes someone
+   The owner: "Trips never have a set date or set cost." An app that demands a target makes someone
    invent one and then reports progress against a number nobody believes.
 5. **Six tabs for one sheet.** Home, Upcoming and Pay plan are three renderings of a single
-   object; the view Carol lives in - one running ledger grouped under each cheque - was not quite
+   object; the view the household lives in - one running ledger grouped under each cheque - was not quite
    any of them.
 
-### Agreed plan (Dax approved the order)
+### Agreed plan (the owner approved the order)
 
-Engine -> M5 (PWA) -> M6 backups -> deploy -> he and Carol set everything up.
+Engine -> M5 (PWA) -> M6 backups -> deploy -> the household sets everything up.
 
 Backups deliberately moved **ahead** of the setup pass: having them hand-enter every bill, date
-and balance into a database with no verified restore is the one ordering worth avoiding. Dax also
+and balance into a database with no verified restore is the one ordering worth avoiding. The owner also
 confirmed the redesign comes before the setup pass, so the data is entered once against the final
 shape.
 
@@ -219,7 +224,7 @@ shape.
 - `packages/core/src/mortgage.ts` - integer-cent amortization, lump sums, payoff date, "what one
   more lump sum buys", and the calendar-year prepayment allowance. **No floats:** interest is
   `balance x basisPoints / (10_000 x periodsPerYear)` through `mulDivRoundHalfUp`. Checked against
-  Dax's own workbook; agrees to one cent after a dozen payments.
+  the original workbook; agrees to one cent after a dozen payments.
 - `packages/core/src/savings.ts` - one real account, several earmarks, optional targets, and the
   number no spreadsheet gives you: **unallocated** = balance - earmarks, surfaced rather than
   clamped when a plan does not fit.
@@ -263,9 +268,9 @@ estimate".
 A one-off can now be added (it could not be at all) **and removed**. Only a one-off: a generated
 row belongs to its bill, and marking it paid would be a different claim.
 
-### Done: biweekly expenses, at Dax's request (2026-11-08)
+### Done: biweekly expenses, at the owner's request (2026-11-08)
 
-Dax: "The mortgage, and other expenses, needs to be able to be configured for bi-weekly." He was
+The owner: "The mortgage, and other expenses, needs to be able to be configured for bi-weekly." They were
 right that it could not be, and the reason was worse than a missing menu entry:
 
 - The only fortnightly option in the interface was **"a few days after someone's payday"**. That
@@ -286,7 +291,7 @@ The **mortgage** can now be anchored either way, and its own dates are the defau
 - **Its own dates** is what a lender states, and a payday-anchored mortgage silently moves every
   payment if that pay anchor is ever corrected.
 - **Following a payday** stays, because this household's really does behave that way (the day
-  after Dax's pay), and that one-day offset is the whole reason the Year screen exists.
+  after a pay), and that one-day offset is the whole reason the Year screen exists.
 
 Naming one anchor clears the other, so which one wins is never a guess. The budget already costed
 biweekly at 26/year rather than 24; verified in the demo at $42.50 a fortnight showing as
@@ -323,7 +328,7 @@ typecheck, lint and test run:
   which immediately found `banked_hours_entry` missing too. It has no edit route yet, so nothing
   was broken; the first one added would have been.
 - **Nothing in the app could add a one-off.** `POST /api/occurrences` and `useCreateOneOff` both
-  existed and no button called either, so Carol's "add a few extra rows" meant SQL. The
+  existed and no button called either, so the "add a few extra rows" ask meant SQL. The
   reachability check in `wiring.test.ts` only scanned two query modules **by file name**; it now
   matches any `*queries.ts`, and failed on `useCreateOneOff` at once. There is now an
   `OneOffForm` on Upcoming, which the ledger merge will absorb.
@@ -369,8 +374,8 @@ Known limits, deliberately chosen:
   test values of `200000`, a documented amount that is the codebase's own cautionary tale). A
   gate with a 140-line allowlist is a gate nobody reads. So a **round** real figure will not be
   caught, and the rule still needs care.
-- It **skips entirely in CI**, which has no seed by design. Its only real home is Dax's machine.
-- Not installed as a git hook: that would change local git config, which is Dax's call. Offered.
+- It **skips entirely in CI**, which has no seed by design. Its only real home is the owner's machine.
+- Not installed as a git hook: that would change local git config, which is the owner's call. Offered.
 
 ## Verified by hand, not only by tests
 
@@ -408,12 +413,12 @@ Two things learned worth keeping:
 ## Bugs caught before deploy (all fixed)
 
 Worth recording, because each would have been invisible until it mattered. Number 9 reached
-Dax in the running app rather than being caught here, which is the one that matters most:
+the owner in the running app rather than being caught here, which is the one that matters most:
 
 1. **Two not-found handlers.** Fastify allows one per prefix, so the app could not start at all. A single handler now decides both the API 404 and the single-page-app fallback.
 2. **A global `pg` int8 type parser.** Added so raw queries would return `BigInt`; it broke *every* Prisma write, because Prisma's driver adapter relies on the driver's default and converts the value itself. Removed, with a note so it is not re-added.
 3. **BigInt serialization.** `setSerializerCompiler` only applies to routes that declare a response schema, so `/api/me` returned 500 on the household's cushion. Now `setReplySerializer`, which covers every reply.
-4. **The login limiter counted successful sign-ins**, while `.env.example` documents `LOGIN_RATE_LIMIT` as failed attempts. Carol could have locked herself out of her own finances. Replaced with a failure-only throttle that a correct password clears.
+4. **The login limiter counted successful sign-ins**, while `.env.example` documents `LOGIN_RATE_LIMIT` as failed attempts. A user could have been locked out of their own finances. Replaced with a failure-only throttle that a correct password clears.
 5. **`pino-pretty` in the production image.** `NODE_ENV=development` against the built image crashed at startup, because the pretty transport is a dev dependency. Pretty logging is now used only when the module is actually present.
 6. **Asset cache headers did nothing.** `@fastify/static` sets its own `cache-control` and overrode them, and the pattern looked for `.hash.js` while Vite emits `name-HASH.js`. Both fixed, then verified against the running container.
 7. **A pinned base image tag that did not exist** (`node:22.23.4-alpine3.22`). Now `node:22.23.4-alpine`.
@@ -424,7 +429,7 @@ Dax in the running app rather than being caught here, which is the one that matt
    by using the running app, not by a test.
 11. **The override checkbox defaulted to ON for a new expense**, because with optional chaining
    `existing?.field !== null` is true when there is no existing record at all.
-12. **Six mutation hooks wired to nothing** - found by Dax in the running app. The query layer
+12. **Six mutation hooks wired to nothing** - found by the owner in the running app. The query layer
    could create and edit categories, goals and assets; no button called any of it, so three
    sections of the Manage screen were read-only text and only SQL could correct them. The
    whole suite was green, because "a person can reach this" was not something any test
@@ -434,9 +439,9 @@ Dax in the running app rather than being caught here, which is the one that matt
    deliberately broken, rather than assumed to work.
    - Same shape as bug 9 and bug 10: correct on each side, wrong at the seam, and found by
      using the app rather than by running the tests.
-9. **A bill saved as 100x its amount** - found by Dax, not by the tests. Typing 186 stored
-   $18,600. The amount was converted twice: the web app turned "186" into 18600 cents and
-   sent `"-18600"`, and the API ran `parseCents` over that again and read it as dollars.
+9. **A bill saved as 100x its amount** - found by the owner, not by the tests. Typing 147 stored
+   $14,700. The amount was converted twice: the web app turned "147" into 14700 cents and
+   sent `"-14700"`, and the API ran `parseCents` over that again and read it as dollars.
    Both sides had passing tests; neither crossed the seam between them, because the API's
    tests sent dollar strings while the client sent cents. Fixed by making integer cents the
    only wire format (`apps/api/src/lib/wire.ts`), refusing a decimal outright rather than
@@ -444,6 +449,71 @@ Dax in the running app rather than being caught here, which is the one that matt
    round - typed, sent, stored, read back, formatted - through the same engine functions the
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
+
+## The names cleanup, and the three real figures it turned up (2026-11-15)
+
+Agreed on 2026-11-09 and left as future work: take both household first names out of a public
+repository. Done now, across 68 files. The count was 217 word-boundary matches, not the ~600
+this file used to claim - the difference was substring matches on the owner's GitHub handle,
+which stays, because it is the remote URL and the image name and is public by nature.
+
+**The scheme, so a future session does not invent a second one:**
+
+- **Prose gets a role**, not a pseudonym: "the owner" for whoever asked for or decided a thing,
+  "the household" for whoever uses the app, "one person" and "the other" where the two have to
+  be told apart. Inventing a fake name for a real person in a design note only moves the
+  problem, because the next reader takes it for a real one.
+- **Test and fixture data gets placeholder names:** `Alex` and `Jordan`, and `alex@example.test`
+  / `jordan@example.test` in the API harness. Chosen so that `Alex < Jordan` alphabetically just
+  as the two originals were, because a test asserts a sorted list of people and would otherwise
+  have gone red for a reason that had nothing to do with the code.
+- **Worked examples in comments use `Alex`** - "Alex verified Power" - since those illustrate
+  wording the UI produces and need a name shaped like a name.
+- **Verbatim quotations keep their wording**, with the name replaced by `[the main user]` or
+  `[the other]` in brackets. Three of them still contain "she": rewriting a pronoun inside
+  quotation marks would misrepresent what was said, and the name is what had to go.
+
+**Three real figures came out with the names, which matters more than the names did.** All three
+had been sitting in a public repository, and all three were round numbers, which is precisely
+what `pnpm check:figures` is documented as not catching:
+
+1. The real **mortgage payment**, quoted in a comment in `packages/core/src/monthlyEquivalent.ts`
+   along with the derivation it differs from - so both the stated figure and the annual cost.
+2. The real **savings transfer**, quoted twice: in this file and in a `schema.prisma` doc
+   comment, both inside a quotation explaining why savings is a target rather than a bill.
+3. A real **bill amount**, used as the worked example for the "a bill saved as 100x its amount"
+   bug in thirteen tracked files - `wire.ts`, its tests, the schema, this log. It was the real
+   Power bill, named as such in one comment.
+
+Each is now an invented figure checked against the seed first. What gave all three away was not
+the number but the sentence around it: the prose said the figure was the household's. No gate
+catches that, and the scanner's own docstring had explicitly reasoned past the third one as "the
+codebase's own cautionary tale" - it was both a cautionary tale and real. That note is corrected.
+
+**`pnpm check:figures` now also fails on a first name.** It reads the two names from the seed's
+`users`, the same way it reads amounts, so nothing in a committed file has to know them; it
+matches on a word boundary and case-insensitively, which is why the GitHub handle is not a hit.
+It earned its keep immediately by finding two lowercase mentions that a case-sensitive `grep`
+for the capitalised names had walked straight past, and it was mutation-checked by putting a
+name back into `timeline.ts` and confirming a non-zero exit.
+
+**Also replaced, as household detail rather than names:** the committed synthetic fixture named
+real vendors and vehicle models (a TV and internet provider, two streaming services, an
+insurance line, two vehicle models). Those are now generic. The fixture's event ids no longer
+carry a first name either, which took one hard-coded pair of ids out of `seed/check_seed.py`:
+it now derives the anchors in that window from the events themselves, so it reads the real seed
+and the synthetic fixture through the same code path. Both still verify.
+
+**Applied migrations were edited, having checked that this is safe.** Four migration SQL files
+carried a name in a comment. Prisma stores a checksum per migration, so the question was whether
+editing one breaks a deploy; tested against the throwaway Postgres, `prisma migrate status` and
+`prisma migrate deploy` both pass unchanged after a comment edit, because neither re-verifies
+already-applied migrations. `prisma migrate dev` is stricter and was not tested - it is not what
+production runs, but a future session creating a migration locally may see it complain.
+
+What stayed: `DaxtonD` in the remote URL, the GHCR image name and CI; the pushed commit
+messages, which would need a force-push the rules here forbid; and `seed/` plus `reference/`,
+which are git-ignored and are where the real names and figures are supposed to live.
 
 ## Scope settled: no offline data, no desktop work, no seed import (2026-11-14)
 
@@ -562,8 +632,8 @@ keyboard way out exists - it is just not on that element.
 
 - **Instant cached Home**, still waiting on the one decision (below).
 - **The desktop layouts, which are not polish.** HANDOFF section 7 names four: the left nav at
-  >=1024px (done), the Home summary beside the Upcoming timeline, Budget as full tables like her
-  sheet, and dragging flexible bills between pay periods on desktop, where the phone has move
+  >=1024px (done), the Home summary beside the Upcoming timeline, Budget as full tables like the
+  spreadsheet, and dragging flexible bills between pay periods on desktop, where the phone has move
   buttons. The last of those is an interaction that wants a browser and a keyboard
   equivalent, not a stylesheet. The 880px cap on the content column also has to rise before
   anything can be two columns. Worth agreeing the order before building it.
@@ -668,7 +738,7 @@ Settings that closes Settings is a lie to anyone who cannot see which screen the
 
 ### The icon
 
-Dax drew one. `assets/headroom-icon.png` is the master and everything under `apps/web/public/`
+The owner drew one. `assets/headroom-icon.png` is the master and everything under `apps/web/public/`
 is generated from it by `scripts/make_icons.py`; the generated files are never edited by hand.
 Icons drift otherwise - a new logo lands in the favicon and not in the maskable one, and nobody
 notices for months because the maskable only shows on an Android home screen.
@@ -764,7 +834,7 @@ Described as "like a hand-drawn svg that isn't symmetrical", which is what it wa
 placed by eye.
 
 First attempt was to generate it - eight identical teeth at 45 degrees, measured by a test that
-read the coordinates back out. It was symmetric and it was still ours, which Dax then settled
+read the coordinates back out. It was symmetric and it was still ours, which the owner then settled
 with "make the gear icon something standard". He is right: a gear is a shape everybody already
 recognises, so there is nothing to gain from having our own and a real cost to getting it
 slightly wrong.
@@ -774,7 +844,7 @@ checked against the published file byte for byte. Inlined rather than installed:
 not worth a dependency, a font or a second request on a phone, and an icon that arrives
 separately is an icon that can be missing while the rest of the header is there.
 
-Font Awesome was what he named, and is the reason for the choice of set rather than against it.
+Font Awesome was what the owner named, and is the reason for the choice of set rather than against it.
 Font Awesome Free's icons are CC BY 4.0, an attribution requirement on anything that ships
 them. Lucide is ISC, which asks only that its notice travel with the code -
 `THIRD-PARTY-NOTICES.md`, pointed at from the component.
@@ -922,7 +992,7 @@ is ever mounted. A `<div>` inside a `<p>` went away with it.
 
 ## Bug 13: a payday was not money (2026-11-09, found in production)
 
-The worst one so far, and the only one that made the app actively lie. Dax had entered every
+The worst one so far, and the only one that made the app actively lie. The owner had entered every
 real figure and the home screen said **safe to spend: a large negative number**, with a
 coverage banner claiming there was not enough for the mortgage.
 
@@ -970,7 +1040,7 @@ through exactly the setup it existed to catch. It now asks per payday.
 **Generation only ever ran after a write.** The horizon is "through the day before the Nth
 upcoming paycheque", so it moves forward every day: a household that edited nothing for a
 fortnight would have watched its ledger shorten rather than extend. It also meant this fix
-would not have reached Dax's data until he happened to edit something.
+would not have reached the real data until someone happened to edit something.
 
 `generateForAllHouseholds` now runs once at startup and every `GENERATION_SWEEP_HOURS`
 (default 6, new in `.env.example` and the Unraid template). Each household is its own
@@ -1063,7 +1133,7 @@ There are no component tests on the web side - the two web test files are source
 checks - so the new form field and the row's date editor are covered by the API tests underneath
 them and by the hand check, not by a test that renders them.
 
-## Settings: themes and text size (2026-11-09, at Dax's request)
+## Settings: themes and text size (2026-11-09, at the owner's request)
 
 Asked for as the last thing before the household starts using the app: a settings menu, several
 themes including light and dark, and a text-size control that scales **down** from the current
@@ -1154,7 +1224,7 @@ fails if the key names ever part company.
 ### Not verified by eye
 
 There is no browser in this environment, so the themes were checked by arithmetic, by the build,
-and by a generated preview page built from the real `tokens.css` and sent to Dax to look at.
+and by a generated preview page built from the real `tokens.css` and sent to the owner to look at.
 Nobody has yet seen the actual app in any theme other than Daylight.
 
 ## Bug 15: a received cheque came back as a ghost (2026-11-09, reported from testing)
@@ -1213,7 +1283,7 @@ The whole sequence, over HTTP against a real Postgres: pay on the ledger, marked
 (balance rises, row leaves, no ghost, undo offered), undone (balance back, row back, editable),
 then archived (row goes, no ghost, checklist says the payday has no pay).
 
-### Follow-up: a cleared row should not vanish (same day, Dax's question)
+### Follow-up: a cleared row should not vanish (same day, the owner's question)
 
 He asked whether marking a payday received should remove it from the ledger completely. It
 should leave the running balance - that is the arithmetic, and section 6.1 says so - but it
@@ -1226,7 +1296,7 @@ account, then what is coming. Shown rather than collapsed, since the problem bei
 row disappearing. No running balance on those lines, because the figure above has counted them.
 
 Offered as three options (band at the top, each row left in place and dimmed, or leave it as it
-was) and he picked the band. The "in place and dimmed" version was the more ledger-like of the
+was) and the owner picked the band. The "in place and dimmed" version was the more ledger-like of the
 two but reads as though a settled row is still to come, sitting below a balance that already
 counted it.
 
@@ -1268,17 +1338,17 @@ cheque to the payday by id, so the amount follows it afterwards. Income rows say
 
 ### "Mark as paid" moved the balance, and nobody knew
 
-Carol's complaint was that a paid item disappears. Measuring it to answer that turned up worse:
-marking a $186 bill paid dropped the balance by $186, because one flag was doing two unrelated
+The complaint was that a paid item disappears. Measuring it to answer that turned up worse:
+marking a $147 bill paid dropped the balance by $147, because one flag was doing two unrelated
 jobs - "we have dealt with this" and "this is already inside the balance I typed in".
 
 Which means a bill that came out **before** the bank was read got subtracted twice: once inside
 the typed figure and once again by the tick. The household is left short by the amount of the
-bill with nothing on screen to say why. Dax had not realised it moved money at all:
+bill with nothing on screen to say why. The owner had not realised it moved money at all:
 
 > "I actually didn't realize that marking a bill paid actually moved the balance until now."
 
-Offered three ways out; he chose the one that makes the double subtraction **impossible** rather
+Offered three ways out; the owner chose the one that makes the double subtraction **impossible** rather
 than merely fixed.
 
 - **`paidAt`/`paidById` is new, and is a tick.** It records that the two of them have dealt with
@@ -1298,7 +1368,7 @@ The "Already in your balance" band from two days ago is gone. It existed only be
 vanished; they no longer do, and undo is tapping the row again. `GET /api/balance/cleared` went
 with it.
 
-Dax also asked whether paid-ness carries into the next cycle. It cannot: each cycle is its own
+The owner also asked whether paid-ness carries into the next cycle. It cannot: each cycle is its own
 occurrence row, so ticking November says nothing about December. Tested.
 
 ### A test that was a time bomb
@@ -1379,12 +1449,12 @@ is the one false positive seen, and it is the harness rather than the app.
 - Nothing pins the clock in CI, so CI still tests only the day it runs on. A matrix of two or
   three fixed dates would make this class of bug impossible to reintroduce.
 
-## An info button on the three headline figures (2026-11-14, at Dax's request)
+## An info button on the three headline figures (2026-11-14, at the owner's request)
 
-> "If Carol is like, 'wait, where did that number come from?' - she could click the info and see
+> "If [the main user] is like, 'wait, where did that number come from?' - she could click the info and see
 > how the number was obtained."
 
-The question behind it was his own: marking a bill paid moved "safe to spend" by an amount that
+The question behind it was the owner's own: marking a bill paid moved "safe to spend" by an amount that
 was not the bill. Measuring it showed why, and showed that the figure is widely misread.
 
 ### What the three numbers are
@@ -1399,7 +1469,7 @@ are the same number and the misreading goes unnoticed. Add paydays and they sepa
 measured at $2,000 in chequing with $1,500 of bills, safe-to-spend was **$2,000** - because the
 cheque lands before the bills, so the balance never dips below where it starts.
 
-That also explains the odd movement he saw. Clearing a bill lowers every balance *before* it and
+That also explains the odd movement the owner saw. Clearing a bill lowers every balance *before* it and
 leaves later ones alone, so if that shifts *which* row is the lowest, the figure moves by the gap
 between two rows - a number unrelated to the bill, and unreadable from the screen.
 
@@ -1421,9 +1491,9 @@ rather than a new pair of colours needing their own check.
 
 ### The cushion
 
-Dax's is set to $0.00, which means safe-to-spend permits spending to exactly zero at the lowest
-point - and it is counting on a cheque that has not arrived yet. The panel now says so in his own
-figures rather than leaving it to be discovered. Left as his decision; not changed.
+This household's is set to $0.00, which means safe-to-spend permits spending to exactly zero at the lowest
+point - and it is counting on a cheque that has not arrived yet. The panel now says so in the household's
+own figures rather than leaving it to be discovered. Left as the owner's decision; not changed.
 
 ### Still to do
 
@@ -1434,7 +1504,7 @@ figures rather than leaving it to be discovered. Left as his decision; not chang
 
 ## Git history and attribution (2026-11-09)
 
-Dax asked for **no attribution lines in any commit** - no `Co-Authored-By`, no "Generated with
+The owner asked for **no attribution lines in any commit** - no `Co-Authored-By`, no "Generated with
 Claude Code" - and said so in the same message that approved the first push.
 
 All 37 commits were rewritten to strip them **before** pushing, because afterwards it would have
@@ -1459,7 +1529,7 @@ memory for the project, so it survives a new session.
 
 ## Names, now the repository is public (2026-11-09)
 
-The owner removed both household members' first names from the README himself, then: "I just
+The owner removed both household members' first names from the README themselves, then: "I just
 wanted names out of the readme. Moving forward we can stop using names. Eventually we will remove
 them all from comments."
 
@@ -1467,19 +1537,18 @@ So:
 
 - **New code, comments, docs, test data and commit messages use no first names** - "the
   household", "one person", "the other", or a role word.
-- **Existing mentions stay for now.** About 600 across ~50 files, heaviest in this file and in the
-  test suites, where the names are also test-user data. Removing them is agreed future work, not
-  urgent, and the fixtures feed the golden tests so it needs a full run rather than a blind
-  find-and-replace.
+- **Existing mentions were removed on 2026-11-15.** See "The names cleanup" below. The estimate
+  of ~600 was wrong by a factor of three: a word-boundary count found 217 across 68 files, the
+  rest having been substring matches on the owner's GitHub handle, which stays.
 - **The pushed commit messages keep them.** Changing those would need a force-push, which the
   rules here forbid.
 
-## Working agreements with Dax (this build is NOT autonomous)
+## Working agreements with the owner (this build is NOT autonomous)
 
-CLAUDE.md describes an autonomous weekend build. That changed: Dax is available and answering questions.
+CLAUDE.md describes an autonomous weekend build. That changed: the owner is available and answering questions.
 
-- **Dax is available.** Ask rather than guessing, for anything that materially changes the build.
-- **Pushing to git requires Dax's explicit OK each time.** Commit freely; never push or tag-push unprompted.
+- **The owner is available.** Ask rather than guessing, for anything that materially changes the build.
+- **Pushing to git requires the owner's explicit OK each time.** Commit freely; never push or tag-push unprompted.
 - Everything else in CLAUDE.md (money rules, integrity rules, conventional commits, milestone order) still stands.
 
 ## Decisions made without asking
@@ -1489,11 +1558,11 @@ CLAUDE.md describes an autonomous weekend build. That changed: Dax is available 
   and not answered, so taken as the default per CLAUDE.md. A 14-month ledger would be mostly
   estimates and would bury the near-term tight week. Say the word to merge them.
 - 2026-11-08: **The golden fixture stays frozen** at the figures captured 2026-11-07, rather than
-  re-captured from the copy Dax attached on 2026-11-08. Three cells had moved (the balance, two
+  re-captured from the copy attached on 2026-11-08. Three cells had moved (the balance, two
   verification marks, and the bottom line that follows from them); the tests pin the old value and
   nothing depends on the new one.
-- 2026-11-08: **The mortgage rate divisor follows Dax's spreadsheet** (annual rate / payments per
-  year) rather than the Canadian semi-annual convention, so the app and the document he reads
+- 2026-11-08: **The mortgage rate divisor follows the household's spreadsheet** (annual rate / payments per
+  year) rather than the Canadian semi-annual convention, so the app and the document they read
   agree. The difference is a couple of hundred dollars of interest across the remaining term and
   does not move the payoff date by one payment. The lender's convention is available as a setting.
 - 2026-11-08: **Goals became Savings** rather than a new tab beside it. The screen is now about one
@@ -1535,27 +1604,30 @@ CLAUDE.md describes an autonomous weekend build. That changed: Dax is available 
   turning on `friday_before` should not start moving paydays. Applying it to both would have been
   a silent change to existing behaviour.
 
-## Decisions made WITH Dax (2026-11-07)
+## Decisions made WITH the owner (2026-11-07)
 
-1. **No financial data in git, at all.** Dax's instruction, broader than CLAUDE.md's private-repo allowance. Consequences:
+1. **No financial data in git, at all.** The owner's instruction, broader than CLAUDE.md's private-repo allowance. Consequences:
    - Git-ignored: `seed/household-nov-2026.json`, `docs/HANDOFF.md` (90 real figures in it), `design/` (all mockups embed real amounts), `reference/`, `headroom-handoff.zip`, `.env`.
    - Committed tests run against a **synthetic fixture** at `packages/core/test/fixtures/household-synthetic.json` — identical structure and dates, invented amounts, all expected values recomputed from those amounts.
-   - The golden tests **also** run against the real seed whenever `seed/household-nov-2026.json` exists locally, so Dax's machine verifies the real numbers while CI never sees them.
-   - The real data reaches the database through the `import-seed` CLI command (M6), never through git.
-   - **Side effect to be aware of:** the repo therefore does not contain the spec (`docs/HANDOFF.md`) or the mockups. A clone is buildable and testable but not self-documenting. Offered to Dax: a redacted `HANDOFF.md` carrying all the rules with synthetic numbers substituted. Awaiting his call; not blocking.
-2. **Database is a Postgres instance Dax already runs** (Unraid or elsewhere), not necessarily the compose `db` service. So:
-   - `DATABASE_URL` in `.env` points at his server.
+   - The golden tests **also** run against the real seed whenever `seed/household-nov-2026.json` exists locally, so the owner's machine verifies the real numbers while CI never sees them.
+   - The real data was entered by hand through the app. An `import-seed` CLI command was
+     planned for M6 and then abandoned on 2026-11-14, the owner preferring to type it in.
+   - **Side effect to be aware of:** the repo therefore does not contain the spec (`docs/HANDOFF.md`) or the mockups. A clone is buildable and testable but not self-documenting. Offered: a redacted `HANDOFF.md` carrying all the rules with synthetic numbers substituted. Awaiting a decision; not blocking.
+2. **Database is a Postgres instance the owner already runs** (Unraid or elsewhere), not necessarily the compose `db` service. So:
+   - `DATABASE_URL` in `.env` points at that server.
    - `docker-compose.yml` still defines a `db` service, but behind a compose **profile**, so `docker compose up` can run against the external Postgres instead. `docker compose --profile with-db up` brings up a self-contained stack.
-   - `docs/DEPLOY.md` documents both routes.
-3. **Tests use a throwaway Docker Postgres** (`postgres:17-alpine`), created and torn down per run; it never touches Dax's real database. CI uses a service container the same way.
+   - `docs/DEPLOY.md` documents both routes. In the event neither was used: the app runs as a
+     plain container from the GHCR image, added through Unraid's Docker Manager, and
+     `docker compose` is not part of the owner's workflow at all.
+3. **Tests use a throwaway Docker Postgres** (`postgres:17-alpine`), created and torn down per run; it never touches the real database. CI uses a service container the same way.
 
 ## Environment notes
 
 - Local Node is **v20.19.0**, not the Node 22 in the spec. Vite 7 accepts `^20.19.0`, so local dev and tests run fine. The Docker image and GitHub Actions both pin **Node 22**, which is what production runs.
-- `gh` CLI is **not installed** on this machine, so CLAUDE.md's `gh repo view` visibility check could not run. CLAUDE.md's fallback is "treat the repo as public"; Dax confirmed directly that `DaxtonD/Headroom` is private. Moot either way now, since decision 1 keeps all real data out of git regardless of visibility.
+- `gh` CLI is **not installed** on this machine, so CLAUDE.md's `gh repo view` visibility check could not run. CLAUDE.md's fallback is "treat the repo as public", and that is how this build has been run throughout. Moot either way, since decision 1 keeps all real data out of git regardless of visibility.
 - `psql` is not installed; database work goes through Prisma and containers.
 
-## Answered for Dax (2026-11-08)
+## Answered for the owner (2026-11-08)
 
 - **"Child tax credit is on the ledger but not in Manage."** Demo-data artefact, not a bug. Manage
   lists templates, and most demo rows were inserted as bare occurrences with no template. The API
@@ -1564,39 +1636,54 @@ CLAUDE.md describes an autonomous weekend build. That changed: Dax is available 
   `import-seed` constraint above, which is the production version of this risk.
 - **One deliberate exception to "everything on the ledger shows in Manage":** a one-off. It has no
   schedule and happens once, so it lives on the ledger only, where it can be edited or removed.
-  Flagged to Dax in case he wants it listed somewhere too.
+  Flagged in case it should be listed somewhere too.
 
-## Questions for Carol
+## Questions for the household
 
 From HANDOFF section 14. Each default is built and editable in the app where it is a household setting. **Amounts omitted on purpose** — see the note at the top of this file; the real values are in the local seed.
 
-1. **Carol's cheque amount** differs between the two-week template and the daily ledger for her November payday. *Built:* the template amount is the recurring default; that one occurrence keeps the ledger amount.
-2. **Monthly net income** on the budget screen is higher than the biweekly cheques plus the child tax credit work out to. *Built:* her stated monthly net income is used, as an editable value.
-3. **Retirement growth** is a flat percentage applied once to the total, not compounded yearly. *Built:* her formula exactly; growth percent and method are editable settings, with a "compound yearly" option available and off.
+1. **One cheque amount** differs between the two-week template and the daily ledger for that November payday. *Built:* the template amount is the recurring default; that one occurrence keeps the ledger amount.
+2. **Monthly net income** on the budget screen is higher than the biweekly cheques plus the child tax credit work out to. *Built:* the stated monthly net income is used, as an editable value.
+3. **Retirement growth** is a flat percentage applied once to the total, not compounded yearly. *Built:* the household's formula exactly; growth percent and method are editable settings, with a "compound yearly" option available and off.
 4. **Who receives each bill?** *Built:* no owner assigned. Each bill shows "Set who gets this bill" and either user can set it. Mockup owner placeholders deliberately not used as data.
 5. **Cushion** to leave after an automatic withdrawal for it to count as covered. *Built:* zero, editable in settings.
-6. **Visa-paid items** (Rogers TV & Internet, Subscriptions). *Built:* v1 tracks chequing only; both templates stay inactive and the Visa balance is not modelled.
+6. **Visa-paid items** (a TV and internet bill, and subscriptions). *Built:* v1 tracks chequing only; both templates stay inactive and the Visa balance is not modelled.
 7. **Horizon** for "left this cycle". *Built:* through the day before the 4th upcoming paycheque, editable.
-8. **Automatic withdrawals that land on a weekend.** *Built:* as scheduled, matching her sheet. Household setting "Weekend withdrawals: as scheduled / Friday before / next business day" with an engine test for each option.
+8. **Automatic withdrawals that land on a weekend.** *Built:* as scheduled, matching the sheet. Household setting "Weekend withdrawals: as scheduled / Friday before / next business day" with an engine test for each option.
 9. **Savings transfer**: a per-pay-period amount in the template versus a single larger transfer in November. *Built:* recurring flexible transfer at the template amount per pay period; the November occurrence keeps its own amount.
-10. **Christmas bonus and "Carol extra"** (blue rows). *Built:* not scheduled; either user can add them as one-offs.
+10. **A Christmas bonus and an occasional extra cheque** (the blue rows). *Built:* not scheduled; either user can add them as one-offs.
 11. **Banked hours.** *Built:* per user, hours only, no dollar conversion.
 12. **Bank connection.** *Built:* the balance stays manual.
 
-## Blocked / needs Dax
+## Blocked / needs the owner
 
-- **Every `git push` and tag push** waits on Dax's explicit OK, by his instruction. EVERY commit
-  on `main` is still local, along with the tags `m0`, `m1` and `m2`. `main` has no upstream set,
-  so `git push -u origin main` and `git push origin m0 m1 m2` are the first steps once he says so.
-- **`APP_ORIGIN` in `.env`** is still the placeholder. It only matters at deploy time, and M6's
-  `docs/DEPLOY.md` will say what to set it to. `DATABASE_URL` is filled in.
-- **Nothing has run against Dax's own database.** Migrations and tests have only ever touched the
-  throwaway Postgres, by design. Applying the schema to his server is a deploy step
-  (`prisma migrate deploy`, which the container entrypoint runs) and needs his go-ahead.
+Rewritten 2026-11-15. Every item this section used to hold had been overtaken by events: it
+still said no commit had ever been pushed, that `main` had no upstream, that `m0`-`m2` were
+unpushed, that `APP_ORIGIN` was a placeholder, and that nothing had ever run against the real
+database. All five were false, and had been for days. A blocker list nobody rereads turns into
+the opposite of what it is for, so what is actually outstanding:
+
+- **Every `git push` and tag push** still waits on the owner's explicit OK, by standing
+  instruction. Commits and tags are made locally as work finishes; pushing is a separate word.
+- **`m5` is not tagged.** M5 is complete and its work is pushed; `m0`-`m4` exist locally and on
+  the remote. Creating and pushing `m5` needs the usual OK.
+- **The twelve questions below are still unanswered.** Each has a defensible default built and
+  editable in the app, so none of them blocks anything - but any one of them could be quietly
+  wrong in the budget actually in use, which is a different kind of risk from a broken build.
+- **Two things have never been exercised at runtime by this build:** the Content-Security-Policy
+  and the four ways out of a sheet (Cancel, Escape, Android Back, a tap outside). Both are
+  covered by static tests, because there is no browser and no DOM test environment in this
+  repository. They are proven by use, not here.
+
+What is no longer blocked, recorded so it is not re-asked: the repository is pushed and
+`origin/main` tracks it; the app runs on Unraid from the GHCR image, which pulls `latest`;
+migrations have been applied to the real database by the container entrypoint
+(`prisma migrate deploy`); and backups are the owner's own Duplicati job to Backblaze rather
+than anything this repository schedules.
 
 ## How to run
 
-Requires Node 20.19+ (what Dax has installed), pnpm 9, and Docker for the test database.
+Requires Node 20.19+ (what this machine has installed), pnpm 9, and Docker for the test database.
 
 ```
 pnpm install
@@ -1605,7 +1692,7 @@ pnpm -F @headroom/api db:generate
 pnpm -F @headroom/core build
 
 node scripts/testdb.mjs up      # throwaway Postgres for tests
-pnpm test                       # 248 tests
+pnpm test                       # 858 tests
 pnpm lint && pnpm typecheck
 pnpm build
 node scripts/testdb.mjs down
@@ -1614,7 +1701,7 @@ node scripts/testdb.mjs down
 Run the whole thing in Docker:
 
 ```
-docker compose up -d --build                      # against the Postgres Dax already runs
+docker compose up -d --build                      # against the Postgres the owner already runs
 docker compose --profile with-db up -d --build     # or let Headroom bring its own
 docker compose exec app node apps/api/dist/cli.js create-user
 ```
