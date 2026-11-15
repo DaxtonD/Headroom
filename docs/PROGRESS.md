@@ -23,7 +23,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
 | Info button on the headline figures | done | | At Dax's request. Shows the working behind in chequing, safe to spend and left this cycle, from the engine so it cannot disagree |
 | Phone-use fixes: greeting, gear, Back button, page width | done | | Four reported from the installed app; the widest was the shell grid making the whole page grow |
-| M5 PWA + desktop polish | **in progress** | | Installed and in daily use. Three shortcuts, the app badge, a Content-Security-Policy that hashes the page it protects, and the accessibility pass. Left: instant cached Home (needs a decision, not a default) and the desktop layouts, which are three named features rather than polish - see below |
+| M5 PWA + desktop polish | **done** | | Installed and in daily use. Three shortcuts, the app badge, a Content-Security-Policy that hashes the page it protects, and the accessibility pass. Cached Home dropped and the desktop layouts deferred, both on request - see "Scope settled" |
 | M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
 
 ## Last session
@@ -444,6 +444,65 @@ Dax in the running app rather than being caught here, which is the one that matt
    round - typed, sent, stored, read back, formatted - through the same engine functions the
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
+
+## Scope settled: no offline data, no desktop work, no seed import (2026-11-14)
+
+Three things asked and answered, which between them close M5 and shrink M6.
+
+### The app is online-only, and already was
+
+Asked whether to persist the last figures on the device so Home paints instantly. The answer was
+that offline is not wanted at all: "network-first is fine, we don't depend on the app working all
+the time, it will only be used when we're online."
+
+Nothing had to be undone, which is worth recording because it is easy to assume otherwise of
+something called a PWA. The service worker precaches the built shell and the webfont and nothing
+else; `/api` is excluded from the navigation fallback on the grounds that a request for data must
+reach the server or fail honestly. The only things in device storage are the chosen theme and text
+size. No household figure has ever been written to a phone.
+
+So **instant cached Home is dropped**, not deferred. Two consequences worth keeping in view:
+
+- Home shows a loading state on a cold open while the first request is in flight. That is the
+  brief's "instantly" traded away deliberately, by the person it was written for.
+- The privacy question that made it a decision rather than a default - balances sitting in phone
+  storage - no longer arises.
+
+What stays, because none of it is about working offline: the shell precache (it is what makes an
+installed app open like an app), the update prompt, and the "Offline, as of ..." banner, which is
+the honest thing to show when a connection drops mid-use.
+
+### Desktop waits
+
+"We probably won't be using desktop very much at all. The features and polishing on desktop can
+wait until I ask for it in the future."
+
+So the three unbuilt items from HANDOFF section 7 - the Home summary beside the Upcoming timeline,
+Budget as full tables, and dragging flexible bills between periods - are **deferred on request**,
+not forgotten. The left nav at >=1024px is built, and every screen is usable on a desktop browser
+at the single-column width; it simply does not use a wide monitor.
+
+A naming note, since it caused a misunderstanding: the milestone is called "PWA + desktop polish",
+and "desktop" there means the desktop *website's* layout. Nothing in the milestone was ever about
+installing the app on a desktop. The two platforms that matter are the Android PWA and the desktop
+browser.
+
+### No seed import
+
+"We can abandon seeding the data. We can add it manually." So `import-seed` comes out of M6. The
+figures are already in by hand, and a CLI that exists to be run once, on one machine, against a
+file that cannot be committed, is not worth carrying.
+
+The seed file keeps its other job: it is the oracle the `packages/core` golden tests check
+themselves against, and `python3 seed/check_seed.py` still verifies it. That is unaffected.
+
+### What M6 is now
+
+1. **Scheduled backups.** The one real risk left: the app holds the household's live finances and
+   `scripts/backup.mjs` can dump, verify and restore, but only when somebody runs it.
+2. **`docs/DEPLOY.md`**, with the Unraid steps.
+3. **The GHCR image and a clean-clone `docker compose up --build`**, both verified rather than
+   assumed.
 
 ## M5: the accessibility pass (2026-11-14)
 
