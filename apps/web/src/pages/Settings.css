@@ -266,3 +266,32 @@
     grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   }
 }
+
+/* The two build identifiers, read rather than acted on. */
+.settings__facts {
+  margin: var(--hr-space-3) 0 0;
+}
+.settings__facts > div {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-2) 0;
+  border-top: 1px solid var(--hr-row-divider);
+}
+.settings__facts dt {
+  color: var(--hr-text-muted);
+  font-size: 0.875rem;
+}
+.settings__facts dd {
+  margin: 0;
+  font-family: var(--hr-font-mono, ui-monospace, monospace);
+  font-size: 0.875rem;
+}
+.settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hr-space-2);
+  margin-top: var(--hr-space-3);
+}

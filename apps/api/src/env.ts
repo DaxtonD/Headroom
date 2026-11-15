@@ -124,6 +124,21 @@ const envSchema = z.object({
   /** Inside a container the app must listen on all interfaces. */
   HOST: z.string().default("0.0.0.0"),
 
+  /**
+   * Which build this is: the commit the image was built from.
+   *
+   * Set by the Dockerfile from a build argument CI fills in with the commit
+   * sha. "unknown" outside a CI build, which is correct for a local run.
+   *
+   * This exists because "which version is actually running?" was unanswerable
+   * twice in one day. `/api/health` reported `coreVersion: "0.1.0"`, a
+   * constant unchanged since M0, so a stale installed app and a stale image
+   * looked exactly alike from the outside and both had to be guessed at. The
+   * web bundle carries the same value, so the two can be compared and a phone
+   * can be told it is out of date without anybody reading a log.
+   */
+  BUILD_ID: z.string().default("unknown"),
+
   /** Saskatchewan time, which has no daylight saving. */
   TZ: z.string().default("America/Regina"),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),

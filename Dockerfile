@@ -31,14 +31,19 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 
 # --------------------------------------------------------------- build ------
 FROM deps AS build
+# The commit being built. CI passes it; a local `docker build` leaves it
+# "unknown", which is the honest answer for a build nobody can point at.
+ARG BUILD_ID=unknown
 COPY tsconfig.base.json ./
 COPY packages/core packages/core
 COPY apps/api apps/api
 COPY apps/web apps/web
 # core first: the API and the web app both import it.
+# VITE_BUILD_ID is baked into the web bundle, so the running app can say
+# which build it is and compare that with the server's.
 RUN pnpm -F @headroom/core build \
  && pnpm -F @headroom/api build \
- && pnpm -F @headroom/web build
+ && VITE_BUILD_ID="$BUILD_ID" pnpm -F @headroom/web build
 
 # ------------------------------------------------------- runtime deps -------
 FROM base AS runtime-deps
@@ -51,6 +56,10 @@ RUN --mount=type=cache,id=pnpm-store,target=/pnpm/store \
 
 # ------------------------------------------------------------- runtime ------
 FROM base AS runtime
+# The commit this image was built from, readable at /api/health. Declared
+# again here because Docker scopes ARG per stage.
+ARG BUILD_ID=unknown
+ENV BUILD_ID=$BUILD_ID
 
 ENV NODE_ENV=production
 # Saskatchewan time, no daylight saving. The server clock is authoritative for

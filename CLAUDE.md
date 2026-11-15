@@ -79,6 +79,10 @@ Keep this list current as you build.
   what came back, so "I have a dump" and "I can get my data back" are the same claim. Runs
   `pg_dump` in a container, so nothing has to be installed. Dumps go in `backups/`, which is
   git-ignored because they contain the household's real figures.
+- `curl <origin>/api/health`: what is actually running. `buildId` is the commit the image was
+  built from, stamped in by CI. The web bundle carries the same value and Settings shows both,
+  so an installed app sitting on a stale service-worker cache is visible rather than guessed at
+  - which it had to be, twice, before this existed.
 - `docker compose up -d --build`: run against the Postgres the owner already has. Kept for a
   local run only - compose is not how this is deployed (see Definition of done).
 - `docker compose --profile with-db up -d --build`: run with a bundled Postgres.

@@ -40,6 +40,25 @@ describe("GET /api/health", () => {
     expect(typeof body.serverTime).toBe("string");
   });
 
+  it("says which build it is", async () => {
+    /*
+     * The field that makes "what version is actually running?" answerable.
+     * Before it existed, health reported `coreVersion: "0.1.0"` - a constant
+     * unchanged since M0 - so a stale installed app and a stale image looked
+     * identical from outside, and an afternoon went into telling them apart.
+     *
+     * Unauthenticated on purpose: the app compares this against its own stamp
+     * to find out it is out of date, and it has to be able to ask before
+     * anyone has signed in.
+     */
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/health" })
+      .then((response) => response.json());
+
+    expect(typeof body.buildId).toBe("string");
+    expect(body.buildId.length).toBeGreaterThan(0);
+  });
+
   it("needs no session, so a probe can call it", async () => {
     const response = await harness.app.inject({ method: "GET", url: "/api/health" });
     expect(response.statusCode).toBe(200);

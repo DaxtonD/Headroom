@@ -11,12 +11,15 @@
  * judge a theme or a text size is to look at it.
  */
 import { TEXT_SIZES, THEMES, useAppearance } from "../lib/appearance.js";
+import { BUILD_ID, isStamped, shortBuild } from "../lib/buildId.js";
+import { loadServerBuild, useServerBuild } from "../lib/serverBuild.js";
 import { useSettingsRoute } from "../lib/settingsRoute.js";
 import "./Settings.css";
 
 export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.Element {
   const [appearance, setAppearance] = useAppearance();
   const settings = useSettingsRoute();
+  const { serverBuild, stale, recheck } = useServerBuild();
 
   return (
     <div className="settings">
@@ -120,6 +123,59 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
             <span className="settings__sample-figure hr-amount">−$862.07</span>
           </p>
           <p className="settings__sample-meta">Comes out automatically on Fri, Nov 13</p>
+        </div>
+      </section>
+
+      {/* --------------------------------------------------------- version ---- */}
+      {/*
+        Which build is running, where anyone can read it.
+
+        This is here because the question "what version are you actually on?"
+        could not be answered from inside the app at all. A deployed install
+        sat on an old bundle for an afternoon while the server served a new
+        one, and the only way to establish that was to open the site in a
+        browser that had never been used before. `/api/health` reported a
+        version constant that has not changed since M0, so it was no help.
+
+        Two values, because the interesting case is them disagreeing: what
+        this app was built from, and what the server says it is serving.
+      */}
+      <section className="hr-card settings__section" aria-labelledby="settings-version">
+        <h2 className="settings__section-title" id="settings-version">
+          Version
+        </h2>
+        <p className="settings__section-note">
+          {stale
+            ? "This app is older than the server. Reload to get the current one."
+            : "What this app is running, and what the server is serving."}
+        </p>
+
+        <dl className="settings__facts">
+          <div>
+            <dt>This app</dt>
+            <dd>{isStamped(BUILD_ID) ? shortBuild(BUILD_ID) : "not a released build"}</dd>
+          </div>
+          <div>
+            <dt>The server</dt>
+            <dd>
+              {serverBuild === null
+                ? "could not ask"
+                : isStamped(serverBuild)
+                  ? shortBuild(serverBuild)
+                  : "not a released build"}
+            </dd>
+          </div>
+        </dl>
+
+        <div className="settings__actions">
+          <button className="hr-button hr-button--secondary" type="button" onClick={recheck}>
+            Check again
+          </button>
+          {stale ? (
+            <button className="hr-button" type="button" onClick={() => void loadServerBuild()}>
+              Reload
+            </button>
+          ) : null}
         </div>
       </section>
 

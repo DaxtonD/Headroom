@@ -32,6 +32,13 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
       // household data.
       ...(databaseError ? { databaseError } : {}),
       coreVersion: CORE_VERSION,
+      /*
+       * The commit this image was built from. The web bundle in the same
+       * image carries the same value, so a client comparing the two can tell
+       * whether what it is running came from this server's build - which is
+       * how a phone holding a stale service-worker cache gets found out.
+       */
+      buildId: app.env.BUILD_ID,
       // The server clock is authoritative for every timestamp in Headroom
       // (section 16.1 rule 10), so expose it for diagnosis.
       serverTime: new Date().toISOString(),

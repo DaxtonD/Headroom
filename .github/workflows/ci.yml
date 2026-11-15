@@ -113,6 +113,8 @@ jobs:
         with:
           context: .
           push: false
+          build-args: |
+            BUILD_ID=${{ github.sha }}
           load: true
           tags: headroom:ci
           cache-from: type=gha
@@ -187,6 +189,10 @@ jobs:
         with:
           context: .
           push: true
+          # Stamped into both halves of the image, so /api/health and the web
+          # bundle can be compared to each other and to this commit.
+          build-args: |
+            BUILD_ID=${{ github.sha }}
           # Unraid is x86, and a second architecture would double the build
           # for nothing. Add linux/arm64 here if that ever changes.
           platforms: linux/amd64

@@ -26,6 +26,22 @@
   box-shadow: var(--hr-shadow-hero);
 }
 
+/*
+ * Out of date, as opposed to a new version merely being ready. By the time
+ * this shows, the service-worker route has already failed to say anything, so
+ * it reads as a warning rather than an offer and has no "Later" to hide it.
+ */
+.update-ready--stale {
+  /*
+   * The one warning pairing the themes define, so it is already in
+   * theme-contrast.test.ts for all five of them rather than being a new
+   * colour nothing checks.
+   */
+  border-color: var(--hr-warning-fg);
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+}
+
 .update-ready__words {
   flex: 1 1 14ch;
   min-width: 0;

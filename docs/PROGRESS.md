@@ -450,6 +450,92 @@ the owner in the running app rather than being caught here, which is the one tha
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
 
+## Bug 19: the installed app would not update, and nothing could say so (2026-11-15)
+
+Reported, after a day of chasing the wrong thing: "the PWA doesn't update when
+the new version is pulled and running." Confirmed by opening the site in a
+browser that had never opened it before, where the new build appeared
+correctly. So: server right, image right, installed app stuck.
+
+**What made this expensive was not the bug. It was that the question "which
+version is actually running?" had no answer.** `/api/health` reported
+`coreVersion: "0.1.0"`, a constant that has not changed since M0. A stale
+installed app and a stale image are indistinguishable from the outside, and
+both were guessed at - once earlier the same day over which image tag was
+deployed, and again here. The diagnosis in the end required a browser that had
+never visited the site, which is not a diagnostic anybody should need.
+
+### What was ruled out
+
+- `UpdateReady` is mounted at the root of `main.tsx`, outside the router and
+  the session, so the registration runs on every load. Not a mounting problem.
+- The CSP has `worker-src 'self'`. Not blocked there.
+- `sw.js`, `index.html` and the manifest are all served `no-cache`, and the
+  fingerprinted assets change filename per build. Not an HTTP-cache problem,
+  which is why clearing the browser cache was the wrong advice and was not
+  given.
+
+The remaining candidates are all inside the service-worker lifecycle, and
+none of them can be told apart from this machine. Which is the point below.
+
+### Built: the running build has a name
+
+- The commit is stamped into **both halves of the image** - `BUILD_ID` for the
+  API, `VITE_BUILD_ID` baked into the web bundle - from one Docker build
+  argument that CI fills in with the commit sha.
+- `/api/health` reports `buildId`.
+- **Settings has a Version section** showing what the app is running and what
+  the server is serving, with "Check again". Readable on the phone, which is
+  where the problem was.
+
+### Built: a way out that does not go through the service worker
+
+The update bar depended entirely on the worker lifecycle noticing a new
+worker and telling React. When that chain is the broken thing, it cannot
+report its own failure.
+
+So there is a second route sharing none of its machinery: ask `/api/health`
+what build the server is, compare with this bundle's stamp, and if they differ
+say so. `/api/health` is excluded from the service worker's navigation
+fallback, so the answer comes from the network or not at all.
+
+The reload that follows forces the issue: a waiting worker is told to take
+over, and if there is no waiting worker - the case where the lifecycle is not
+cooperating - the registration is unregistered outright so the next load must
+come from the network. One online load, and the precache rebuilds.
+
+A mismatch is only ever reported when **both** sides are stamped. A dev server
+talking to a CI-built API would otherwise cry wolf on every load, and a
+warning that is usually wrong stops being read.
+
+### Breaking the image, and what that taught the tests
+
+While adding the build argument I renamed a Docker stage by accident.
+`FROM base AS runtime` is a prefix of `FROM base AS runtime-deps`, so a single
+textual replacement aimed at the runtime stage landed on the deps stage. Every
+`COPY --from=runtime-deps` then resolved to a public image instead of a local
+stage and the build failed outright.
+
+The test written minutes earlier **passed on the broken Dockerfile**, because
+it only looked for a stage whose first line was `base AS runtime` - and the
+mangled stage qualified. A check that confirms the stage *list* is exactly
+`base, deps, build, runtime-deps, runtime`, and that every `--from=` names one
+of them, now exists and fails on that mutation.
+
+Caught only because the Dockerfile was actually built rather than trusted.
+That is now the rule for a Dockerfile change: build it, run it, and read the
+value back out of the running container. Both stamps were verified that way.
+
+### Still not known
+
+The root cause inside the service-worker lifecycle. `skipWaiting` stays
+`false` - it is there so a new build never swaps itself in under someone
+halfway through typing a balance, and that reasoning has not changed. What has
+changed is that the app can now notice the worker has failed to do its job and
+offer a reload that does not depend on it. The Version section should say
+which build is where the next time this happens, which is the information that
+was missing.
+
 ## Bug 18: two sections vanished from Savings (2026-11-15, reported from production)
 
 Reported as: "I don't see banked hours or reimbursements at all, anywhere in
