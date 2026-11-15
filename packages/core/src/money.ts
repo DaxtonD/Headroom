@@ -141,7 +141,8 @@ export function mulDivRoundHalfUp(value: bigint, numerator: bigint, denominator:
 
 /**
  * Apply a whole-number percentage: `applyPercent(1000n, 10n)` is `100n`.
- * Used for the retirement growth rate, which Carol applies as a flat percent.
+ * Used for the retirement growth rate, which the household applies as a flat
+ * percent.
  */
 export function applyPercent(value: Cents, percent: bigint): Cents {
   return mulDivRoundHalfUp(value, percent, 100n);

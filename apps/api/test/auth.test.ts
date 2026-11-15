@@ -49,7 +49,7 @@ describe("GET /api/health", () => {
     await seedHousehold(harness);
     const body = await harness.app.inject({ method: "GET", url: "/api/health" }).then((r) => r.body);
 
-    expect(body).not.toContain("Carol");
+    expect(body).not.toContain("Alex");
     expect(body).not.toContain("example.test");
     expect(body).not.toContain("Chequing");
   });
@@ -57,9 +57,9 @@ describe("GET /api/health", () => {
 
 describe("POST /api/auth/login", () => {
   it("signs in each of the two users and sets a session cookie", async () => {
-    const { carol, dax, password } = await seedHousehold(harness);
+    const { alex, jordan, password } = await seedHousehold(harness);
 
-    for (const user of [carol, dax]) {
+    for (const user of [alex, jordan]) {
       const response = await harness.app.inject({
         method: "POST",
         url: "/api/auth/login",
@@ -79,11 +79,11 @@ describe("POST /api/auth/login", () => {
   });
 
   it("never returns the password hash", async () => {
-    const { carol, password } = await seedHousehold(harness);
+    const { alex, password } = await seedHousehold(harness);
     const response = await harness.app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { email: carol.email, password },
+      payload: { email: alex.email, password },
     });
 
     expect(response.body).not.toContain("argon2");
@@ -95,18 +95,18 @@ describe("POST /api/auth/login", () => {
     const response = await harness.app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { email: "  CAROL@Example.TEST  ", password },
+      payload: { email: "  ALEX@Example.TEST  ", password },
     });
 
     expect(response.statusCode).toBe(200);
   });
 
   it("rejects a wrong password", async () => {
-    const { carol } = await seedHousehold(harness);
+    const { alex } = await seedHousehold(harness);
     const response = await harness.app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { email: carol.email, password: "not-the-password" },
+      payload: { email: alex.email, password: "not-the-password" },
     });
 
     expect(response.statusCode).toBe(401);
@@ -114,7 +114,7 @@ describe("POST /api/auth/login", () => {
   });
 
   it("answers an unknown email exactly as it answers a wrong password", async () => {
-    const { carol } = await seedHousehold(harness);
+    const { alex } = await seedHousehold(harness);
 
     const unknown = await harness.app.inject({
       method: "POST",
@@ -124,7 +124,7 @@ describe("POST /api/auth/login", () => {
     const wrongPassword = await harness.app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { email: carol.email, password: "wrong-password" },
+      payload: { email: alex.email, password: "wrong-password" },
     });
 
     // Same status and same message: nothing reveals which account exists.
@@ -133,16 +133,16 @@ describe("POST /api/auth/login", () => {
   });
 
   it("will not sign in a removed user", async () => {
-    const { carol, password } = await seedHousehold(harness);
+    const { alex, password } = await seedHousehold(harness);
     await harness.db.prisma.user.update({
-      where: { id: carol.id },
+      where: { id: alex.id },
       data: { deletedAt: new Date() },
     });
 
     const response = await harness.app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { email: carol.email, password },
+      payload: { email: alex.email, password },
     });
 
     expect(response.statusCode).toBe(401);
@@ -170,7 +170,7 @@ describe("GET /api/me", () => {
 
   it("returns the user, the household settings and both members", async () => {
     const { password } = await seedHousehold(harness);
-    const cookie = await signIn(harness, "carol@example.test", password);
+    const cookie = await signIn(harness, "alex@example.test", password);
 
     const response = await harness.app.inject({
       method: "GET",
@@ -181,7 +181,7 @@ describe("GET /api/me", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
 
-    expect(body.user.name).toBe("Carol");
+    expect(body.user.name).toBe("Alex");
     expect(body.user.initial).toBe("C");
     expect(body.household.timezone).toBe("America/Regina");
     expect(body.household.currency).toBe("CAD");
@@ -194,7 +194,7 @@ describe("GET /api/me", () => {
 
   it("stops working once the session is deleted server-side", async () => {
     const { password } = await seedHousehold(harness);
-    const cookie = await signIn(harness, "carol@example.test", password);
+    const cookie = await signIn(harness, "alex@example.test", password);
 
     await harness.db.prisma.session.deleteMany({});
 
@@ -208,7 +208,7 @@ describe("GET /api/me", () => {
 
   it("treats an expired session as signed out and tidies it away", async () => {
     const { password } = await seedHousehold(harness);
-    const cookie = await signIn(harness, "carol@example.test", password);
+    const cookie = await signIn(harness, "alex@example.test", password);
 
     // Age the whole row, not just its expiry: a CHECK constraint keeps
     // expiresAt after createdAt, so a session that expired before it was
@@ -242,7 +242,7 @@ describe("GET /api/me", () => {
 describe("POST /api/auth/logout", () => {
   it("removes the session and clears the cookie", async () => {
     const { password } = await seedHousehold(harness);
-    const cookie = await signIn(harness, "carol@example.test", password);
+    const cookie = await signIn(harness, "alex@example.test", password);
 
     const response = await harness.app.inject({
       method: "POST",
@@ -270,7 +270,7 @@ describe("login throttling", () => {
     harness.app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { email: "carol@example.test", password: "wrong-password" },
+      payload: { email: "alex@example.test", password: "wrong-password" },
       remoteAddress: ip,
     });
 
@@ -296,11 +296,11 @@ describe("login throttling", () => {
     }
     expect((await wrongPassword(ATTACKER_IP)).statusCode).toBe(429);
 
-    // Carol, at home on a different address, is unaffected.
+    // Alex, at home on a different address, is unaffected.
     const fromHome = await harness.app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { email: "carol@example.test", password },
+      payload: { email: "alex@example.test", password },
       remoteAddress: "198.51.100.4",
     });
     expect(fromHome.statusCode).toBe(200);
@@ -314,7 +314,7 @@ describe("login throttling", () => {
       const response = await harness.app.inject({
         method: "POST",
         url: "/api/auth/login",
-        payload: { email: "carol@example.test", password },
+        payload: { email: "alex@example.test", password },
         remoteAddress: "198.51.100.7",
       });
       expect(response.statusCode, `sign-in ${i + 1}`).toBe(200);
@@ -333,7 +333,7 @@ describe("login throttling", () => {
     const success = await harness.app.inject({
       method: "POST",
       url: "/api/auth/login",
-      payload: { email: "carol@example.test", password },
+      payload: { email: "alex@example.test", password },
       remoteAddress: ip,
     });
     expect(success.statusCode).toBe(200);

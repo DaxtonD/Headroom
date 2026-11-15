@@ -338,7 +338,7 @@ export function payoffDelta(
 /* -------------------------------------------------------------------------- */
 
 /**
- * The window a prepayment allowance resets on. Dax confirmed the household's
+ * The window a prepayment allowance resets on. Confirmed that this household's
  * runs on the calendar year, which is why a lump sum can legitimately land in
  * late December, just before the reset.
  */

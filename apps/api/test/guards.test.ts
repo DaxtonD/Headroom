@@ -27,19 +27,19 @@ beforeEach(async () => {
 
 describe("balance_snapshot is insert-only", () => {
   it("accepts new snapshots", async () => {
-    const { account, carol } = await seedHousehold(harness);
+    const { account, alex } = await seedHousehold(harness);
 
     await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: carol.id },
+      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: alex.id },
     });
 
     expect(await harness.db.prisma.balanceSnapshot.count()).toBe(1);
   });
 
   it("refuses an UPDATE: a correction is a new snapshot", async () => {
-    const { account, carol } = await seedHousehold(harness);
+    const { account, alex } = await seedHousehold(harness);
     const snapshot = await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: carol.id },
+      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: alex.id },
     });
 
     await expect(
@@ -50,9 +50,9 @@ describe("balance_snapshot is insert-only", () => {
   });
 
   it("refuses a DELETE", async () => {
-    const { account, carol } = await seedHousehold(harness);
+    const { account, alex } = await seedHousehold(harness);
     const snapshot = await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: carol.id },
+      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: alex.id },
     });
 
     await expect(
@@ -61,16 +61,16 @@ describe("balance_snapshot is insert-only", () => {
   });
 
   it("keeps the latest as_of as the one that counts", async () => {
-    const { account, carol } = await seedHousehold(harness);
+    const { account, alex } = await seedHousehold(harness);
 
     const earlier = new Date("2026-11-07T09:58:00-06:00");
     const later = new Date("2026-11-07T18:30:00-06:00");
 
     await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 41_000n, asOf: earlier, enteredById: carol.id },
+      data: { accountId: account.id, cents: 41_000n, asOf: earlier, enteredById: alex.id },
     });
     await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 52_750n, asOf: later, enteredById: carol.id },
+      data: { accountId: account.id, cents: 52_750n, asOf: later, enteredById: alex.id },
     });
 
     const latest = await harness.db.prisma.balanceSnapshot.findFirst({
@@ -86,15 +86,15 @@ describe("balance_snapshot is insert-only", () => {
 
 describe("activity is append-only", () => {
   it("refuses an UPDATE or a DELETE", async () => {
-    const { household, carol } = await seedHousehold(harness);
+    const { household, alex } = await seedHousehold(harness);
 
     const activity = await harness.db.prisma.activity.create({
       data: {
         householdId: household.id,
-        userId: carol.id,
+        userId: alex.id,
         action: "create",
         entity: "occurrence",
-        entityId: carol.id,
+        entityId: alex.id,
         versionAfter: 1,
         fields: ["cents"],
       },

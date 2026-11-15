@@ -1,10 +1,11 @@
 /**
  * The badges and chips from the mockups (HANDOFF section 15).
  *
- * The verified/estimate distinction is the one Carol and Dax read at a glance,
+ * The verified/estimate distinction is the one read at a glance,
  * and the brief is specific about it: a filled green check with the verifier's
  * initial when someone has entered the real amount, versus a dashed ring with
- * a "~" when it is still a guess. In the spreadsheet this was Dax typing an
+ * a "~" when it is still a guess. In the spreadsheet this was someone typing
+ * an
  * "X"; here it is graphical, and it never relies on colour alone - the shape,
  * the symbol and the accessible name all carry the meaning.
  */

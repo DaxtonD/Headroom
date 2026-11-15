@@ -40,8 +40,8 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  memberId = seeded.carol.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  memberId = seeded.alex.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 function post(url: string, payload: unknown) {
@@ -131,7 +131,7 @@ describe("a correction under Manage", () => {
     await addPayday();
     const bill = await addBill({
       name: "Power",
-      defaultCents: "18600",
+      defaultCents: "14700",
       withdrawal: "auto",
       schedule: { type: "monthly", day: 18 },
     });
@@ -147,7 +147,7 @@ describe("a correction under Manage", () => {
         templateId: bill.id,
         periodKey: `${lastMonth.getUTCFullYear()}-${String(lastMonth.getUTCMonth() + 1).padStart(2, "0")}`,
         name: "Power",
-        cents: -18_600n,
+        cents: -14_700n,
         kind: "bill",
         withdrawal: "auto",
         date: lastMonth,
@@ -162,7 +162,7 @@ describe("a correction under Manage", () => {
 
     const reread = await harness.db.prisma.occurrence.findUniqueOrThrow({ where: { id: old.id } });
     expect(reread.name).toBe("Power");
-    expect(reread.cents).toBe(-18_600n);
+    expect(reread.cents).toBe(-14_700n);
     expect(reread.version).toBe(1);
   });
 
@@ -284,7 +284,7 @@ describe("correcting a payday", () => {
 
     const power = await addBill({
       name: "Power",
-      defaultCents: "18600",
+      defaultCents: "14700",
       withdrawal: "flexible",
       schedule: { type: "flexible", frequency: "monthly" },
     });

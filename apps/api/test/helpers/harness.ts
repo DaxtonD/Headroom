@@ -179,24 +179,24 @@ export async function seedHousehold(harness: Harness) {
 
   const passwordHash = await hashPassword("correct-horse-battery-staple");
 
-  const carol = await harness.db.prisma.user.create({
+  const alex = await harness.db.prisma.user.create({
     data: {
       householdId: household.id,
-      name: "Carol",
+      name: "Alex",
       initial: "C",
-      email: "carol@example.test",
+      email: "alex@example.test",
       passwordHash,
       colorFg: "#2A3C8F",
       colorBg: "#E3E7F7",
     },
   });
 
-  const dax = await harness.db.prisma.user.create({
+  const jordan = await harness.db.prisma.user.create({
     data: {
       householdId: household.id,
-      name: "Dax",
+      name: "Jordan",
       initial: "D",
-      email: "dax@example.test",
+      email: "jordan@example.test",
       passwordHash,
       colorFg: "#7A4A00",
       colorBg: "#F3E6CF",
@@ -207,7 +207,7 @@ export async function seedHousehold(harness: Harness) {
     data: { householdId: household.id, name: "Chequing" },
   });
 
-  return { household, carol, dax, account, password: "correct-horse-battery-staple" };
+  return { household, alex, jordan, account, password: "correct-horse-battery-staple" };
 }
 
 /** Sign in and return the cookie header to replay on later requests. */

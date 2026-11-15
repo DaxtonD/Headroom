@@ -9,7 +9,7 @@
  *    after the mortgage is paid off, with no growth of its own;
  *  - the drawdown is a flat division by the number of years.
  *
- * Carol is the financial expert in the house and her sheet is the spec
+ * The household's own spreadsheet is the spec here, arithmetic included
  * (section 1). Every input is an editable setting, and `compoundYearly` is
  * offered as an alternative that is off by default (section 14 q3).
  */

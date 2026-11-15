@@ -44,8 +44,8 @@ export interface Earmark {
   /**
    * What it is being saved towards, when there is a figure.
    *
-   * Null is the normal case for a trip: Dax's words were that trips "never
-   * have a set date or set cost - we simply save for it and book a good deal
+   * Null is the normal case for a trip. The household's words were that trips
+   * "never have a set date or set cost - we simply save for it and book a good deal
    * when it comes about". An app that demands a target makes someone invent
    * one, and then reports progress against a number nobody believes.
    */

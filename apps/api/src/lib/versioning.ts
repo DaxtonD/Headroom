@@ -41,7 +41,7 @@ export class VersionConflictError extends HttpError {
 }
 
 /**
- * The wording the UI shows: "Carol changed this to $140.00 (verified) 2
+ * The wording the UI shows: "Alex changed this to $140.00 (verified) 2
  * minutes ago" is assembled client-side from the details; this is the fallback
  * sentence and what ends up in logs.
  */
@@ -268,7 +268,7 @@ export async function applyVersionedChange<TRow extends { version: number }>(
       versionAfter: nextVersion,
       fields: Object.keys(changes),
       // Only the fields this change touched, so the log stays readable and
-      // "Carol verified the power bill: $131.50 (was $125.00)" is easy to
+      // "Alex verified the power bill: $131.50 (was $125.00)" is easy to
       // assemble from it.
       beforeJson: asJson(pick(beforeSnapshot, Object.keys(changes))),
       afterJson: asJson(pick(afterSnapshot, Object.keys(changes))),

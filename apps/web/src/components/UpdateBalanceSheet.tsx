@@ -3,7 +3,7 @@
  *
  * Two taps: type the amount, save. The checklist underneath is the part the
  * brief asks for - "Did any of these clear since the last update?" - because
- * the balance Carol reads from the bank already has those withdrawals in it,
+ * the balance read from the bank already has those withdrawals in it,
  * and without ticking them they would be counted twice.
  */
 import { formatCents, formatDateShort, parseCents } from "@headroom/core";

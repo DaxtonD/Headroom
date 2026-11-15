@@ -171,7 +171,7 @@ export function GoalForm({
       </Field>
 
       {/*
-        Some things have a number attached and some do not. Dax, 2026-11-08:
+        Some things have a number attached and some do not. Asked, 2026-11-08:
         "Trips never have a set date or set cost. We simply save for it and
         book a good deal when it comes about." So the target is opt-in, and
         switching it off is a normal answer rather than leaving a box empty.

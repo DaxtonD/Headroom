@@ -730,7 +730,7 @@ function ordinal(day: number): string {
  * `create-user`, which makes the household and the people and no account. So a
  * brand new household reached "No account yet." with no way forward: the
  * balance endpoint refuses with 409, and the ledger stays empty. Found while
- * walking the from-scratch path before Dax entered the household's real data.
+ * walking the from-scratch path before the household's real data went in.
  */
 function AccountsSection({
   accounts,

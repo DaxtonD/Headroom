@@ -275,8 +275,8 @@ export interface BudgetLineInput {
 export interface BudgetIncomeInput {
   readonly netMonthlyCents: Cents;
   /**
-   * Carol's stated yearly net, which is not exactly monthly x 12
-   * (section 14 q2). Her figure is used as given.
+   * The household's stated yearly net, which is not exactly monthly x 12
+   * (section 14 q2). That figure is used as given.
    */
   readonly netYearlyCents: Cents;
 }

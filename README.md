@@ -12,7 +12,7 @@ By decision on 2026-11-07, **no real household financial data is committed to gi
 | `seed/household-nov-2026.json` | The real November figures |
 | `docs/HANDOFF.md` | The full spec; quotes ~90 real amounts |
 | `design/` | Mockup sources; embed real amounts as sample data |
-| `reference/` | Scan of Carol's original sheet |
+| `reference/` | Scan of the original sheet |
 | `.env` | Secrets and the database connection string |
 
 Committed tests run against a **synthetic fixture** (`packages/core/test/fixtures/household-synthetic.json`) with the same structure and dates but invented amounts. The golden tests additionally run against the real seed whenever that file is present locally, so a developer machine verifies the real numbers while CI never sees them. Real data reaches the database only through the `import-seed` command.
@@ -65,5 +65,5 @@ Deployment, backups and restore: [docs/DEPLOY.md](docs/DEPLOY.md) (written in M6
 ## Documentation
 
 - [CLAUDE.md](CLAUDE.md) — working rules: money rules, integrity rules, git conventions, milestones.
-- [docs/PROGRESS.md](docs/PROGRESS.md) — milestone status, decisions, questions for Carol, blockers.
+- [docs/PROGRESS.md](docs/PROGRESS.md) — milestone status, decisions, open questions, blockers.
 - `docs/HANDOFF.md` — the full spec. Local only, not in git (see above).

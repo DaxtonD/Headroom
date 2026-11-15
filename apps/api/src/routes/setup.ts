@@ -5,7 +5,7 @@
  * These had no API at all before, which meant pay schedules could only be
  * inserted with SQL — and almost everything depends on them: the horizon, the
  * two-week pay periods, where a flexible bill anchors, and any bill that comes
- * out "the day after Dax's payday". Without this the app cannot be set up.
+ * out "the day after a payday". Without this the app cannot be set up.
  */
 import { isPlainDate } from "@headroom/core";
 import type { FastifyInstance } from "fastify";

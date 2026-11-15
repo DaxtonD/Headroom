@@ -1,6 +1,7 @@
-"""Fail if a real household figure has made it into a tracked file.
+"""Fail if a real household figure or first name has reached a tracked file.
 
-Dax's standing rule is that no real financial data goes into git, ever. The
+The owner's standing rule is that no real financial data goes into git, ever,
+and that the household's first names stay out of anything new. The
 risk is not a reckless paste; it is the small, reasonable-looking one. While
 building the mortgage engine, four real figures ended up in source comments and
 test expectations in a single sitting - a basis-point example, a "reject a
@@ -11,6 +12,9 @@ So this script does not hard-code anything to look for. That would put the
 figures in a committed file and defeat its own purpose. Instead it reads the
 git-ignored seed on this machine, treats every amount in it as a needle, and
 searches the tracked tree for them.
+
+It does the same for the two first names in the seed's `users`, which is the
+only place in this tree that still knows them.
 
 Run:
     python3 scripts/scan_for_real_figures.py            # tracked files
@@ -73,10 +77,17 @@ def is_distinctive(value: int) -> bool:
     A real bank figure almost always carries odd cents - a mortgage payment, a
     paycheque, an account balance. An invented test value almost never does;
     people reach for round hundreds. Scanning for round numbers produced 140
-    hits across the tree, effectively all of them coincidence: a `sortIndex`
-    capped at 100_000, test amounts of 200000, a documented $186.00 that is the
-    codebase's own cautionary tale. Every one of those would have to be
+    hits across the tree, almost all of them coincidence: a `sortIndex` capped
+    at 100_000, test amounts of 200000. Every one of those would have to be
     allowlisted, and a gate with a 140-line allowlist is a gate nobody reads.
+
+    That blind spot is real, and on 2026-11-15 a hand audit found three round
+    figures it had let through: a mortgage payment and a savings transfer
+    quoted in comments, and a bill amount used as a worked example in a dozen
+    files. What gave each away was not the number but the prose around it -
+    the text said the figure was the household's. No gate catches that, so a
+    round amount being below the threshold here is not a clearance: do not
+    write a real one into a comment and expect this script to object.
 
     So this deliberately trades recall for precision: it catches the figures
     that fingerprint this household and ignores round ones. A round real figure
@@ -85,6 +96,26 @@ def is_distinctive(value: int) -> bool:
     not a substitute for the rule.
     """
     return value % 100 != 0
+
+
+def collect_names(seed: dict) -> set[str]:
+    """
+    The household's first names, read from the seed rather than written here.
+
+    Same reasoning as the amounts: naming them in a committed file would be the
+    leak this script exists to prevent. Matched on a word boundary and case
+    insensitively, so the owner's GitHub handle - which is public, appears in
+    the remote URL and the image name, and merely starts with one of them - is
+    not a hit.
+    """
+    out: set[str] = set()
+    for user in seed.get("users", []):
+        name = str(user.get("name", "")).strip()
+        key = str(user.get("key", "")).strip()
+        for value in (name, key):
+            if len(value) >= 3:
+                out.add(value.lower())
+    return out
 
 
 def needles_from(cents: set[int]) -> dict[str, int]:
@@ -114,9 +145,16 @@ def main() -> int:
         print(f"SKIP: {SEED.relative_to(ROOT)} is not on this machine, so there is nothing to scan for.")
         return 0
 
+    seed = json.loads(SEED.read_text(encoding="utf-8"))
     amounts: set[int] = set()
-    collect_amounts(json.loads(SEED.read_text(encoding="utf-8")), amounts)
+    collect_amounts(seed, amounts)
     needles = needles_from(amounts)
+    names = collect_names(seed)
+    name_pattern = (
+        re.compile(r"\b(" + "|".join(sorted(re.escape(n) for n in names)) + r")\b", re.IGNORECASE)
+        if names
+        else None
+    )
 
     allowed: set[str] = set()
     if ALLOWLIST.exists():
@@ -126,6 +164,7 @@ def main() -> int:
                 allowed.add(entry)
 
     hits: list[str] = []
+    name_hits: list[str] = []
     scanned = 0
 
     for relative in tracked_files(staged_only):
@@ -151,7 +190,19 @@ def main() -> int:
                     continue
                 hits.append(f"  {relative}:{line_number}  {run}\n      {line.strip()[:110]}")
 
-    print(f"Scanned {scanned} tracked file(s) against {len(amounts)} real amount(s).")
+            if name_pattern is not None:
+                for found in name_pattern.findall(line):
+                    key = f"{relative}:{found.lower()}"
+                    if key in allowed or found.lower() in allowed:
+                        continue
+                    name_hits.append(
+                        f"  {relative}:{line_number}  (first name)\n      {line.strip()[:110]}"
+                    )
+
+    print(
+        f"Scanned {scanned} tracked file(s) against {len(amounts)} real amount(s) "
+        f"and {len(names)} first name(s)."
+    )
 
     if hits:
         print(f"\n{len(hits)} possible real figure(s) in tracked files:\n")
@@ -160,9 +211,19 @@ def main() -> int:
             "\nReplace the value with an invented one, or - if it is a genuine "
             "coincidence - add a line to scripts/scan_allowlist.txt."
         )
+
+    if name_hits:
+        print(f"\n{len(name_hits)} household first name(s) in tracked files:\n")
+        print("\n".join(name_hits))
+        print(
+            "\nUse a role - 'the owner', 'the household', 'one person' - or one of "
+            "the placeholder names the fixtures use."
+        )
+
+    if hits or name_hits:
         return 1
 
-    print("Clean: no real household figure found in a tracked file.")
+    print("Clean: no real household figure or first name in a tracked file.")
     return 0
 
 

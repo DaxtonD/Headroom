@@ -6,9 +6,9 @@
  *  1. "% of Total" is each line's share of **its own section** (fixed or
  *     variable), not of income. A line that is 38% of fixed expenses is not
  *     38% of what the household earns.
- *  2. The yearly income figure is Carol's stated number, which is not exactly
- *     the monthly figure times twelve (section 14 q2). Her number is used as
- *     given; line items are the ones multiplied by twelve.
+ *  2. The yearly income figure is the household's stated number, which is not
+ *     exactly the monthly figure times twelve (section 14 q2). That number is
+ *     used as given; line items are the ones multiplied by twelve.
  */
 import { percentShare, sumCents, type Cents } from "./money.js";
 import type {

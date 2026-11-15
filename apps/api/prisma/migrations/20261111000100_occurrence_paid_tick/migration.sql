@@ -7,7 +7,7 @@
 -- the household short by the amount of the bill, silently.
 --
 -- It also meant the row vanished, which is the opposite of what a ledger is
--- for: "when an item is marked as paid it disappears; Carol doesn't like this".
+-- for: "when an item is marked as paid it disappears", which was not wanted.
 --
 -- So the tick becomes its own thing. It records that the two of them have dealt
 -- with something, changes no figure at all, and leaves the row on the timeline

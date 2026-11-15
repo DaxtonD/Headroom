@@ -71,7 +71,10 @@ check("sheet order end", timeline([by_id[i] for i in fx["sheetOrder"]], fx["star
 p = exp["payPeriods"]
 p0 = [e for e in events if e.get("anchor") == "now"]
 check("P0 left", fx["startBalanceCents"] + sum(e["cents"] for e in p0), p[0]["leftCents"])
-in_window = lambda e, a, b: ("date" in e and a <= e["date"] <= b) or (e.get("anchor") in ("pay_dax_2026-11-12", "pay_carol_2026-11-19") and a == "2026-11-12")
+# The anchors inside the first window, derived rather than named: the real
+# seed and the synthetic fixture use different ids for the same cheques.
+p1_anchors = {e["id"] for e in fx["events"] if e["type"] == "paycheque" and "2026-11-12" <= e.get("date", "") <= "2026-11-25"}
+in_window = lambda e, a, b: ("date" in e and a <= e["date"] <= b) or (e.get("anchor") in p1_anchors and a == "2026-11-12")
 p1 = [e for e in events if in_window(e, "2026-11-12", "2026-11-25")]
 p1_in = sum(e["cents"] for e in p1 if e["cents"] > 0)
 p1_auto = -sum(e["cents"] for e in p1 if e["type"] == "auto")
@@ -83,8 +86,8 @@ check("P1 left", p1_in - p1_auto - p1_flex, p[1]["leftCents"])
 p1_runs = [r for e, r in zip(events, run) if e in p1]
 check("P1 lowest", min(p1_runs), p[1]["lowest"]["cents"])
 p2 = [e for e in events if "date" in e and "2026-11-26" <= e["date"] <= "2026-12-09"]
-carol_dec3 = seed["paySchedules"][1]["defaultCents"]
-p2_in = sum(e["cents"] for e in p2 if e["cents"] > 0) + carol_dec3
+second_dec3 = seed["paySchedules"][1]["defaultCents"]
+p2_in = sum(e["cents"] for e in p2 if e["cents"] > 0) + second_dec3
 p2_auto = -sum(e["cents"] for e in p2 if e["type"] == "auto")
 check("P2 in", p2_in, p[2]["inCents"])
 check("P2 auto", p2_auto, p[2]["autoCents"])

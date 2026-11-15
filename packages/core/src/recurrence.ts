@@ -1,7 +1,7 @@
 /**
  * Turning templates into occurrences (HANDOFF section 6.5).
  *
- * A template says "the mortgage comes out the day after each of Dax's
+ * A template says "the mortgage comes out the day after each of one person's
  * paydays". This module works out the actual dates, far enough ahead to cover
  * the horizon plus one pay period, and hands back a list of occurrences to
  * create.
@@ -480,7 +480,7 @@ function everyPayday(options: GenerateOptions): PlainDate[] {
 /**
  * The sign an occurrence should carry.
  *
- * Templates store a magnitude - "the power bill is $186" - and the direction
+ * Templates store a magnitude - "the power bill is $147" - and the direction
  * comes from what kind of thing it is. A bill or a transfer leaves the
  * account; a deposit or a paycheque arrives.
  */

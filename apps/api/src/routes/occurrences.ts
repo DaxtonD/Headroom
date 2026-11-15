@@ -139,7 +139,7 @@ function snapshotOccurrence(row: Occurrence): Record<string, unknown> {
 
 /**
  * Which single action best describes this change, for the history feed.
- * "Carol verified Power" reads better than "Carol updated Power".
+ * "Alex verified Power" reads better than "Alex updated Power".
  */
 function actionFor(changes: Record<string, unknown>): ActivityAction {
   const keys = Object.keys(changes);

@@ -126,7 +126,7 @@ describe("biweekly paydays", () => {
   });
 
   it("is biweekly, not twice a month: three cheques in a month need no special case", () => {
-    // Dax's paydays in a long month, straight from the 14-day rule.
+    // Jordan's paydays in a long month, straight from the 14-day rule.
     const paydays = paydaysBetween(anchor, "2026-12-01", "2026-12-31");
     expect(paydays).toEqual(["2026-12-10", "2026-12-24"]);
 
@@ -151,14 +151,14 @@ describe("biweekly paydays", () => {
   });
 
   it("interleaves two people paid on alternating Thursdays", () => {
-    const dax = paydaysBetween("2026-11-12", "2026-11-07", "2026-12-09");
-    const carol = paydaysBetween("2026-11-19", "2026-11-07", "2026-12-09");
+    const jordan = paydaysBetween("2026-11-12", "2026-11-07", "2026-12-09");
+    const alex = paydaysBetween("2026-11-19", "2026-11-07", "2026-12-09");
 
-    expect(dax).toEqual(["2026-11-12", "2026-11-26"]);
-    expect(carol).toEqual(["2026-11-19", "2026-12-03"]);
+    expect(jordan).toEqual(["2026-11-12", "2026-11-26"]);
+    expect(alex).toEqual(["2026-11-19", "2026-12-03"]);
 
     // Each two-week window holds one cheque from each person.
-    const all = [...dax, ...carol].sort(compareDates);
+    const all = [...jordan, ...alex].sort(compareDates);
     expect(all).toEqual(["2026-11-12", "2026-11-19", "2026-11-26", "2026-12-03"]);
   });
 

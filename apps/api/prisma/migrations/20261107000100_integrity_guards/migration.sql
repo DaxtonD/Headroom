@@ -52,7 +52,7 @@ ALTER TABLE "occurrence"
   );
 
 -- Verification and clearing each record who did it and when, together or not
--- at all. A half-set pair would make "Carol verified this" unanswerable.
+-- at all. A half-set pair would make "Alex verified this" unanswerable.
 ALTER TABLE "occurrence"
   ADD CONSTRAINT occurrence_verified_pair CHECK (
     ("verifiedAt" IS NULL) = ("verifiedById" IS NULL)

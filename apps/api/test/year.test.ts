@@ -37,20 +37,20 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  daxId = seeded.dax.id;
-  carolId = seeded.carol.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  daxId = seeded.jordan.id;
+  carolId = seeded.alex.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 /** Two people paid every fortnight, a week apart. */
 async function seedPay() {
-  const dax = await harness.db.prisma.paySchedule.create({
+  const jordan = await harness.db.prisma.paySchedule.create({
     data: { userId: daxId, anchorDate: new Date("2026-01-08T00:00:00Z"), defaultCents: 200_000n },
   });
-  const carol = await harness.db.prisma.paySchedule.create({
+  const alex = await harness.db.prisma.paySchedule.create({
     data: { userId: carolId, anchorDate: new Date("2026-01-15T00:00:00Z"), defaultCents: 180_000n },
   });
-  return { dax, carol };
+  return { jordan, alex };
 }
 
 async function seedMortgage(payScheduleId: string, offsetDays = 1) {
@@ -122,8 +122,8 @@ describe("GET /api/year", () => {
     const body = await get().then((response) => response.json());
 
     const names = (body.months[0] as Month).entries.map((entry) => entry.name);
-    expect(names).toContain("Dax's pay");
-    expect(names).toContain("Carol's pay");
+    expect(names).toContain("Jordan's pay");
+    expect(names).toContain("Alex's pay");
   });
 
   it("lands two or three times a month, never any other count", async () => {
@@ -162,8 +162,8 @@ describe("GET /api/year", () => {
   });
 
   it("nets the extras against each other, in integer cents on the wire", async () => {
-    const { dax } = await seedPay();
-    await seedMortgage(dax.id);
+    const { jordan } = await seedPay();
+    await seedMortgage(jordan.id);
     const body = await get().then((response) => response.json());
 
     expect(body.hasMortgage).toBe(true);
@@ -182,13 +182,13 @@ describe("GET /api/year", () => {
   });
 
   it("treats the mortgage as money leaving, anchored off the payday it follows", async () => {
-    const { dax } = await seedPay();
-    const mortgage = await seedMortgage(dax.id, 1);
+    const { jordan } = await seedPay();
+    const mortgage = await seedMortgage(jordan.id, 1);
     const body = await get().then((response) => response.json());
 
     const allMonths = body.months as Month[];
     const payDates = new Set(
-      allMonths.flatMap((month) => month.entries.find((e) => e.id === dax.id)?.dates ?? []),
+      allMonths.flatMap((month) => month.entries.find((e) => e.id === jordan.id)?.dates ?? []),
     );
     const mortgageDates = allMonths.flatMap(
       (month) => month.entries.find((e) => e.id === mortgage.id)?.dates ?? [],
@@ -196,7 +196,7 @@ describe("GET /api/year", () => {
 
     expect(mortgageDates.length).toBeGreaterThan(0);
 
-    // Every payment is exactly one day after one of Dax's paydays. This offset
+    // Every payment is exactly one day after one of Jordan's paydays. This offset
     // is the whole reason a month can hold three cheques but two payments.
     for (const date of mortgageDates) {
       const dayBefore = new Date(`${date}T00:00:00Z`);
@@ -210,12 +210,12 @@ describe("GET /api/year", () => {
   });
 
   it("moves with the offset, so a zero offset keeps the two in lockstep", async () => {
-    const { dax } = await seedPay();
-    const mortgage = await seedMortgage(dax.id, 0);
+    const { jordan } = await seedPay();
+    const mortgage = await seedMortgage(jordan.id, 0);
     const body = await get().then((response) => response.json());
 
     for (const month of body.months as Month[]) {
-      const pay = month.entries.find((e) => e.id === dax.id);
+      const pay = month.entries.find((e) => e.id === jordan.id);
       const mort = month.entries.find((e) => e.id === mortgage.id);
       expect(mort!.count).toBe(pay!.count);
       expect(mort!.dates).toEqual(pay!.dates);

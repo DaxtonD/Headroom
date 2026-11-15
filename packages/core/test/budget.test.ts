@@ -131,30 +131,30 @@ describe("computeReimbursements", () => {
 
 describe("sumBankedHours", () => {
   it("adds hours exactly, where repeated float addition would drift", () => {
-    const entries = Array.from({ length: 10 }, () => ({ userId: "dax", hours: "0.10" }));
+    const entries = Array.from({ length: 10 }, () => ({ userId: "jordan", hours: "0.10" }));
     expect(sumBankedHours(entries)).toBe("1.00");
   });
 
   it("handles quarters and halves", () => {
     expect(
       sumBankedHours([
-        { userId: "dax", hours: "7.50" },
-        { userId: "dax", hours: "0.25" },
-        { userId: "carol", hours: "2.25" },
+        { userId: "jordan", hours: "7.50" },
+        { userId: "jordan", hours: "0.25" },
+        { userId: "alex", hours: "2.25" },
       ]),
     ).toBe("10.00");
   });
 
   it("accepts whole hours and one decimal place", () => {
-    expect(sumBankedHours([{ userId: "dax", hours: "8" }])).toBe("8.00");
-    expect(sumBankedHours([{ userId: "dax", hours: "8.5" }])).toBe("8.50");
+    expect(sumBankedHours([{ userId: "jordan", hours: "8" }])).toBe("8.00");
+    expect(sumBankedHours([{ userId: "jordan", hours: "8.5" }])).toBe("8.50");
   });
 
   it("handles hours taken back out", () => {
     expect(
       sumBankedHours([
-        { userId: "dax", hours: "8.00" },
-        { userId: "dax", hours: "-3.50" },
+        { userId: "jordan", hours: "8.00" },
+        { userId: "jordan", hours: "-3.50" },
       ]),
     ).toBe("4.50");
   });
@@ -164,8 +164,8 @@ describe("sumBankedHours", () => {
   });
 
   it("refuses something that is not an hours value", () => {
-    expect(() => sumBankedHours([{ userId: "dax", hours: "eight" }])).toThrow(SyntaxError);
-    expect(() => sumBankedHours([{ userId: "dax", hours: "1.234" }])).toThrow(SyntaxError);
+    expect(() => sumBankedHours([{ userId: "jordan", hours: "eight" }])).toThrow(SyntaxError);
+    expect(() => sumBankedHours([{ userId: "jordan", hours: "1.234" }])).toThrow(SyntaxError);
   });
 });
 

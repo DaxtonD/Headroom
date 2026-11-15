@@ -140,7 +140,7 @@ const envSchema = z.object({
   SESSION_SECRET: notPlaceholder("SESSION_SECRET").pipe(
     z.string().min(32, "must be at least 32 characters; generate with: openssl rand -hex 32"),
   ),
-  /** Long-lived, because Carol opens the app many times a day. */
+  /** Long-lived, because the app is opened many times a day. */
   SESSION_TTL_DAYS: intInRange(1, 400, 90),
   /** Must stay true in production: the cookie may only travel over HTTPS. */
   COOKIE_SECURE: boolish(true),

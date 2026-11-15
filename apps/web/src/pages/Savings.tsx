@@ -2,7 +2,8 @@
  * Savings (replaces the Goals screen).
  *
  * The household has one real savings account and is saving as hard as it can
- * in order to pay the mortgage off early with annual lump sums. Dax said it
+ * in order to pay the mortgage off early with annual lump sums. The ask was
+ * that it
  * plainly: they would not need a budget at all if they were not trying to save
  * this much. So this screen answers three questions in that order:
  *

@@ -4,7 +4,7 @@
 !.env.example
 
 # ---------------------------------------------------------------
-# Real household financial data: NEVER committed (Dax's decision,
+# Real household financial data: NEVER committed (the owner's decision,
 # 2026-11-07). These files stay local only; they arrive in
 # headroom-handoff.zip. Committed tests use the synthetic fixture
 # at packages/core/test/fixtures/household-synthetic.json, and the

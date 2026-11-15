@@ -35,8 +35,8 @@ beforeEach(async () => {
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
   accountId = seeded.account.id;
-  carolId = seeded.carol.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  carolId = seeded.alex.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 const START_CENTS = 41_000n;
@@ -67,12 +67,12 @@ async function buildScenario() {
       },
     ],
   });
-  const dax = await harness.db.prisma.user.findFirstOrThrow({
-    where: { householdId, email: "dax@example.test" },
+  const jordan = await harness.db.prisma.user.findFirstOrThrow({
+    where: { householdId, email: "jordan@example.test" },
   });
   await harness.db.prisma.paySchedule.create({
     data: {
-      userId: dax.id,
+      userId: jordan.id,
       anchorDate: new Date("2026-11-12T00:00:00.000Z"),
       defaultCents: 175_000n,
     },
@@ -81,7 +81,7 @@ async function buildScenario() {
   const payDax = await harness.db.prisma.occurrence.create({
     data: {
       householdId,
-      name: "Dax's pay",
+      name: "Jordan's pay",
       cents: 175_000n,
       kind: "paycheque",
       withdrawal: "auto",
@@ -103,7 +103,7 @@ async function buildScenario() {
     },
   });
 
-  // A flexible bill hanging off Dax's cheque.
+  // A flexible bill hanging off Jordan's cheque.
   const energy = await harness.db.prisma.occurrence.create({
     data: {
       householdId,
@@ -162,7 +162,7 @@ async function buildScenario() {
     cushionCents: 0n,
     events: [
       { id: power.id, name: "Power", cents: -12_345n, kind: "bill", placement: "flexible", anchorId: null, sortIndex: 0 },
-      { id: payDax.id, name: "Dax's pay", cents: 175_000n, kind: "paycheque", placement: "auto", date: "2026-11-12", sortIndex: 1 },
+      { id: payDax.id, name: "Jordan's pay", cents: 175_000n, kind: "paycheque", placement: "auto", date: "2026-11-12", sortIndex: 1 },
       { id: energy.id, name: "Energy", cents: -9_000n, kind: "bill", placement: "flexible", anchorId: payDax.id, sortIndex: 2 },
       { id: mortgage.id, name: "Mortgage", cents: -98_765n, kind: "bill", placement: "auto", date: "2026-11-13", sortIndex: 3, verified: true },
       { id: insurance.id, name: "Home insurance", cents: -21_500n, kind: "bill", placement: "auto", date: "2026-11-17", sortIndex: 4 },
@@ -258,7 +258,7 @@ describe("GET /api/timeline", () => {
 
     const mortgage = body.rows.find((row: { id: string }) => row.id === ids.mortgage.id);
     expect(mortgage.verified).toBe(true);
-    expect(mortgage.verifiedBy.name).toBe("Carol");
+    expect(mortgage.verifiedBy.name).toBe("Alex");
 
     const insurance = body.rows.find((row: { id: string }) => row.id === ids.insurance.id);
     expect(insurance.verified).toBe(false);
@@ -331,7 +331,7 @@ describe("GET /api/dashboard", () => {
     expect(body.balance.snapshotCents).toBe(START_CENTS.toString());
     expect(body.balance.cents).toBe(START_CENTS.toString());
     expect(body.balance.asOf).toBe("2026-11-07T15:58:00.000Z");
-    expect(body.balance.enteredBy.name).toBe("Carol");
+    expect(body.balance.enteredBy.name).toBe("Alex");
   });
 
   it("warns about the first withdrawal that is not covered", async () => {

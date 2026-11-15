@@ -12,15 +12,15 @@ import { computeTimeline, effectiveBalance, orderTimeline,
 } from "../src/timeline.js";
 import type { PaySchedule, TimelineInput } from "../src/types.js";
 
-const DAX: PaySchedule = {
-  id: "dax",
-  ownerId: "dax",
+const JORDAN: PaySchedule = {
+  id: "jordan",
+  ownerId: "jordan",
   anchorDate: "2026-11-12",
   defaultCents: 200_000n,
 };
-const CAROL: PaySchedule = {
-  id: "carol",
-  ownerId: "carol",
+const ALEX: PaySchedule = {
+  id: "alex",
+  ownerId: "alex",
   anchorDate: "2026-11-19",
   defaultCents: 180_000n,
 };
@@ -377,7 +377,7 @@ describe("effectiveBalance", () => {
 
 describe("pay period windows", () => {
   it("opens with a partial window when today is not a payday", () => {
-    const windows = payPeriodWindows("2026-11-07", DAX, 3);
+    const windows = payPeriodWindows("2026-11-07", JORDAN, 3);
 
     expect(windows[0]).toEqual({ start: "2026-11-07", end: "2026-11-11", isCurrentPartial: true });
     expect(windows[1]).toEqual({ start: "2026-11-12", end: "2026-11-25", isCurrentPartial: false });
@@ -385,14 +385,14 @@ describe("pay period windows", () => {
   });
 
   it("has no partial window when today IS a payday", () => {
-    const windows = payPeriodWindows("2026-11-12", DAX, 2);
+    const windows = payPeriodWindows("2026-11-12", JORDAN, 2);
 
     expect(windows[0]).toEqual({ start: "2026-11-12", end: "2026-11-25", isCurrentPartial: false });
     expect(windows[1]).toEqual({ start: "2026-11-26", end: "2026-12-09", isCurrentPartial: false });
   });
 
   it("keeps every full window exactly fourteen days", () => {
-    for (const window of payPeriodWindows("2026-11-07", DAX, 6)) {
+    for (const window of payPeriodWindows("2026-11-07", JORDAN, 6)) {
       if (window.isCurrentPartial) continue;
       expect(new Date(window.end).getTime() - new Date(window.start).getTime()).toBe(13 * 86_400_000);
     }
@@ -402,39 +402,39 @@ describe("pay period windows", () => {
 describe("pay periods", () => {
   it("projects a cheque that is due in the window but not placed yet", () => {
     const timeline = computeTimeline({
-      events: [paycheque("pay_dax", "2026-11-26", 200_000n, "dax")],
+      events: [paycheque("pay_jordan", "2026-11-26", 200_000n, "jordan")],
       startBalanceCents: 0n,
     });
 
     const periods = computePayPeriods({
       timeline,
-      paySchedules: [DAX, CAROL],
+      paySchedules: [JORDAN, ALEX],
       today: "2026-11-26",
       periodCount: 1,
-      anchorScheduleId: "dax",
+      anchorScheduleId: "jordan",
     });
 
     const period = periods[0];
-    // Dax's cheque is placed; Carol's Dec 3 one is projected from her schedule.
-    expect(period?.inCents).toBe(200_000n + CAROL.defaultCents);
-    expect(period?.projectedPaychequeIds).toEqual(["carol|2026-12-03"]);
+    // Jordan's cheque is placed; Alex's Dec 3 one is projected from her schedule.
+    expect(period?.inCents).toBe(200_000n + ALEX.defaultCents);
+    expect(period?.projectedPaychequeIds).toEqual(["alex|2026-12-03"]);
   });
 
   it("does not double-count a cheque that is already placed", () => {
     const timeline = computeTimeline({
       events: [
-        paycheque("pay_dax", "2026-11-26", 200_000n, "dax"),
-        paycheque("pay_carol", "2026-12-03", 185_000n, "carol"),
+        paycheque("pay_jordan", "2026-11-26", 200_000n, "jordan"),
+        paycheque("pay_alex", "2026-12-03", 185_000n, "alex"),
       ],
       startBalanceCents: 0n,
     });
 
     const periods = computePayPeriods({
       timeline,
-      paySchedules: [DAX, CAROL],
+      paySchedules: [JORDAN, ALEX],
       today: "2026-11-26",
       periodCount: 1,
-      anchorScheduleId: "dax",
+      anchorScheduleId: "jordan",
     });
 
     // The placed amount is used, not the schedule's default.
@@ -450,10 +450,10 @@ describe("pay periods", () => {
 
     const periods = computePayPeriods({
       timeline,
-      paySchedules: [DAX],
+      paySchedules: [JORDAN],
       today: "2026-11-07",
       periodCount: 1,
-      anchorScheduleId: "dax",
+      anchorScheduleId: "jordan",
     });
 
     expect(periods[0]?.isCurrentPartial).toBe(true);
@@ -474,7 +474,7 @@ describe("pay periods", () => {
     expect(() =>
       computePayPeriods({
         timeline,
-        paySchedules: [DAX],
+        paySchedules: [JORDAN],
         today: "2026-11-07",
         anchorScheduleId: "nobody",
       }),
@@ -486,34 +486,34 @@ describe("the horizon", () => {
   it("counts both people's upcoming cheques", () => {
     // Upcoming: Nov 12 (D), Nov 19 (C), Nov 26 (D), Dec 3 (C).
     expect(
-      computeHorizonEnd({ today: "2026-11-07", paySchedules: [DAX, CAROL], paychequeCount: 4 }),
+      computeHorizonEnd({ today: "2026-11-07", paySchedules: [JORDAN, ALEX], paychequeCount: 4 }),
     ).toBe("2026-12-02");
 
     expect(
-      computeHorizonEnd({ today: "2026-11-07", paySchedules: [DAX, CAROL], paychequeCount: 1 }),
+      computeHorizonEnd({ today: "2026-11-07", paySchedules: [JORDAN, ALEX], paychequeCount: 1 }),
     ).toBe("2026-11-11");
 
     expect(
-      computeHorizonEnd({ today: "2026-11-07", paySchedules: [DAX, CAROL], paychequeCount: 2 }),
+      computeHorizonEnd({ today: "2026-11-07", paySchedules: [JORDAN, ALEX], paychequeCount: 2 }),
     ).toBe("2026-11-18");
   });
 
   it("treats a cheque arriving today as already in the balance", () => {
-    // On Nov 12 the next cheque is Carol's on Nov 19, not Dax's today.
+    // On Nov 12 the next cheque is Alex's on Nov 19, not Jordan's today.
     expect(
-      computeHorizonEnd({ today: "2026-11-12", paySchedules: [DAX, CAROL], paychequeCount: 1 }),
+      computeHorizonEnd({ today: "2026-11-12", paySchedules: [JORDAN, ALEX], paychequeCount: 1 }),
     ).toBe("2026-11-18");
   });
 
   it("is an editable setting, so a longer view works too", () => {
     expect(
-      computeHorizonEnd({ today: "2026-11-07", paySchedules: [DAX, CAROL], paychequeCount: 6 }),
+      computeHorizonEnd({ today: "2026-11-07", paySchedules: [JORDAN, ALEX], paychequeCount: 6 }),
     ).toBe("2026-12-16");
   });
 
   it("refuses a nonsensical count", () => {
     expect(() =>
-      computeHorizonEnd({ today: "2026-11-07", paySchedules: [DAX], paychequeCount: 0 }),
+      computeHorizonEnd({ today: "2026-11-07", paySchedules: [JORDAN], paychequeCount: 0 }),
     ).toThrow(RangeError);
   });
 });
@@ -523,15 +523,15 @@ describe("room to save", () => {
   // cheques and an automatic withdrawal.
   //
   // Running balances:
-  //   flex    (anchored to "now")   38,000
-  //   dax     2026-11-12           238,000
-  //   carol   2026-11-19           418,000
-  //   auto    2026-11-22           388,000
+  //   flex     (anchored to "now")   38,000
+  //   jordan   2026-11-12            238,000
+  //   alex     2026-11-19            418,000
+  //   auto     2026-11-22            388,000
   const timeline = computeTimeline({
     events: [
       flexibleBill("flex", null, -12_000n),
-      paycheque("pay_dax", "2026-11-12", 200_000n, "dax"),
-      paycheque("pay_carol", "2026-11-19", 180_000n, "carol"),
+      paycheque("pay_jordan", "2026-11-12", 200_000n, "jordan"),
+      paycheque("pay_alex", "2026-11-19", 180_000n, "alex"),
       autoBill("auto", "2026-11-22", -30_000n),
     ],
     startBalanceCents: 50_000n,
@@ -540,10 +540,10 @@ describe("room to save", () => {
   function periods(cushionCents = 0n) {
     return computePayPeriods({
       timeline,
-      paySchedules: [DAX, CAROL],
+      paySchedules: [JORDAN, ALEX],
       today: "2026-11-07",
       periodCount: 2,
-      anchorScheduleId: "dax",
+      anchorScheduleId: "jordan",
       cushionCents,
     });
   }
@@ -560,7 +560,7 @@ describe("room to save", () => {
   });
 
   it("does not hold a later window to today's balance", () => {
-    // By the time anyone acts in the Nov 12-25 window, Dax's cheque has
+    // By the time anyone acts in the Nov 12-25 window, Jordan's cheque has
     // landed, so the room is 238,000 and not the 38,000 available today.
     const [, second] = periods();
 
@@ -583,10 +583,10 @@ describe("room to save", () => {
 
     const [, second] = computePayPeriods({
       timeline: quiet,
-      paySchedules: [DAX, CAROL],
+      paySchedules: [JORDAN, ALEX],
       today: "2026-11-07",
       periodCount: 2,
-      anchorScheduleId: "dax",
+      anchorScheduleId: "jordan",
     });
 
     // Nothing is scheduled in or after Nov 12-25, so the room is whatever the
@@ -602,10 +602,10 @@ describe("room to save", () => {
 
     const [first] = computePayPeriods({
       timeline: tight,
-      paySchedules: [DAX, CAROL],
+      paySchedules: [JORDAN, ALEX],
       today: "2026-11-07",
       periodCount: 1,
-      anchorScheduleId: "dax",
+      anchorScheduleId: "jordan",
     });
 
     // Already short: the number says by how much instead of clamping to zero.
@@ -626,7 +626,7 @@ describe("every row lands in a window", () => {
     autoBill("overdue", "2026-11-02", -7_500n), // before today, never cleared
     flexibleBill("undated", null, -4_000n), // anchored to "now"
     autoBill("soon", "2026-11-10", -2_500n), // inside the partial window
-    paycheque("pay_dax", "2026-11-12", 200_000n, "dax"),
+    paycheque("pay_jordan", "2026-11-12", 200_000n, "jordan"),
     autoBill("later", "2026-11-20", -9_000n), // inside the second window
   ];
 
@@ -634,11 +634,11 @@ describe("every row lands in a window", () => {
 
   const periods = computePayPeriods({
     timeline,
-    paySchedules: [DAX, CAROL],
+    paySchedules: [JORDAN, ALEX],
     // Not a payday, so there is a partial window from today to Nov 11.
     today: "2026-11-09",
     periodCount: 2,
-    anchorScheduleId: "dax",
+    anchorScheduleId: "jordan",
   });
 
   it("accounts for every row exactly once", () => {
@@ -653,7 +653,7 @@ describe("every row lands in a window", () => {
     // In the timeline's own order, which the ledger displays and the running
     // balance follows: a row anchored to "now" comes before dated ones.
     expect(periods[0]?.rowIds).toEqual(["undated", "overdue", "soon"]);
-    expect(periods[1]?.rowIds).toEqual(["pay_dax", "later"]);
+    expect(periods[1]?.rowIds).toEqual(["pay_jordan", "later"]);
   });
 
   it("counts them in that window's totals, not only in its list", () => {
@@ -671,10 +671,10 @@ describe("every row lands in a window", () => {
     // one - and it still has to absorb the overdue and undated rows.
     const onPayday = computePayPeriods({
       timeline,
-      paySchedules: [DAX, CAROL],
+      paySchedules: [JORDAN, ALEX],
       today: "2026-11-12",
       periodCount: 2,
-      anchorScheduleId: "dax",
+      anchorScheduleId: "jordan",
     });
 
     expect(onPayday[0]?.isCurrentPartial).toBe(false);
@@ -686,8 +686,8 @@ describe("every row lands in a window", () => {
 
 describe("the windows cover the horizon", () => {
   it("adds windows until one reaches the date it is told to cover", () => {
-    const short = payPeriodWindows("2026-11-09", DAX, 3);
-    const long = payPeriodWindows("2026-11-09", DAX, 3, "2027-02-01");
+    const short = payPeriodWindows("2026-11-09", JORDAN, 3);
+    const long = payPeriodWindows("2026-11-09", JORDAN, 3, "2027-02-01");
 
     // The partial window counts towards the minimum, so three means a partial
     // one plus two full ones - about four weeks, which is less reach than it
@@ -698,13 +698,13 @@ describe("the windows cover the horizon", () => {
   });
 
   it("asks for no more than the minimum when that already reaches", () => {
-    const windows = payPeriodWindows("2026-11-09", DAX, 3, "2026-11-20");
+    const windows = payPeriodWindows("2026-11-09", JORDAN, 3, "2026-11-20");
 
     expect(windows).toHaveLength(3);
   });
 
   it("will not run away on an absurd horizon", () => {
-    expect(payPeriodWindows("2026-11-09", DAX, 3, "2400-01-01").length).toBeLessThanOrEqual(60);
+    expect(payPeriodWindows("2026-11-09", JORDAN, 3, "2400-01-01").length).toBeLessThanOrEqual(60);
   });
 
   it("keeps a row beyond the default three windows inside one", () => {
@@ -712,17 +712,17 @@ describe("the windows cover the horizon", () => {
     // can reach this state just by raising the horizon setting.
     const far = autoBill("far", "2027-01-20", -5_000n);
     const timeline = computeTimeline({
-      events: [paycheque("pay_dax", "2026-11-12", 200_000n, "dax"), far],
+      events: [paycheque("pay_jordan", "2026-11-12", 200_000n, "jordan"), far],
       startBalanceCents: 50_000n,
     });
 
     const covered = computePayPeriods({
       timeline,
-      paySchedules: [DAX],
+      paySchedules: [JORDAN],
       today: "2026-11-09",
       periodCount: 3,
       coverThrough: "2027-01-20",
-      anchorScheduleId: "dax",
+      anchorScheduleId: "jordan",
     });
 
     expect(covered.flatMap((period) => period.rowIds)).toContain("far");
@@ -760,7 +760,7 @@ describe("explaining a figure", () => {
       events: [
         pay("p1", "2026-11-16", 210_000n),
         bill("b1", "Rent", "2026-11-17", -90_000n),
-        bill("b2", "Power", "2026-11-20", -18_600n),
+        bill("b2", "Power", "2026-11-20", -14_700n),
       ],
       startBalanceCents: 200_000n,
     });
@@ -770,14 +770,14 @@ describe("explaining a figure", () => {
     expect(working.startBalanceCents).toBe(200_000n);
     expect(working.inCents).toBe(210_000n);
     expect(working.inCount).toBe(1);
-    // A magnitude, because "less $1,086.00 going out" reads better than a
+    // A magnitude, because "less $1,047.00 going out" reads better than a
     // double negative.
-    expect(working.outCents).toBe(108_600n);
+    expect(working.outCents).toBe(104_700n);
     expect(working.outCount).toBe(2);
 
     // And it adds up to the figure the headline shows.
     expect(working.endCents).toBe(result.leftThisCycleCents);
-    expect(working.endCents).toBe(301_400n);
+    expect(working.endCents).toBe(305_300n);
   });
 
   it("names the row the balance is lowest after", () => {

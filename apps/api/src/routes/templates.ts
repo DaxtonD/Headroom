@@ -2,7 +2,8 @@
  * Templates and generation (HANDOFF section 6.5 and 9).
  *
  * A template is the recurring fact: "the mortgage comes out the day after each
- * of Dax's paydays, usually $987.65". The occurrences it produces are separate
+ * of someone's paydays, usually $987.65". The occurrences it produces are
+ * separate
  * rows, and editing one of those never edits the template - that is a
  * deliberate, separate choice ("change for all future").
  */
@@ -24,7 +25,7 @@ import type { Template } from "../generated/prisma/client.js";
  * One parser for amounts, shared with every other route.
  *
  * This file used to define its own, which meant two places decided what an
- * amount on the wire looks like. That is the seam the $186-becomes-$18,600 bug
+ * amount on the wire looks like. That is the seam the $147-becomes-$14,700 bug
  * came through, so there is deliberately only one now.
  */
 const centsSchema = wireCents;

@@ -234,7 +234,7 @@ export function timelineEvents(seed: Seed): TimelineInput[] {
       name: event.name,
       cents: cents(event.cents),
       sortIndex: index,
-      // The sheet marks the bills Dax has typed an "X" against; the fixture
+      // The sheet marks the bills the household has ticked off; the fixture
       // does not record verification, so every bill reads as an estimate.
       verified: false,
     };

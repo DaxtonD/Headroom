@@ -4,8 +4,8 @@ Run:  python3 seed/make_synthetic_fixture.py
 
 Why this exists
 ---------------
-No real household financial data is committed to this repository (Dax's
-decision, 2026-11-07). The golden tests still need a seed with expected values
+No real household financial data is committed to this repository (the
+owner's decision, 2026-11-07). The golden tests still need a seed with expected values
 to check the engine against, so this script writes one whose amounts are
 entirely invented.
 
@@ -38,44 +38,44 @@ CUSHION_CENTS = 0
 START_BALANCE_CENTS = 41_000
 
 PAY_SCHEDULES = [
-    {"user": "dax", "cadence": "biweekly", "weekday": "Thu", "anchorDate": "2026-11-12", "defaultCents": 200_000},
-    {"user": "carol", "cadence": "biweekly", "weekday": "Thu", "anchorDate": "2026-11-19", "defaultCents": 180_000},
+    {"user": "jordan", "cadence": "biweekly", "weekday": "Thu", "anchorDate": "2026-11-12", "defaultCents": 200_000},
+    {"user": "alex", "cadence": "biweekly", "weekday": "Thu", "anchorDate": "2026-11-19", "defaultCents": 180_000},
 ]
 
 # Same ids, dates, types and anchors as the real fixture; invented amounts.
-# The Nov 19 cheque deliberately differs from Carol's template amount, which
-# mirrors the real quirk the engine has to cope with.
+# The Nov 19 cheque deliberately differs from that person's template amount,
+# which mirrors the real quirk the engine has to cope with.
 EVENTS = [
     {"id": "power", "name": "Power", "type": "flexible", "anchor": "now", "cents": -15_000},
-    {"id": "pay_dax_2026-11-12", "name": "Dax's pay", "type": "paycheque", "date": "2026-11-12", "cents": 200_000},
-    {"id": "energy", "name": "Energy", "type": "flexible", "anchor": "pay_dax_2026-11-12", "cents": -9_000},
-    {"id": "sasktel_refund", "name": "Phone refund", "type": "one_off", "anchor": "pay_dax_2026-11-12", "cents": 4_000},
+    {"id": "pay_jordan_2026-11-12", "name": "Jordan's pay", "type": "paycheque", "date": "2026-11-12", "cents": 200_000},
+    {"id": "energy", "name": "Energy", "type": "flexible", "anchor": "pay_jordan_2026-11-12", "cents": -9_000},
+    {"id": "phone_refund", "name": "Phone refund", "type": "one_off", "anchor": "pay_jordan_2026-11-12", "cents": 4_000},
     {"id": "mortgage_1", "name": "Mortgage", "type": "auto", "date": "2026-11-13", "cents": -100_000},
     {"id": "home_insurance", "name": "Home insurance", "type": "auto", "date": "2026-11-17", "cents": -20_000},
-    {"id": "pay_carol_2026-11-19", "name": "Carol's pay", "type": "paycheque", "date": "2026-11-19", "cents": 185_000},
-    {"id": "water", "name": "Water", "type": "flexible", "anchor": "pay_carol_2026-11-19", "cents": -16_000},
-    {"id": "savings", "name": "Savings transfer", "type": "flexible", "anchor": "pay_carol_2026-11-19", "cents": -120_000},
+    {"id": "pay_alex_2026-11-19", "name": "Alex's pay", "type": "paycheque", "date": "2026-11-19", "cents": 185_000},
+    {"id": "water", "name": "Water", "type": "flexible", "anchor": "pay_alex_2026-11-19", "cents": -16_000},
+    {"id": "savings", "name": "Savings transfer", "type": "flexible", "anchor": "pay_alex_2026-11-19", "cents": -120_000},
     {"id": "child_tax_credit", "name": "Child tax credit", "type": "auto_deposit", "date": "2026-11-20", "cents": 10_000},
-    {"id": "tacoma_license", "name": "Truck license", "type": "auto", "date": "2026-11-21", "cents": -8_000},
+    {"id": "truck_license", "name": "Truck license", "type": "auto", "date": "2026-11-21", "cents": -8_000},
     {"id": "rogers_wireless", "name": "Wireless", "type": "auto", "date": "2026-11-22", "cents": -17_000},
-    {"id": "pay_dax_2026-11-26", "name": "Dax's pay", "type": "paycheque", "date": "2026-11-26", "cents": 200_000},
+    {"id": "pay_jordan_2026-11-26", "name": "Jordan's pay", "type": "paycheque", "date": "2026-11-26", "cents": 200_000},
     {"id": "mortgage_2", "name": "Mortgage", "type": "auto", "date": "2026-11-27", "cents": -100_000},
     {"id": "bank_fees", "name": "Bank fees", "type": "auto", "date": "2026-11-30", "cents": -1_200},
     {"id": "property_tax", "name": "Property tax", "type": "auto", "date": "2026-12-01", "cents": -30_000},
-    {"id": "rav_license", "name": "Car license", "type": "auto", "date": "2026-12-02", "cents": -10_000},
+    {"id": "car_license", "name": "Car license", "type": "auto", "date": "2026-12-02", "cents": -10_000},
 ]
 
 # The spreadsheet's own row order, which differs from the app's in one place.
 SHEET_ORDER = [
-    "power", "pay_dax_2026-11-12", "mortgage_1", "rogers_wireless", "home_insurance",
-    "sasktel_refund", "energy", "pay_carol_2026-11-19", "water", "child_tax_credit",
-    "tacoma_license", "savings", "pay_dax_2026-11-26", "mortgage_2", "bank_fees",
-    "property_tax", "rav_license",
+    "power", "pay_jordan_2026-11-12", "mortgage_1", "rogers_wireless", "home_insurance",
+    "phone_refund", "energy", "pay_alex_2026-11-19", "water", "child_tax_credit",
+    "truck_license", "savings", "pay_jordan_2026-11-26", "mortgage_2", "bank_fees",
+    "property_tax", "car_license",
 ]
 
 # Large enough to push the wireless bill past the available balance.
 SHORTFALL_EDIT = {"id": "rogers_wireless", "cents": -170_000}
-MOVED_FLEXIBLE = {"id": "savings", "toAnchor": "pay_dax_2026-11-26"}
+MOVED_FLEXIBLE = {"id": "savings", "toAnchor": "pay_jordan_2026-11-26"}
 
 INCOME_NET_MONTHLY_CENTS = 900_000
 # Deliberately not exactly monthly x 12, mirroring the real sheet's quirk.
@@ -84,14 +84,14 @@ INCOME_NET_YEARLY_CENTS = 10_850_000
 FIXED = [
     {"name": "Mortgage", "monthlyCents": 200_000},
     {"name": "Saving", "monthlyCents": 200_000},
-    {"name": "Netflix", "monthlyCents": 2_000},
+    {"name": "Streaming", "monthlyCents": 2_000},
     {"name": "Property Tax", "monthlyCents": 30_000},
-    {"name": "Spotify", "monthlyCents": 1_500},
-    {"name": "Rogers tv", "monthlyCents": 10_000},
+    {"name": "Music", "monthlyCents": 1_500},
+    {"name": "TV & internet", "monthlyCents": 10_000},
     {"name": "Power", "monthlyCents": 15_000},
     {"name": "Energy", "monthlyCents": 9_000},
     {"name": "Cell Phone", "monthlyCents": 16_000},
-    {"name": "RAV Insurance", "monthlyCents": 10_000},
+    {"name": "Car insurance", "monthlyCents": 10_000},
     {"name": "Truck insurance", "monthlyCents": 8_000},
     {"name": "Water", "monthlyCents": 16_000},
     {"name": "Home Insurance", "monthlyCents": 20_000},
@@ -110,8 +110,8 @@ GOAL = {"name": "Trip fund", "targetCents": 450_000, "savedCents": 320_000}
 NET_WORTH_ASSETS = [
     {"name": "Home (market estimate)", "cents": 40_000_000},
     {"name": "RRSPs", "cents": 15_000_000},
-    {"name": "RAV4", "cents": 1_200_000},
-    {"name": "Tacoma", "cents": 800_000},
+    {"name": "Car", "cents": 1_200_000},
+    {"name": "Truck", "cents": 800_000},
 ]
 NET_WORTH_LIABILITIES = [{"name": "Mortgage", "cents": 14_000_000}]
 
@@ -176,7 +176,7 @@ def build():
             return start <= e["date"] <= end
         return e.get("anchor") in anchors_in_window
 
-    p1_anchors = ("pay_dax_2026-11-12", "pay_carol_2026-11-19")
+    p1_anchors = ("pay_jordan_2026-11-12", "pay_alex_2026-11-19")
     p1 = [e for e in ordered if in_window(e, "2026-11-12", "2026-11-25", p1_anchors)]
     p1_in = sum(e["cents"] for e in p1 if e["cents"] > 0)
     p1_auto = -sum(e["cents"] for e in p1 if e["type"] == "auto")
@@ -186,10 +186,10 @@ def build():
     p1_lowest_date = next(e["date"] for e, r in zip(ordered, run) if r == p1_lowest and "date" in e)
 
     p2 = [e for e in ordered if "date" in e and "2026-11-26" <= e["date"] <= "2026-12-09"]
-    # Carol's next cheque falls inside this window but past the horizon, so it
-    # is projected from her pay schedule rather than placed on the timeline.
-    carol_projected = PAY_SCHEDULES[1]["defaultCents"]
-    p2_in = sum(e["cents"] for e in p2 if e["cents"] > 0) + carol_projected
+    # The second schedule's next cheque falls inside this window but past the
+    # horizon, so it is projected from the pay schedule rather than placed.
+    second_projected = PAY_SCHEDULES[1]["defaultCents"]
+    p2_in = sum(e["cents"] for e in p2 if e["cents"] > 0) + second_projected
     p2_auto = -sum(e["cents"] for e in p2 if e["type"] == "auto")
     p2_flex = -sum(e["cents"] for e in p2 if e["type"] == "flexible")
 
@@ -247,8 +247,8 @@ def build():
             "cushionCents": CUSHION_CENTS,
         },
         "users": [
-            {"key": "dax", "name": "Dax", "initial": "D"},
-            {"key": "carol", "name": "Carol", "initial": "C"},
+            {"key": "jordan", "name": "Jordan", "initial": "J"},
+            {"key": "alex", "name": "Alex", "initial": "A"},
         ],
         "account": {"name": "Chequing", "balanceCents": START_BALANCE_CENTS, "asOf": "2026-11-07T09:58:00-06:00"},
         "paySchedules": PAY_SCHEDULES,
@@ -257,7 +257,7 @@ def build():
             "today": "2026-11-07",
             "startBalanceCents": START_BALANCE_CENTS,
             "horizonEnd": "2026-12-02",
-            "anchors": ["now", "pay_dax_2026-11-12", "pay_carol_2026-11-19", "pay_dax_2026-11-26"],
+            "anchors": ["now", "pay_jordan_2026-11-12", "pay_alex_2026-11-19", "pay_jordan_2026-11-26"],
             "events": EVENTS,
             "sheetOrder": SHEET_ORDER,
             "expected": {

@@ -1,6 +1,6 @@
 # Headroom on Docker (HANDOFF section 11).
 #
-# Two ways to run it, because Dax already runs a Postgres server:
+# Two ways to run it, because the owner already runs a Postgres server:
 #
 #   1. Against that existing Postgres (the default here).
 #      Point DATABASE_URL at it in .env, then:
@@ -13,7 +13,7 @@
 #      .env.example ships with.
 #
 # The app port is published only on APP_BIND_ADDRESS (127.0.0.1 by default, or
-# the Tailscale IP), so this is not exposed to the internet unless Dax chooses
+# the Tailscale IP), so this is not exposed to the internet unless the owner chooses
 # to put a reverse proxy in front of it. Postgres is never published.
 
 name: headroom

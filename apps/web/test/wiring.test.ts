@@ -10,7 +10,7 @@
  *     so the only way to correct one was SQL. Nothing failed, because nothing
  *     asserted that a mutation hook is reachable by a person.
  *
- *  2. An amount typed as $186 arrived as $18,600, because the two sides
+ *  2. An amount typed as $147 arrived as $14,700, because the two sides
  *     disagreed about the wire format. `wire.test.ts` covers that one now.
  *
  * So these are source-level checks rather than behaviour tests. They are cheap

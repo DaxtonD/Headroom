@@ -31,7 +31,8 @@ const goalCreate = z
     name: z.string().trim().min(1, "Give this goal a name.").max(120),
     /**
      * Null means "no target": save towards it and stop when it is enough.
-     * Dax, 2026-11-08: trips never have a set date or a set cost. Absent and
+     * Asked and answered, 2026-11-08: trips never have a set date or a set
+     * cost. Absent and
      * explicitly null mean the same thing here, so a client can clear a target
      * by sending null.
      */

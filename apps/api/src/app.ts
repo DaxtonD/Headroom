@@ -153,7 +153,7 @@ export async function buildApp({ env, db, changeStream }: BuildAppOptions): Prom
     parseOptions: {},
   });
 
-  // Registered but off by default, so Carol refreshing the dashboard many
+  // Registered but off by default, so refreshing the dashboard many
   // times a day is never throttled. Login is protected by `loginThrottle`
   // instead, which counts only FAILED attempts: a plain request limiter would
   // also count successful sign-ins and could lock a real user out.

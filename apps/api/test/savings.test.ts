@@ -45,8 +45,8 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  daxId = seeded.dax.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  daxId = seeded.jordan.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 const headers = () => ({ cookie, "idempotency-key": randomUUID() });
@@ -144,7 +144,7 @@ describe("GET /api/savings: the account", () => {
     const body = await get().then((response) => response.json());
     expect(body.balanceCents).toBe("438215");
     expect(body.accounts[0].cents).toBe("438215");
-    expect(body.accounts[0].enteredBy.name).toBe("Carol");
+    expect(body.accounts[0].enteredBy.name).toBe("Alex");
   });
 
   it("keeps the savings balance out of the money available to spend", async () => {
@@ -538,7 +538,7 @@ describe("GET /api/savings: the mortgage panel", () => {
     expect(body.mortgage.plan.payoffDate).toBe("2027-08-13");
     expect(body.mortgage.plan.paymentCount).toBe(42);
     expect(body.mortgage.plan.totalInterestCents).toBe("83121");
-    expect(body.mortgage.follows).toBe("Dax");
+    expect(body.mortgage.follows).toBe("Jordan");
   });
 
   it("anchors the payments on the payday plus the offset, not on the payday", async () => {

@@ -31,8 +31,8 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  carolId = seeded.carol.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  carolId = seeded.alex.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 const headers = () => ({ cookie, "idempotency-key": randomUUID() });
@@ -81,7 +81,7 @@ describe("GET /api/budget", () => {
 
     // Line items are multiplied by twelve...
     expect(body.fixed.yearlyCents).toBe("4980000");
-    // ...but the yearly income is Carol's stated figure, which is NOT the
+    // ...but the yearly income is the household's stated figure, NOT the
     // monthly one times twelve (section 14 q2).
     expect(body.income.netYearlyCents).toBe("10850000");
     // Fixed 415000 and variable 152000 a month, so 6,804,000 a year, against
@@ -300,7 +300,7 @@ describe("GET /api/goals-overview", () => {
   });
 
   it("accepts a goal with no target at all", async () => {
-    // The trip case. Dax, 2026-11-08: "Trips never have a set date or set
+    // The trip case. Asked, 2026-11-08: "Trips never have a set date or set
     // cost." Nothing to be a fraction of, so no remaining and no percentage -
     // and null rather than "0", because they mean different things.
     const created = await harness.app.inject({
@@ -484,14 +484,14 @@ describe("GET /api/goals-overview", () => {
   });
 
   it("keeps banked hours per person, in hours and never in money", async () => {
-    const dax = await harness.db.prisma.user.findFirstOrThrow({
-      where: { householdId, email: "dax@example.test" },
+    const jordan = await harness.db.prisma.user.findFirstOrThrow({
+      where: { householdId, email: "jordan@example.test" },
     });
 
     for (const entry of [
       { userId: carolId, hours: "7.5" },
       { userId: carolId, hours: "0.25" },
-      { userId: dax.id, hours: "4" },
+      { userId: jordan.id, hours: "4" },
     ]) {
       const response = await harness.app.inject({
         method: "POST",
@@ -508,8 +508,8 @@ describe("GET /api/goals-overview", () => {
 
     expect(body.bankedHours.total).toBe("11.75");
 
-    const carol = body.bankedHours.perPerson.find((p: { initial: string }) => p.initial === "C");
-    expect(carol.hours).toBe("7.75");
+    const alex = body.bankedHours.perPerson.find((p: { initial: string }) => p.initial === "C");
+    expect(alex.hours).toBe("7.75");
     const daxHours = body.bankedHours.perPerson.find((p: { initial: string }) => p.initial === "D");
     expect(daxHours.hours).toBe("4.00");
   });

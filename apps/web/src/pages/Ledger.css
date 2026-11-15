@@ -3,7 +3,7 @@
  *
  * One scroll, so the only real layout decisions are: the balance has to be the
  * first thing the eye lands on, and the running balance has to line up down
- * the right-hand edge. Carol reads that column the way she reads it in the
+ * the right-hand edge. That column is read the way it is read in the
  * spreadsheet, and a column that does not align is a column nobody scans.
  */
 .ledger {

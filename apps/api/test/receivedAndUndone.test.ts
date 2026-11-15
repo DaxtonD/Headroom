@@ -48,8 +48,8 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  memberId = seeded.carol.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  memberId = seeded.alex.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 function post(url: string, payload: unknown) {
@@ -198,7 +198,8 @@ describe("marking a cheque as received", () => {
 
 describe("ticking a row as dealt with", () => {
   /*
-   * What "mark as paid" means now, decided with Dax after he found that it
+   * What "mark as paid" means now, decided with the household after they
+   * found that it
    * moved the balance: a tick for the two of them and nothing else.
    *
    *   "I actually didn't realize that marking a bill paid actually moved the
@@ -233,7 +234,7 @@ describe("ticking a row as dealt with", () => {
       name: "Power",
       kind: "bill",
       section: "fixed",
-      defaultCents: "18600",
+      defaultCents: "14700",
       withdrawal: "auto",
       schedule: { type: "monthly", day: soon.getUTCDate() },
     });
@@ -275,7 +276,7 @@ describe("ticking a row as dealt with", () => {
     expect(found?.paid).toBe(true);
     // Who ticked it, because on the other phone the question is "did you
     // already pay this?".
-    expect(found?.paidBy?.name).toBe("Carol");
+    expect(found?.paidBy?.name).toBe("Alex");
   });
 
   it("can be untapped", async () => {
@@ -310,7 +311,7 @@ describe("ticking a row as dealt with", () => {
   });
 
   it("does not carry over to the next cycle", async () => {
-    // What Dax asked for, and it holds by construction: each cycle is its own
+    // What was asked for, and it holds by construction: each cycle is its own
     // row, so ticking one says nothing about the next.
     await addPayday();
     const target = await bill();

@@ -17,9 +17,9 @@ import {
 } from "../src/recurrence.js";
 import type { PaySchedule } from "../src/types.js";
 
-const DAX: PaySchedule = { id: "dax", ownerId: "dax", anchorDate: "2026-11-12", defaultCents: 175_000n };
-const CAROL: PaySchedule = { id: "carol", ownerId: "carol", anchorDate: "2026-11-19", defaultCents: 180_000n };
-const SCHEDULES = [DAX, CAROL];
+const JORDAN: PaySchedule = { id: "jordan", ownerId: "jordan", anchorDate: "2026-11-12", defaultCents: 175_000n };
+const ALEX: PaySchedule = { id: "alex", ownerId: "alex", anchorDate: "2026-11-19", defaultCents: 180_000n };
+const SCHEDULES = [JORDAN, ALEX];
 
 function template(overrides: Partial<TemplateSpec> & Pick<TemplateSpec, "id" | "schedule">): TemplateSpec {
   return {
@@ -136,7 +136,7 @@ describe("relative_to_pay", () => {
     id: "mortgage",
     name: "Mortgage",
     defaultCents: 98_765n,
-    schedule: { type: "relative_to_pay", payScheduleId: "dax", offsetDays: 1 },
+    schedule: { type: "relative_to_pay", payScheduleId: "jordan", offsetDays: 1 },
   });
 
   it("comes out the day after each of that person's paydays", () => {
@@ -147,7 +147,7 @@ describe("relative_to_pay", () => {
       to: "2026-12-31",
     });
 
-    // Dax's paydays are Nov 12, Nov 26, Dec 10, Dec 24.
+    // Jordan's paydays are Nov 12, Nov 26, Dec 10, Dec 24.
     expect(generated.map((occurrence) => occurrence.date)).toEqual([
       "2026-11-13",
       "2026-11-27",
@@ -200,11 +200,11 @@ describe("relative_to_pay", () => {
 describe("biweekly paycheques", () => {
   it("lands on every payday, as money coming in", () => {
     const pay = template({
-      id: "dax-pay",
-      name: "Dax's pay",
+      id: "jordan-pay",
+      name: "Jordan's pay",
       kind: "paycheque",
       defaultCents: 175_000n,
-      schedule: { type: "biweekly", payScheduleId: "dax" },
+      schedule: { type: "biweekly", payScheduleId: "jordan" },
     });
 
     const generated = generateOccurrences({
@@ -221,10 +221,10 @@ describe("biweekly paycheques", () => {
 
   it("produces three cheques in a long month with no special handling", () => {
     const pay = template({
-      id: "dax-pay",
+      id: "jordan-pay",
       kind: "paycheque",
       defaultCents: 175_000n,
-      schedule: { type: "biweekly", payScheduleId: "dax" },
+      schedule: { type: "biweekly", payScheduleId: "jordan" },
     });
 
     const generated = generateOccurrences({
@@ -258,7 +258,7 @@ describe("flexible bills", () => {
     });
 
     expect(generated.map((occurrence) => occurrence.periodKey)).toEqual(["2026-11", "2026-12", "2027-01"]);
-    // November's first payday in the window is Dax's, on the 12th.
+    // November's first payday in the window is Jordan's, on the 12th.
     expect(generated[0]?.anchorPaydayDate).toBe("2026-11-12");
     // Flexible items carry no date of their own.
     expect(generated.every((occurrence) => occurrence.date === undefined)).toBe(true);
@@ -454,8 +454,8 @@ describe("running it twice", () => {
   const templates: TemplateSpec[] = [
     template({ id: "insurance", schedule: { type: "monthly", day: 17 } }),
     template({ id: "fees", schedule: { type: "monthly_last" } }),
-    template({ id: "mortgage", schedule: { type: "relative_to_pay", payScheduleId: "dax", offsetDays: 1 } }),
-    template({ id: "dax-pay", kind: "paycheque", schedule: { type: "biweekly", payScheduleId: "dax" } }),
+    template({ id: "mortgage", schedule: { type: "relative_to_pay", payScheduleId: "jordan", offsetDays: 1 } }),
+    template({ id: "jordan-pay", kind: "paycheque", schedule: { type: "biweekly", payScheduleId: "jordan" } }),
     template({ id: "power", schedule: { type: "flexible", frequency: "monthly" } }),
     template({ id: "savings", kind: "transfer", schedule: { type: "flexible", frequency: "per_pay_period" } }),
   ];
@@ -579,10 +579,10 @@ describe("biweekly", () => {
   it("still follows a payday when told to, unchanged", () => {
     const pay = template({
       id: "dax_pay",
-      name: "Dax's pay",
+      name: "Jordan's pay",
       kind: "paycheque",
       defaultCents: 175_000n,
-      schedule: { type: "biweekly", payScheduleId: "dax" },
+      schedule: { type: "biweekly", payScheduleId: "jordan" },
     });
 
     const generated = generateOccurrences({
@@ -643,7 +643,7 @@ describe("biweekly", () => {
         to: "2026-11-30",
       });
 
-    expect(run({ type: "biweekly", payScheduleId: "dax", anchorDate: "2026-11-06" })).toThrow(
+    expect(run({ type: "biweekly", payScheduleId: "jordan", anchorDate: "2026-11-06" })).toThrow(
       /exactly one/,
     );
     expect(run({ type: "biweekly" })).toThrow(/exactly one/);

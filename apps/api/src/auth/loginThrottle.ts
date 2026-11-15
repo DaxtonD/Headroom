@@ -6,7 +6,7 @@
  * success clears the record.
  *
  * That distinction matters for a household app. A plain request limiter would
- * also count successful sign-ins, so Carol adding the app to a second phone,
+ * also count successful sign-ins, so adding the app to a second phone,
  * or signing in on a flaky connection, could lock herself out of her own
  * finances. Counting only failures still stops password guessing, which is the
  * thing worth stopping.
@@ -81,7 +81,7 @@ export class LoginThrottle {
     this.failures.delete(key);
   }
 
-  /** Test helper, and a way to let Dax clear a lockout if it ever bites. */
+  /** Test helper, and a way to clear a lockout if it ever bites. */
   reset(): void {
     this.failures.clear();
   }

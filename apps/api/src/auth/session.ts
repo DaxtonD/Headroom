@@ -5,7 +5,7 @@
  * lives in the `session` table. That way a session can be revoked server-side,
  * and the cookie never contains a claim worth forging.
  *
- * Long-lived on purpose (90 days by default): Carol opens the app several
+ * Long-lived on purpose (90 days by default): the app is opened several
  * times a day and should not meet a login screen each time.
  */
 import { randomUUID } from "node:crypto";

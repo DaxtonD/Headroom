@@ -3,8 +3,8 @@
  *
  * After each commit the API sends a Postgres `NOTIFY`, and this relays it to
  * every open client over Server-Sent Events. Clients then invalidate the
- * matching query and refetch. So when Carol verifies a bill on her phone,
- * Dax's phone updates without him doing anything.
+ * matching query and refetch. So when one person verifies a bill on their
+ * phone, the other's phone updates without them doing anything.
  *
  * Two deliberate choices:
  *

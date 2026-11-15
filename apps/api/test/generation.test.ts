@@ -32,9 +32,9 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  carolId = seeded.carol.id;
-  daxId = seeded.dax.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  carolId = seeded.alex.id;
+  daxId = seeded.jordan.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 /** Pay schedules far enough ahead that the window always contains paydays. */
@@ -47,14 +47,14 @@ async function seedSchedules() {
   const anchorCarol = new Date(anchorDax);
   anchorCarol.setUTCDate(anchorCarol.getUTCDate() + 7);
 
-  const dax = await harness.db.prisma.paySchedule.create({
+  const jordan = await harness.db.prisma.paySchedule.create({
     data: { userId: daxId, anchorDate: anchorDax, defaultCents: 175_000n },
   });
-  const carol = await harness.db.prisma.paySchedule.create({
+  const alex = await harness.db.prisma.paySchedule.create({
     data: { userId: carolId, anchorDate: anchorCarol, defaultCents: 180_000n },
   });
 
-  return { dax, carol };
+  return { jordan, alex };
 }
 
 /**
@@ -316,17 +316,17 @@ describe("a biweekly expense", () => {
   });
 
   it("still works anchored on a payday instead", async () => {
-    const { dax } = await seedSchedules();
+    const { jordan } = await seedSchedules();
 
     const response = await createBiweekly({
-      name: "Follows Dax",
-      schedule: { type: "biweekly", payScheduleId: dax.id },
+      name: "Follows Jordan",
+      schedule: { type: "biweekly", payScheduleId: jordan.id },
     });
     expect(response.statusCode).toBe(201);
     await generate();
 
     const rows = await harness.db.prisma.occurrence.findMany({
-      where: { name: "Follows Dax", deletedAt: null },
+      where: { name: "Follows Jordan", deletedAt: null },
       select: { cents: true },
     });
     expect(rows.length).toBeGreaterThan(0);
@@ -334,10 +334,10 @@ describe("a biweekly expense", () => {
   });
 
   it("refuses both anchors at once, and neither", async () => {
-    const { dax } = await seedSchedules();
+    const { jordan } = await seedSchedules();
 
     const both = await createBiweekly({
-      schedule: { type: "biweekly", payScheduleId: dax.id, anchorDate: "2026-11-06" },
+      schedule: { type: "biweekly", payScheduleId: jordan.id, anchorDate: "2026-11-06" },
     });
     const neither = await createBiweekly({ schedule: { type: "biweekly" } });
 
@@ -443,12 +443,12 @@ describe("POST /api/templates/generate", () => {
       data: [
         {
           householdId,
-          name: "Dax's pay",
+          name: "Jordan's pay",
           kind: "paycheque",
           defaultCents: 175_000n,
           withdrawal: "auto",
           scheduleType: "biweekly",
-          scheduleJson: { type: "biweekly", payScheduleId: schedules.dax.id },
+          scheduleJson: { type: "biweekly", payScheduleId: schedules.jordan.id },
         },
         {
           householdId,
@@ -457,7 +457,7 @@ describe("POST /api/templates/generate", () => {
           defaultCents: 98_765n,
           withdrawal: "auto",
           scheduleType: "relative_to_pay",
-          scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 1 },
+          scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 1 },
         },
         {
           householdId,
@@ -481,7 +481,7 @@ describe("POST /api/templates/generate", () => {
       select: { name: true, kind: true, withdrawal: true, date: true, periodKey: true, cents: true },
     });
 
-    expect(occurrences.some((row) => row.name === "Dax's pay" && row.kind === "paycheque")).toBe(true);
+    expect(occurrences.some((row) => row.name === "Jordan's pay" && row.kind === "paycheque")).toBe(true);
     expect(occurrences.some((row) => row.name === "Mortgage" && row.withdrawal === "auto")).toBe(true);
 
     // The flexible bill is undated and hangs off a cheque.
@@ -491,7 +491,7 @@ describe("POST /api/templates/generate", () => {
 
     // Bills leave the account; paycheques arrive.
     expect(occurrences.find((row) => row.name === "Mortgage")?.cents).toBe(-98_765n);
-    expect(occurrences.find((row) => row.name === "Dax's pay")?.cents).toBe(175_000n);
+    expect(occurrences.find((row) => row.name === "Jordan's pay")?.cents).toBe(175_000n);
   });
 
   it("anchors a flexible bill to a real paycheque row", async () => {
@@ -501,12 +501,12 @@ describe("POST /api/templates/generate", () => {
       data: [
         {
           householdId,
-          name: "Dax's pay",
+          name: "Jordan's pay",
           kind: "paycheque",
           defaultCents: 175_000n,
           withdrawal: "auto",
           scheduleType: "biweekly",
-          scheduleJson: { type: "biweekly", payScheduleId: schedules.dax.id },
+          scheduleJson: { type: "biweekly", payScheduleId: schedules.jordan.id },
         },
         {
           householdId,
@@ -541,7 +541,7 @@ describe("POST /api/templates/generate", () => {
         defaultCents: 98_765n,
         withdrawal: "auto",
         scheduleType: "relative_to_pay",
-        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 1 },
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 1 },
       },
     });
 
@@ -565,7 +565,7 @@ describe("POST /api/templates/generate", () => {
         defaultCents: 98_765n,
         withdrawal: "auto",
         scheduleType: "relative_to_pay",
-        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 1 },
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 1 },
       },
     });
 
@@ -576,7 +576,7 @@ describe("POST /api/templates/generate", () => {
       orderBy: { date: "asc" },
     });
 
-    // Carol types the real amount and verifies it.
+    // Alex types the real amount and verifies it.
     const patched = await harness.app.inject({
       method: "PATCH",
       url: `/api/occurrences/${occurrence.id}`,
@@ -606,7 +606,7 @@ describe("POST /api/templates/generate", () => {
         defaultCents: 98_765n,
         withdrawal: "auto",
         scheduleType: "relative_to_pay",
-        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 1 },
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 1 },
       },
     });
 
@@ -650,12 +650,12 @@ describe("POST /api/templates/generate", () => {
     await harness.db.prisma.template.create({
       data: {
         householdId,
-        name: "Dax's pay",
+        name: "Jordan's pay",
         kind: "paycheque",
         defaultCents: 175_000n,
         withdrawal: "auto",
         scheduleType: "biweekly",
-        scheduleJson: { type: "biweekly", payScheduleId: schedules.dax.id },
+        scheduleJson: { type: "biweekly", payScheduleId: schedules.jordan.id },
       },
     });
 
@@ -685,12 +685,12 @@ describe("POST /api/templates/generate", () => {
     await harness.db.prisma.template.create({
       data: {
         householdId,
-        name: "Dax's pay",
+        name: "Jordan's pay",
         kind: "paycheque",
         defaultCents: 175_000n,
         withdrawal: "auto",
         scheduleType: "biweekly",
-        scheduleJson: { type: "biweekly", payScheduleId: schedules.dax.id },
+        scheduleJson: { type: "biweekly", payScheduleId: schedules.jordan.id },
       },
     });
 
@@ -714,7 +714,7 @@ describe("POST /api/templates/generate", () => {
         defaultCents: 98_765n,
         withdrawal: "auto",
         scheduleType: "relative_to_pay",
-        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 1 },
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 1 },
       },
     });
 
@@ -749,21 +749,21 @@ describe("POST /api/templates/generate", () => {
       data: [
         {
           householdId,
-          name: "Dax's pay",
+          name: "Jordan's pay",
           kind: "paycheque",
           defaultCents: 175_000n,
           withdrawal: "auto",
           scheduleType: "biweekly",
-          scheduleJson: { type: "biweekly", payScheduleId: schedules.dax.id },
+          scheduleJson: { type: "biweekly", payScheduleId: schedules.jordan.id },
         },
         {
           householdId,
-          name: "Carol's pay",
+          name: "Alex's pay",
           kind: "paycheque",
           defaultCents: 180_000n,
           withdrawal: "auto",
           scheduleType: "biweekly",
-          scheduleJson: { type: "biweekly", payScheduleId: schedules.carol.id },
+          scheduleJson: { type: "biweekly", payScheduleId: schedules.alex.id },
         },
         {
           householdId,
@@ -772,7 +772,7 @@ describe("POST /api/templates/generate", () => {
           defaultCents: 98_765n,
           withdrawal: "auto",
           scheduleType: "relative_to_pay",
-          scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 1 },
+          scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 1 },
         },
       ],
     });
@@ -815,7 +815,7 @@ describe("PATCH /api/templates/:id", () => {
         defaultCents: 98_765n,
         withdrawal: "auto",
         scheduleType: "relative_to_pay",
-        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 1 },
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 1 },
       },
     });
 
@@ -893,10 +893,10 @@ describe("PATCH /api/templates/:id", () => {
         householdId,
         name: "Power",
         kind: "bill",
-        defaultCents: 18_600n,
+        defaultCents: 14_700n,
         withdrawal: "auto",
         scheduleType: "relative_to_pay",
-        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 2 },
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 2 },
       },
     });
 
@@ -949,7 +949,7 @@ describe("PATCH /api/templates/:id", () => {
         defaultCents: 4_500n,
         withdrawal: "auto",
         scheduleType: "relative_to_pay",
-        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 3 },
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 3 },
       },
     });
 
@@ -1020,7 +1020,7 @@ describe("PATCH /api/templates/:id", () => {
         defaultCents: 98_765n,
         withdrawal: "auto",
         scheduleType: "relative_to_pay",
-        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.dax.id, offsetDays: 1 },
+        scheduleJson: { type: "relative_to_pay", payScheduleId: schedules.jordan.id, offsetDays: 1 },
       },
     });
 

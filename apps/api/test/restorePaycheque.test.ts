@@ -44,9 +44,9 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  firstMemberId = seeded.carol.id;
-  secondMemberId = seeded.dax.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  firstMemberId = seeded.alex.id;
+  secondMemberId = seeded.jordan.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 function post(url: string, payload: unknown) {
@@ -129,7 +129,7 @@ describe("the checklist item", () => {
 
     // With two people entered, "a payday has no paycheque" left no way to
     // tell which one was wrong.
-    expect(body.paydaysWithoutPay).toEqual([{ scheduleId: schedule.id, person: "Carol" }]);
+    expect(body.paydaysWithoutPay).toEqual([{ scheduleId: schedule.id, person: "Alex" }]);
   });
 
   it("names each payday separately", async () => {
@@ -141,7 +141,7 @@ describe("the checklist item", () => {
     }
 
     const body = await setup();
-    expect(body.paydaysWithoutPay.map((payday) => payday.person).sort()).toEqual(["Carol", "Dax"]);
+    expect(body.paydaysWithoutPay.map((payday) => payday.person).sort()).toEqual(["Alex", "Jordan"]);
   });
 
   it("is satisfied by a deposit landing on the paydays", async () => {
@@ -333,7 +333,7 @@ describe("putting the pay back", () => {
     await post(`/api/pay-schedules/${first.id}/paycheque`, {});
 
     const body = await setup();
-    expect(body.paydaysWithoutPay.map((payday) => payday.person)).toEqual(["Dax"]);
+    expect(body.paydaysWithoutPay.map((payday) => payday.person)).toEqual(["Jordan"]);
   });
 
   it("refuses a payday from another household", async () => {

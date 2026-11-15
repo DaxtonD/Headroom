@@ -13,7 +13,7 @@
  *    anchored to somebody's payday silently moves every payment if that pay
  *    anchor is ever corrected.
  *  - **Following a payday.** A fixed number of days after one. This household's
- *    really does behave this way - the day after Dax's pay - and that one-day
+ *    really does behave this way - the day after a pay - and that one-day
  *    offset is why a month can hold three cheques but two mortgage payments.
  *
  * The balance date is the fiddly one either way: the valid dates are the

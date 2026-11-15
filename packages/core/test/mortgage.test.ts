@@ -192,7 +192,7 @@ describe("the prepayment allowance", () => {
   ];
 
   it("counts only the current calendar year", () => {
-    // Dax confirmed the privilege runs on the calendar year, so the 2025 lump
+    // The privilege runs on the calendar year, confirmed, so the 2025 lump
     // sum is outside this window even though it is not the oldest.
     const room = lumpSumRoom({
       today: "2026-06-01",

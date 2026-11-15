@@ -8,14 +8,14 @@
   },
   "users": [
     {
-      "key": "dax",
-      "name": "Dax",
-      "initial": "D"
+      "key": "jordan",
+      "name": "Jordan",
+      "initial": "J"
     },
     {
-      "key": "carol",
-      "name": "Carol",
-      "initial": "C"
+      "key": "alex",
+      "name": "Alex",
+      "initial": "A"
     }
   ],
   "account": {
@@ -25,14 +25,14 @@
   },
   "paySchedules": [
     {
-      "user": "dax",
+      "user": "jordan",
       "cadence": "biweekly",
       "weekday": "Thu",
       "anchorDate": "2026-11-12",
       "defaultCents": 200000
     },
     {
-      "user": "carol",
+      "user": "alex",
       "cadence": "biweekly",
       "weekday": "Thu",
       "anchorDate": "2026-11-19",
@@ -46,9 +46,9 @@
     "horizonEnd": "2026-12-02",
     "anchors": [
       "now",
-      "pay_dax_2026-11-12",
-      "pay_carol_2026-11-19",
-      "pay_dax_2026-11-26"
+      "pay_jordan_2026-11-12",
+      "pay_alex_2026-11-19",
+      "pay_jordan_2026-11-26"
     ],
     "events": [
       {
@@ -59,8 +59,8 @@
         "cents": -15000
       },
       {
-        "id": "pay_dax_2026-11-12",
-        "name": "Dax's pay",
+        "id": "pay_jordan_2026-11-12",
+        "name": "Jordan's pay",
         "type": "paycheque",
         "date": "2026-11-12",
         "cents": 200000
@@ -69,14 +69,14 @@
         "id": "energy",
         "name": "Energy",
         "type": "flexible",
-        "anchor": "pay_dax_2026-11-12",
+        "anchor": "pay_jordan_2026-11-12",
         "cents": -9000
       },
       {
-        "id": "sasktel_refund",
+        "id": "phone_refund",
         "name": "Phone refund",
         "type": "one_off",
-        "anchor": "pay_dax_2026-11-12",
+        "anchor": "pay_jordan_2026-11-12",
         "cents": 4000
       },
       {
@@ -94,8 +94,8 @@
         "cents": -20000
       },
       {
-        "id": "pay_carol_2026-11-19",
-        "name": "Carol's pay",
+        "id": "pay_alex_2026-11-19",
+        "name": "Alex's pay",
         "type": "paycheque",
         "date": "2026-11-19",
         "cents": 185000
@@ -104,14 +104,14 @@
         "id": "water",
         "name": "Water",
         "type": "flexible",
-        "anchor": "pay_carol_2026-11-19",
+        "anchor": "pay_alex_2026-11-19",
         "cents": -16000
       },
       {
         "id": "savings",
         "name": "Savings transfer",
         "type": "flexible",
-        "anchor": "pay_carol_2026-11-19",
+        "anchor": "pay_alex_2026-11-19",
         "cents": -120000
       },
       {
@@ -122,7 +122,7 @@
         "cents": 10000
       },
       {
-        "id": "tacoma_license",
+        "id": "truck_license",
         "name": "Truck license",
         "type": "auto",
         "date": "2026-11-21",
@@ -136,8 +136,8 @@
         "cents": -17000
       },
       {
-        "id": "pay_dax_2026-11-26",
-        "name": "Dax's pay",
+        "id": "pay_jordan_2026-11-26",
+        "name": "Jordan's pay",
         "type": "paycheque",
         "date": "2026-11-26",
         "cents": 200000
@@ -164,7 +164,7 @@
         "cents": -30000
       },
       {
-        "id": "rav_license",
+        "id": "car_license",
         "name": "Car license",
         "type": "auto",
         "date": "2026-12-02",
@@ -173,22 +173,22 @@
     ],
     "sheetOrder": [
       "power",
-      "pay_dax_2026-11-12",
+      "pay_jordan_2026-11-12",
       "mortgage_1",
       "rogers_wireless",
       "home_insurance",
-      "sasktel_refund",
+      "phone_refund",
       "energy",
-      "pay_carol_2026-11-19",
+      "pay_alex_2026-11-19",
       "water",
       "child_tax_credit",
-      "tacoma_license",
+      "truck_license",
       "savings",
-      "pay_dax_2026-11-26",
+      "pay_jordan_2026-11-26",
       "mortgage_2",
       "bank_fees",
       "property_tax",
-      "rav_license"
+      "car_license"
     ],
     "expected": {
       "runningCents": [
@@ -267,7 +267,7 @@
         "_about": "Move the savings transfer to the following paycheque. End total and lowest point unchanged.",
         "move": {
           "id": "savings",
-          "toAnchor": "pay_dax_2026-11-26"
+          "toAnchor": "pay_jordan_2026-11-26"
         },
         "leftThisCycleCents": 193800,
         "lowestCents": 26000
@@ -290,7 +290,7 @@
         "monthlyCents": 200000
       },
       {
-        "name": "Netflix",
+        "name": "Streaming",
         "monthlyCents": 2000
       },
       {
@@ -298,11 +298,11 @@
         "monthlyCents": 30000
       },
       {
-        "name": "Spotify",
+        "name": "Music",
         "monthlyCents": 1500
       },
       {
-        "name": "Rogers tv",
+        "name": "TV & internet",
         "monthlyCents": 10000
       },
       {
@@ -318,7 +318,7 @@
         "monthlyCents": 16000
       },
       {
-        "name": "RAV Insurance",
+        "name": "Car insurance",
         "monthlyCents": 10000
       },
       {
@@ -412,11 +412,11 @@
         "cents": 15000000
       },
       {
-        "name": "RAV4",
+        "name": "Car",
         "cents": 1200000
       },
       {
-        "name": "Tacoma",
+        "name": "Truck",
         "cents": 800000
       }
     ],

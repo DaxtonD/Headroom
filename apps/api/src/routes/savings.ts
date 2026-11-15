@@ -1,7 +1,7 @@
 /**
  * Savings, earmarks and the mortgage payoff.
  *
- * This screen's reason for existing came straight from Dax: the household is
+ * This screen's reason for existing came straight from the household: it is
  * actively trying to save as much as possible in order to pay the mortgage off
  * early with annual lump sums. The spreadsheet cannot say what a given lump sum
  * buys, so the decision about how much to save was being made without the one
@@ -268,7 +268,8 @@ interface MortgagePanelInput {
  *
  *  - `plan` applies every lump sum on record, including ones only intended.
  *  - `withoutFurther` applies only the ones actually paid, which is the "if we
- *    stop here" line. Dax's own workbook had an intention for next year with no
+ *    stop here" line. The original workbook had an intention for next year
+ *    with no
  *    way to see what dropping it would cost; this is that number.
  *
  * Lump sums dated on or before the balance date are left out of both: they are

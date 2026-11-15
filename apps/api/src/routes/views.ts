@@ -59,7 +59,7 @@ function serialiseTimelineRow(row: TimelineRow, decoration: OccurrenceDecoration
 const HOME_AUTO_COUNT = 4;
 
 export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
-  /** Home: the one screen Carol opens several times a day. */
+  /** Home: the one screen opened several times a day. */
   app.get("/dashboard", async (request, reply) => {
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");

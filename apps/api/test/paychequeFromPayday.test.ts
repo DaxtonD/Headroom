@@ -38,9 +38,9 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  firstMemberId = seeded.carol.id;
-  secondMemberId = seeded.dax.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  firstMemberId = seeded.alex.id;
+  secondMemberId = seeded.jordan.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 /** The next Thursday, as a plain date. Any weekday would do; biweekly does the rest. */

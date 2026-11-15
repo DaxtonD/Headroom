@@ -11,10 +11,10 @@
  * the classic version of this mistake and it understates the yearly cost by
  * two whole payments.
  *
- * A derived figure can still be overridden. Carol's sheet states the mortgage
- * at $2,509.00 a month where the derivation gives $2,510.89, and her number is
- * the spec (HANDOFF section 1); the override exists so her figure wins without
- * anyone having to re-enter the bill itself.
+ * A derived figure can still be overridden. The household's sheet states a
+ * monthly mortgage figure a couple of dollars away from what the derivation
+ * gives, and the stated one is the spec (HANDOFF section 1); the override
+ * exists so it wins without anyone having to re-enter the bill itself.
  */
 import { divRoundHalfUp, type Cents } from "./money.js";
 

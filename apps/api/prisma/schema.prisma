@@ -101,8 +101,8 @@ enum RateCompounding {
   semi_annual
 }
 
-/// The window a prepayment allowance resets on. Dax confirmed the household's
-/// runs on the calendar year, which is why a lump sum can land in late
+/// The window a prepayment allowance resets on. Confirmed that this
+/// household's runs on the calendar year, which is why a lump sum can land in late
 /// December just before the reset.
 enum PrivilegePeriod {
   calendar_year
@@ -152,9 +152,9 @@ model Household {
 
   weekendWithdrawalRule WeekendWithdrawalRule @default(as_scheduled)
 
-  /// Carol's stated net income for the Budget screen (HANDOFF section 4.3).
-  /// The yearly figure is NOT monthly x 12 - hers do not agree exactly, and
-  /// section 14 q2 says to use her numbers as given rather than reconcile
+  /// The household's stated net income for the Budget screen (HANDOFF 4.3).
+  /// The yearly figure is NOT monthly x 12 - the two do not agree exactly, and
+  /// section 14 q2 says to use the stated numbers as given rather than reconcile
   /// them. So both are stored, and both are editable.
   netMonthlyIncomeCents BigInt @default(0)
   netYearlyIncomeCents  BigInt @default(0)
@@ -327,9 +327,9 @@ model Template {
   /// account.
   ///
   /// The savings line was modelled as a bill, which made it look like an
-  /// obligation competing with everything else. Dax, 2026-11-08: "The savings
-  /// of $1300 is a goal we set. She decides when and how much we allocate." So
-  /// `defaultCents` is the household's per-period TARGET, and each occurrence's
+  /// obligation competing with everything else. Answered 2026-11-08: the
+  /// regular transfer "is a goal we set", and the household decides when and
+  /// how much to allocate. So `defaultCents` is the per-period TARGET, and each occurrence's
   /// own amount is what was actually decided that period. Target against actual
   /// then falls out of machinery that already exists, including the
   /// estimate-versus-verified badge, which reads as proposed versus decided.
@@ -342,8 +342,8 @@ model Template {
   ///
   /// Headroom works out what a recurring bill costs per month from its
   /// cadence (biweekly is 26 times a year, so 26/12 of the amount). Where
-  /// Carol's sheet states a different figure, hers is the spec, and this
-  /// holds it. Null means use the derived figure.
+  /// the household's sheet states a different figure, that is the spec, and
+  /// this holds it. Null means use the derived figure.
   monthlyBudgetOverrideCents BigInt?
 
   /// False archives it: generation stops and it leaves the budget, but every
@@ -484,8 +484,8 @@ model Goal {
 
   /// What it is being saved towards, when there is a figure at all.
   ///
-  /// Null is the normal case for a trip. Dax, 2026-11-08: "Trips never have a
-  /// set date or set cost. We simply save for it and book a good deal when it
+  /// Null is the normal case for a trip. Answered 2026-11-08: "Trips never
+  /// have a set date or set cost. We simply save for it and book a good deal when it
   /// comes about." An app that demands a target makes someone invent one and
   /// then reports progress against a number nobody believes.
   targetCents BigInt?

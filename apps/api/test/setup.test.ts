@@ -36,9 +36,9 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  carolId = seeded.carol.id;
-  daxId = seeded.dax.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  carolId = seeded.alex.id;
+  daxId = seeded.jordan.id;
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 const headers = () => ({ cookie, "idempotency-key": randomUUID() });
@@ -75,7 +75,7 @@ describe("GET /api/setup", () => {
 
     expect(body.missing).not.toContain("pay_schedule");
     expect(body.paySchedules).toHaveLength(1);
-    expect(body.paySchedules[0].user.name).toBe("Dax");
+    expect(body.paySchedules[0].user.name).toBe("Jordan");
   });
 
   it("carries the household settings with their version, so they can be edited", async () => {
@@ -604,7 +604,7 @@ describe("an expense entered once as a recurring bill", () => {
       url: "/api/templates",
       headers: headers(),
       payload: {
-        name: "Dax's pay",
+        name: "Jordan's pay",
         kind: "paycheque",
         defaultCents: "175000",
         withdrawal: "auto",

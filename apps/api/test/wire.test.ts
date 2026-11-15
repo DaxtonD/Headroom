@@ -1,9 +1,9 @@
 /**
  * The money wire format, and the seam it protects.
  *
- * These exist because of a real bug. The web app turned a typed "186" into
- * 18600 cents and sent `"-18600"`; the API read `"-18600"` as a DOLLAR amount
- * and stored $18,600. Both sides had passing tests, because neither crossed
+ * These exist because of a real bug. The web app turned a typed "147" into
+ * 14700 cents and sent `"-14700"`; the API read `"-14700"` as a DOLLAR amount
+ * and stored $14,700. Both sides had passing tests, because neither crossed
  * the seam between them: the API's tests sent dollar strings and the client's
  * sent cents.
  *
@@ -23,39 +23,39 @@ import { createHarness, migrateTestDatabase, seedHousehold, signIn, type Harness
 
 describe("wireCents", () => {
   it("reads integer cents from a string", () => {
-    expect(wireCents.parse("18600")).toBe(18_600n);
-    expect(wireCents.parse("-18600")).toBe(-18_600n);
+    expect(wireCents.parse("14700")).toBe(14_700n);
+    expect(wireCents.parse("-14700")).toBe(-14_700n);
     expect(wireCents.parse("0")).toBe(0n);
     expect(wireCents.parse(" 100 ")).toBe(100n);
   });
 
   it("accepts a safe integer number too", () => {
-    expect(wireCents.parse(18_600)).toBe(18_600n);
-    expect(wireCents.parse(-18_600)).toBe(-18_600n);
+    expect(wireCents.parse(14_700)).toBe(14_700n);
+    expect(wireCents.parse(-14_700)).toBe(-14_700n);
   });
 
   it("REFUSES a decimal rather than guessing the convention", () => {
-    // This is the whole point. "186.00" could mean 186 cents or 18600 cents,
-    // and guessing is what caused the $18,600 bug.
-    expect(() => wireCents.parse("186.00")).toThrow();
-    expect(() => wireCents.parse("186.5")).toThrow();
-    expect(() => wireCents.parse(186.5)).toThrow();
+    // This is the whole point. "147.00" could mean 147 cents or 14700 cents,
+    // and guessing is what caused the $14,700 bug.
+    expect(() => wireCents.parse("147.00")).toThrow();
+    expect(() => wireCents.parse("147.5")).toThrow();
+    expect(() => wireCents.parse(147.5)).toThrow();
     expect(() => wireCents.parse("1,860")).toThrow();
   });
 
   it("says what the right format is when it refuses", () => {
-    const result = wireCents.safeParse("186.00");
+    const result = wireCents.safeParse("147.00");
     expect(result.success).toBe(false);
     if (!result.success) {
       expect(result.error.issues[0]?.message).toMatch(/integer cents/);
-      expect(result.error.issues[0]?.message).toMatch(/18600/);
+      expect(result.error.issues[0]?.message).toMatch(/14700/);
     }
   });
 
   it("refuses anything that is not a number at all", () => {
     expect(() => wireCents.parse("")).toThrow();
     expect(() => wireCents.parse("abc")).toThrow();
-    expect(() => wireCents.parse("$186")).toThrow();
+    expect(() => wireCents.parse("$147")).toThrow();
     expect(() => wireCents.parse("1e4")).toThrow();
   });
 
@@ -94,7 +94,7 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  cookie = await signIn(harness, "carol@example.test", seeded.password);
+  cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 /**
@@ -120,8 +120,8 @@ describe("an amount typed into a bill", () => {
   }
 
   it.each([
-    ["186", "$186.00"],
-    ["186.00", "$186.00"],
+    ["147", "$147.00"],
+    ["147.00", "$147.00"],
     ["0.05", "$0.05"],
     ["1234.56", "$1,234.56"],
     ["$1,234.56", "$1,234.56"],
@@ -156,12 +156,12 @@ describe("an amount typed into a bill", () => {
       method: "PATCH",
       url: `/api/occurrences/${bill.id}`,
       headers: { cookie, "if-match": '"1"', "idempotency-key": randomUUID() },
-      payload: { cents: asTheUiWouldSend("186", true) },
+      payload: { cents: asTheUiWouldSend("147", true) },
     });
 
     const row = await harness.db.prisma.occurrence.findUniqueOrThrow({ where: { id: bill.id } });
-    // $186.00 is 18600 cents. Not 1860000.
-    expect(row.cents).toBe(-18_600n);
+    // $147.00 is 14700 cents. Not 1470000.
+    expect(row.cents).toBe(-14_700n);
   });
 
   it("refuses a decimal sent over the wire, so the old bug cannot come back", async () => {
@@ -171,7 +171,7 @@ describe("an amount typed into a bill", () => {
       method: "PATCH",
       url: `/api/occurrences/${bill.id}`,
       headers: { cookie, "if-match": '"1"', "idempotency-key": randomUUID() },
-      payload: { cents: "-186.00" },
+      payload: { cents: "-147.00" },
     });
 
     expect(response.statusCode).toBe(400);

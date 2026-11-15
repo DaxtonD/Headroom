@@ -3,10 +3,10 @@
  *
  * Every amount here is invented.
  *
- * The case that drives the design is a trip with no target: Dax's words were
- * that trips "never have a set date or set cost". An earmark therefore has to
- * work with `targetCents: null`, and reporting progress against a target
- * nobody set would be a fiction.
+ * The case that drives the design is a trip with no target. The household's
+ * words were that trips "never have a set date or set cost", so an earmark
+ * has to work with `targetCents: null`, and reporting progress against a
+ * target nobody set would be a fiction.
  */
 import { describe, expect, it } from "vitest";
 import { computeSavings, earmarkProgress, mortgageEarmark } from "../src/savings.js";

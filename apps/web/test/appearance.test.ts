@@ -175,7 +175,7 @@ describe("the choices on offer", () => {
   });
 
   it("only ever scales down from the size the app was designed at", () => {
-    // Stated by Dax: the current size is as large as anyone wants it.
+    // Stated by the household: the current size is as large as anyone wants it.
     expect(Math.max(...TEXT_SIZES.map((size) => size.scale))).toBe(1);
     expect(Math.min(...TEXT_SIZES.map((size) => size.scale))).toBeGreaterThan(0.5);
     expect(TEXT_SIZES.length).toBeGreaterThan(2);

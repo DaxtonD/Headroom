@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "Household budget web app / PWA for Dax and Carol",
+  "description": "Household budget web app / PWA for a two-person household",
   "license": "UNLICENSED",
   "packageManager": "pnpm@9.15.0",
   "engines": {

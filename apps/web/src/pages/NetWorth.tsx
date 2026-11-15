@@ -2,7 +2,8 @@
  * Net worth and retirement (HANDOFF section 7.6).
  *
  * What the household owns, what it owes, and the retirement outlook built from
- * Carol's own formula: the RRSPs plus the mortgage payment redirected for a
+ * The household's own formula: the RRSPs plus the mortgage payment
+ * redirected for a
  * fixed number of years, grown once by a flat percentage, then divided across
  * the years in retirement.
  *
@@ -390,7 +391,7 @@ function AssumptionsForm({
         <form onSubmit={(event) => void submit(event)}>
           <h2 className="sheet__title">Retirement assumptions</h2>
           <p className="sheet__intro">
-            These are Carol's figures and her method. Change any of them and the outlook
+            These are your own figures and method. Change any of them and the outlook
             recalculates.
           </p>
 

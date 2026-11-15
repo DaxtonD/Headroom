@@ -1,7 +1,7 @@
 /**
  * The monthly and yearly budget (HANDOFF section 4.3, 6.6 and 7.4).
  *
- * This is page 2 of Carol's spreadsheet. The totals and the per-line shares
+ * This is page 2 of the household's spreadsheet. The totals and the per-line shares
  * are computed by `@headroom/core`, which is golden-tested against the real
  * seed, so nothing here does arithmetic of its own.
  *
@@ -10,7 +10,7 @@
  *  - "% of Total" is each line's share of **its own section** (fixed or
  *    variable), not of income. A line that is 38% of fixed expenses is not 38%
  *    of what the household earns.
- *  - The yearly income figure is Carol's stated number, which is not exactly
+ *  - The yearly income figure is the household's stated number, not exactly
  *    the monthly figure times twelve (section 14 q2). Hers is used as given;
  *    line items are the ones multiplied by twelve.
  */
@@ -48,7 +48,8 @@ const patchBody = z
   .strict();
 
 /**
- * Income is a household setting rather than a list of lines: Carol states a
+ * Income is a household setting rather than a list of lines: the household
+ * states a
  * net monthly and a net yearly figure, and they do not agree exactly.
  */
 const incomeBody = z
@@ -132,7 +133,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
      * actually comes out.
      *
      * Biweekly is 26 times a year, so 26/12 of the amount, which is more than
-     * twice it. A stated override wins where Carol's sheet says otherwise.
+     * twice it. A stated override wins where the sheet says otherwise.
      */
     const fromBills = templates.flatMap((template) => {
       const parsedSchedule = scheduleSchema.safeParse(template.scheduleJson);
@@ -471,7 +472,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
     return reply.status(result.statusCode).send(result.body);
   });
 
-  /** Carol's stated net income, which the Budget screen treats as editable. */
+  /** The stated net income, which the Budget screen treats as editable. */
   app.put("/settings/income", async (request, reply) => {
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");

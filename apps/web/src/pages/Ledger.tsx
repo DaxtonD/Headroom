@@ -1,7 +1,7 @@
 /**
  * The ledger: Home, Upcoming and Pay plan as one scroll.
  *
- * This is Carol's column 1. Her complaint about the first version of the app
+ * This is column 1 of the spreadsheet. The complaint about the first version
  * was not that a number was wrong, it was that "the data is too spread out -
  * she can't easily see everything". Three screens each held part of one list:
  * the balance on Home, the running balance on Upcoming, the per-cheque
@@ -296,7 +296,8 @@ export function Ledger({
       )}
 
       {/*
-        Carol's "add a few extra rows": a dentist bill, or an extra amount into
+        The spreadsheet's "add a few extra rows": a dentist bill, or an extra
+        amount into
         savings because a third cheque landed.
       */}
       <div className="ledger__actions">
@@ -482,7 +483,8 @@ function PeriodGroup({
 /**
  * "today, 9:58 AM" / "yesterday, 6:12 PM" / "Nov 3".
  *
- * Relative wording for the recent past, because that is how Carol thinks about
+ * Relative wording for the recent past, because that is how the household
+ * thinks about
  * when she last typed the balance in.
  */
 function describeUpdated(at: Date): string {

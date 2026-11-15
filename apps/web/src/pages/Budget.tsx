@@ -1,5 +1,5 @@
 /**
- * Budget (HANDOFF section 7.4) — page 2 of Carol's spreadsheet.
+ * Budget (HANDOFF section 7.4) — page 2 of the household's spreadsheet.
  *
  * A Monthly/Yearly toggle, what is left after everything as the hero with a
  * stacked bar, then income, fixed expenses with share bars, and variable

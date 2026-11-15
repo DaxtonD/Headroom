@@ -43,10 +43,10 @@ describe("in chequing", () => {
       cents: 200_000n,
       snapshotCents: 200_000n,
       asOf: new Date("2026-11-13T15:00:00.000Z"),
-      enteredBy: { name: "Carol" },
+      enteredBy: { name: "Alex" },
     });
 
-    expect(working.lines[0]?.label).toContain("Carol");
+    expect(working.lines[0]?.label).toContain("Alex");
     expect(working.lines[0]?.label).toContain("Nov");
     expect(total(working)).toBe(200_000n);
     expect(addsUp(working)).toBe(true);
@@ -71,7 +71,7 @@ describe("in chequing", () => {
       cents: 181_400n,
       snapshotCents: 200_000n,
       asOf: new Date("2026-11-13T15:00:00.000Z"),
-      enteredBy: { name: "Carol" },
+      enteredBy: { name: "Alex" },
     });
 
     expect(working.lines.length).toBe(3);
@@ -137,7 +137,7 @@ describe("safe to spend now", () => {
       horizonEnd: "2026-12-24",
     });
 
-    // Dax's cushion is 0.00, which means this figure permits spending to
+    // The household cushion is 0.00, which means this figure permits spending to
     // exactly zero. The panel is the right place to make that visible.
     expect(working.notes?.join(" ")).toContain("cushion is set to nothing");
   });
@@ -196,7 +196,7 @@ describe("left this cycle", () => {
         startBalanceCents: 200_000n,
         inCents: 210_000n,
         inCount: 1,
-        outCents: 18_600n,
+        outCents: 14_700n,
         outCount: 1,
         endCents: 391_400n,
       },
