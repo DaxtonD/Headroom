@@ -3,6 +3,10 @@
 .env.*
 !.env.example
 
+# Local tool config. `.claude/settings.json` was tracked until 2026-11-15;
+# it is this machine's permission allow/deny list, not part of the app.
+.claude/
+
 # ---------------------------------------------------------------
 # Real household financial data: NEVER committed (the owner's decision,
 # 2026-11-07). These files stay local only; they arrive in
