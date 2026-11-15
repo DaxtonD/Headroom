@@ -84,7 +84,7 @@ describe("parseEnv", () => {
       "http://172.16.4.2:8484",
       "http://172.31.255.1:8484",
       "http://169.254.1.1:8484",
-      "http://daxpc.local:8484",
+      "http://deskpc.local:8484",
     ]) {
       const env = parseEnv(
         validEnv({ APP_ORIGIN: origin, COOKIE_SECURE: "false", NODE_ENV: "development" }),

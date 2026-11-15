@@ -19,7 +19,7 @@ let harness: Harness;
 let cookie: string;
 let householdId: string;
 let accountId: string;
-let carolId: string;
+let alexId: string;
 
 beforeAll(async () => {
   migrateTestDatabase();
@@ -35,7 +35,7 @@ beforeEach(async () => {
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
   accountId = seeded.account.id;
-  carolId = seeded.alex.id;
+  alexId = seeded.alex.id;
   cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
@@ -53,7 +53,7 @@ async function buildScenario() {
       accountId,
       cents: START_CENTS,
       asOf: new Date("2026-11-07T15:58:00.000Z"),
-      enteredById: carolId,
+      enteredById: alexId,
     },
   });
 
@@ -61,7 +61,7 @@ async function buildScenario() {
   await harness.db.prisma.paySchedule.createMany({
     data: [
       {
-        userId: carolId,
+        userId: alexId,
         anchorDate: new Date("2026-11-19T00:00:00.000Z"),
         defaultCents: 180_000n,
       },
@@ -78,7 +78,7 @@ async function buildScenario() {
     },
   });
 
-  const payDax = await harness.db.prisma.occurrence.create({
+  const payJordan = await harness.db.prisma.occurrence.create({
     data: {
       householdId,
       name: "Jordan's pay",
@@ -111,7 +111,7 @@ async function buildScenario() {
       cents: -9_000n,
       kind: "bill",
       withdrawal: "flexible",
-      anchorOccurrenceId: payDax.id,
+      anchorOccurrenceId: payJordan.id,
       sortIndex: 2,
     },
   });
@@ -126,7 +126,7 @@ async function buildScenario() {
       withdrawal: "auto",
       date: new Date("2026-11-13T00:00:00.000Z"),
       verifiedAt: new Date(),
-      verifiedById: carolId,
+      verifiedById: alexId,
       sortIndex: 3,
     },
   });
@@ -162,15 +162,15 @@ async function buildScenario() {
     cushionCents: 0n,
     events: [
       { id: power.id, name: "Power", cents: -12_345n, kind: "bill", placement: "flexible", anchorId: null, sortIndex: 0 },
-      { id: payDax.id, name: "Jordan's pay", cents: 175_000n, kind: "paycheque", placement: "auto", date: "2026-11-12", sortIndex: 1 },
-      { id: energy.id, name: "Energy", cents: -9_000n, kind: "bill", placement: "flexible", anchorId: payDax.id, sortIndex: 2 },
+      { id: payJordan.id, name: "Jordan's pay", cents: 175_000n, kind: "paycheque", placement: "auto", date: "2026-11-12", sortIndex: 1 },
+      { id: energy.id, name: "Energy", cents: -9_000n, kind: "bill", placement: "flexible", anchorId: payJordan.id, sortIndex: 2 },
       { id: mortgage.id, name: "Mortgage", cents: -98_765n, kind: "bill", placement: "auto", date: "2026-11-13", sortIndex: 3, verified: true },
       { id: insurance.id, name: "Home insurance", cents: -21_500n, kind: "bill", placement: "auto", date: "2026-11-17", sortIndex: 4 },
       { id: credit.id, name: "Child tax credit", cents: 10_000n, kind: "deposit", placement: "auto", date: "2026-11-20", sortIndex: 5 },
     ],
   });
 
-  return { ids: { power, payDax, energy, mortgage, insurance, credit }, expected };
+  return { ids: { power, payJordan, energy, mortgage, insurance, credit }, expected };
 }
 
 describe("GET /api/timeline", () => {
@@ -185,7 +185,7 @@ describe("GET /api/timeline", () => {
       // Anchored to "now", so before everything.
       ids.power.id,
       // Payday, then the bill hanging off it, then the other dated items.
-      ids.payDax.id,
+      ids.payJordan.id,
       ids.energy.id,
       ids.mortgage.id,
       ids.insurance.id,
@@ -559,7 +559,7 @@ describe("DELETE /api/occurrences/:id", () => {
     // The row is still there, with who removed it and when.
     const row = await harness.db.prisma.occurrence.findUniqueOrThrow({ where: { id: one.id } });
     expect(row.deletedAt).not.toBeNull();
-    expect(row.deletedById).toBe(carolId);
+    expect(row.deletedById).toBe(alexId);
 
     // And the figures move with it: the bill is no longer taken off.
     expect(BigInt(after.leftThisCycleCents)).toBe(BigInt(before.leftThisCycleCents) + 12_500n);
@@ -683,7 +683,7 @@ describe("editing changes the derived numbers immediately", () => {
       method: "PATCH",
       url: `/api/occurrences/${ids.power.id}`,
       headers: { cookie, "if-match": '"1"', "idempotency-key": randomUUID() },
-      payload: { anchorOccurrenceId: ids.payDax.id },
+      payload: { anchorOccurrenceId: ids.payJordan.id },
     });
     expect(moved.statusCode).toBe(200);
 

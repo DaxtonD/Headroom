@@ -86,7 +86,7 @@ function isPrivateNetworkHost(hostname: string): boolean {
     if (a === 169 && b === 254) return true;
     return false;
   }
-  // mDNS names, e.g. a machine advertised as "daxpc.local".
+  // mDNS names, e.g. a machine advertised as "deskpc.local".
   return hostname.endsWith(".local");
 }
 

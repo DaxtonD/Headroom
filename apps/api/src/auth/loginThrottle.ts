@@ -6,10 +6,10 @@
  * success clears the record.
  *
  * That distinction matters for a household app. A plain request limiter would
- * also count successful sign-ins, so adding the app to a second phone,
- * or signing in on a flaky connection, could lock herself out of her own
- * finances. Counting only failures still stops password guessing, which is the
- * thing worth stopping.
+ * also count successful sign-ins, so adding the app to a second phone, or
+ * signing in on a flaky connection, could lock someone out of their own
+ * finances. Counting only failures still stops password guessing, which is
+ * the thing worth stopping.
  *
  * State is in memory, which is right for a single-container deployment: a
  * restart forgets the counts, and an attacker cannot force a restart.

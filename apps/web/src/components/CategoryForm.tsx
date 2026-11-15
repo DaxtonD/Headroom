@@ -7,9 +7,8 @@
  * only ever appears on Budget.
  *
  * The yearly figure is normally twelve times the monthly one. It can be stated
- * separately because the household's sheet does exactly that for a few
- * lines, and
- * silently showing twelve times the monthly figure would contradict her.
+ * separately because the household's sheet does exactly that for a few lines,
+ * and silently showing twelve times the monthly figure would contradict it.
  */
 import { formatCents, parseCents } from "@headroom/core";
 import { useId, useState } from "react";

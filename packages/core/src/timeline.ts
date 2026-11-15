@@ -2,9 +2,9 @@
  * The timeline: "the way the bank sees it" (HANDOFF section 6.2 and 6.3).
  *
  * This is the heart of Headroom. Everything the household checks all day comes
- * out of here: the running balance on every line, the lowest point before the next
- * payday, what is safe to spend, and whether every automatic withdrawal is
- * covered.
+ * out of here: the running balance on every line, the lowest point before the
+ * next payday, what is safe to spend, and whether every automatic withdrawal
+ * is covered.
  *
  * None of it is ever stored. Facts go in the database; these numbers are
  * derived on demand (section 16.1 rule 5).

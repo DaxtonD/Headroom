@@ -16,8 +16,8 @@ import { createHarness, migrateTestDatabase, seedHousehold, signIn, type Harness
 let harness: Harness;
 let cookie: string;
 let householdId: string;
-let carolId: string;
-let daxId: string;
+let alexId: string;
+let jordanId: string;
 
 beforeAll(async () => {
   migrateTestDatabase();
@@ -32,8 +32,8 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  carolId = seeded.alex.id;
-  daxId = seeded.jordan.id;
+  alexId = seeded.alex.id;
+  jordanId = seeded.jordan.id;
   cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
@@ -42,16 +42,16 @@ async function seedSchedules() {
   const monday = new Date();
   monday.setUTCHours(0, 0, 0, 0);
   // Any Thursday works as an anchor; biweekly does the rest.
-  const anchorDax = new Date(monday);
-  anchorDax.setUTCDate(anchorDax.getUTCDate() + ((4 - anchorDax.getUTCDay() + 7) % 7));
-  const anchorCarol = new Date(anchorDax);
-  anchorCarol.setUTCDate(anchorCarol.getUTCDate() + 7);
+  const anchorJordan = new Date(monday);
+  anchorJordan.setUTCDate(anchorJordan.getUTCDate() + ((4 - anchorJordan.getUTCDay() + 7) % 7));
+  const anchorAlex = new Date(anchorJordan);
+  anchorAlex.setUTCDate(anchorAlex.getUTCDate() + 7);
 
   const jordan = await harness.db.prisma.paySchedule.create({
-    data: { userId: daxId, anchorDate: anchorDax, defaultCents: 175_000n },
+    data: { userId: jordanId, anchorDate: anchorJordan, defaultCents: 175_000n },
   });
   const alex = await harness.db.prisma.paySchedule.create({
-    data: { userId: carolId, anchorDate: anchorCarol, defaultCents: 180_000n },
+    data: { userId: alexId, anchorDate: anchorAlex, defaultCents: 180_000n },
   });
 
   return { jordan, alex };
@@ -741,7 +741,7 @@ describe("POST /api/templates/generate", () => {
         accountId: (await harness.db.prisma.account.findFirstOrThrow({ where: { householdId } })).id,
         cents: 41_000n,
         asOf: new Date(),
-        enteredById: carolId,
+        enteredById: alexId,
       },
     });
 

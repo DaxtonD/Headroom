@@ -5,8 +5,8 @@
  * was not that a number was wrong, it was that "the data is too spread out -
  * she can't easily see everything". Three screens each held part of one list:
  * the balance on Home, the running balance on Upcoming, the per-cheque
- * subtotals on Pay plan. In the spreadsheet all of that is one column she
- * scrolls, and she can see a tight week by looking at it.
+ * subtotals on Pay plan. In the spreadsheet all of that is one column to
+ * scroll, and a tight week can be seen by looking at it.
  *
  * So: the balance and what is safe to spend at the top, where they are the
  * instant answer the brief asks for, and then every event in the order the
@@ -297,8 +297,7 @@ export function Ledger({
 
       {/*
         The spreadsheet's "add a few extra rows": a dentist bill, or an extra
-        amount into
-        savings because a third cheque landed.
+        amount into savings because a third cheque landed.
       */}
       <div className="ledger__actions">
         <button
@@ -484,8 +483,7 @@ function PeriodGroup({
  * "today, 9:58 AM" / "yesterday, 6:12 PM" / "Nov 3".
  *
  * Relative wording for the recent past, because that is how the household
- * thinks about
- * when she last typed the balance in.
+ * thinks about when the balance was last typed in.
  */
 function describeUpdated(at: Date): string {
   const time = at.toLocaleTimeString("en-CA", { hour: "numeric", minute: "2-digit" });

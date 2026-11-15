@@ -1,0 +1,7 @@
+# One entry per line. `word` allows it anywhere; `path:word` only in that
+# file. Text after # is a comment. See scripts/scan_for_real_figures.py.
+
+# The owner's GitHub handle. It contains a household first name, but it is
+# the remote URL, the GHCR image name and the deployed hostname, and it is
+# public by nature. Not a leak, and not removable.
+daxtond

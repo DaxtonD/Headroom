@@ -6,8 +6,8 @@
  * expenses.
  *
  * The share bars show each line's share of **its own section**, which is what
- * her "% of Total" column means. Her two pie charts become bars here: on a
- * phone, bars are far easier to compare than slices.
+ * the spreadsheet's "% of Total" column means. Its two pie charts become bars
+ * here: on a phone, bars are far easier to compare than slices.
  */
 import { formatCents } from "@headroom/core";
 import type { Cents } from "@headroom/core";
@@ -195,7 +195,7 @@ function ExpenseSection({
               </span>
               <span className="budget__line-amount hr-amount">{formatCents(amountOf(line))}</span>
 
-              {/* Share of this section, which is what her "% of Total" means. */}
+              {/* Share of this section - the sheet's "% of Total". */}
               <span className="budget__line-share">
                 <span className="budget__share-track" aria-hidden="true">
                   <span className="budget__share-fill" style={{ width: `${line.sharePct}%` }} />

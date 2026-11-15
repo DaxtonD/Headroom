@@ -49,8 +49,7 @@ const patchBody = z
 
 /**
  * Income is a household setting rather than a list of lines: the household
- * states a
- * net monthly and a net yearly figure, and they do not agree exactly.
+ * states a net monthly and a net yearly figure, and they do not agree exactly.
  */
 const incomeBody = z
   .object({

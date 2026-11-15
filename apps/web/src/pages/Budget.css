@@ -238,7 +238,7 @@
   font-size: 0.9375rem;
 }
 
-/* ---- Desktop: full tables, as in her sheet ---- */
+/* ---- Desktop: full tables, as in the spreadsheet ---- */
 
 @media (min-width: 1024px) {
   .budget__line {

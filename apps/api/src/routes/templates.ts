@@ -3,9 +3,8 @@
  *
  * A template is the recurring fact: "the mortgage comes out the day after each
  * of someone's paydays, usually $987.65". The occurrences it produces are
- * separate
- * rows, and editing one of those never edits the template - that is a
- * deliberate, separate choice ("change for all future").
+ * separate rows, and editing one of those never edits the template - that is
+ * a deliberate, separate choice ("change for all future").
  */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";

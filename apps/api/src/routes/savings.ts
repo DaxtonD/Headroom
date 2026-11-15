@@ -269,8 +269,7 @@ interface MortgagePanelInput {
  *  - `plan` applies every lump sum on record, including ones only intended.
  *  - `withoutFurther` applies only the ones actually paid, which is the "if we
  *    stop here" line. The original workbook had an intention for next year
- *    with no
- *    way to see what dropping it would cost; this is that number.
+ *    with no way to see what dropping it would cost; this is that number.
  *
  * Lump sums dated on or before the balance date are left out of both: they are
  * already inside the balance that was typed in, and applying them again would

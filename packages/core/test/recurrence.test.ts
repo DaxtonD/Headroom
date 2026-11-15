@@ -578,7 +578,7 @@ describe("biweekly", () => {
 
   it("still follows a payday when told to, unchanged", () => {
     const pay = template({
-      id: "dax_pay",
+      id: "jordan_pay",
       name: "Jordan's pay",
       kind: "paycheque",
       defaultCents: 175_000n,

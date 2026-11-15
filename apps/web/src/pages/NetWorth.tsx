@@ -2,14 +2,13 @@
  * Net worth and retirement (HANDOFF section 7.6).
  *
  * What the household owns, what it owes, and the retirement outlook built from
- * The household's own formula: the RRSPs plus the mortgage payment
- * redirected for a
- * fixed number of years, grown once by a flat percentage, then divided across
- * the years in retirement.
+ * the household's own formula: the RRSPs plus the mortgage payment redirected
+ * for a fixed number of years, grown once by a flat percentage, then divided
+ * across the years in retirement.
  *
  * Every assumption is editable (section 4.5 — "All retirement inputs must be
  * editable settings, not constants"), including an option to compound the
- * growth yearly instead, which is off by default because her sheet applies it
+ * growth yearly instead, which is off by default because the sheet applies it
  * once (section 14 q3).
  */
 import { formatCents, parseCents } from "@headroom/core";

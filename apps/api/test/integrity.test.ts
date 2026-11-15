@@ -31,7 +31,7 @@ let harness: Harness;
 let alexCookie: string;
 let jordanCookie: string;
 let householdId: string;
-let carolId: string;
+let alexId: string;
 let accountId: string;
 
 beforeAll(async () => {
@@ -47,7 +47,7 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  carolId = seeded.alex.id;
+  alexId = seeded.alex.id;
   accountId = seeded.account.id;
   alexCookie = await signIn(harness, "alex@example.test", seeded.password);
   jordanCookie = await signIn(harness, "jordan@example.test", seeded.password);
@@ -62,7 +62,7 @@ async function makeBill(cents: bigint, name = "Power") {
       cents,
       kind: "bill",
       withdrawal: "flexible",
-      createdById: carolId,
+      createdById: alexId,
     },
   });
 }
@@ -181,7 +181,7 @@ describe("two people change DIFFERENT fields from the same version", () => {
         kind: "paycheque",
         withdrawal: "auto",
         date: new Date("2026-11-26T00:00:00.000Z"),
-        createdById: carolId,
+        createdById: alexId,
       },
     });
     const bill = await makeBill(-12_345n);
@@ -449,7 +449,7 @@ describe("balance snapshots", () => {
 
     const cleared = await harness.db.prisma.occurrence.findUniqueOrThrow({ where: { id: bill.id } });
     expect(cleared.clearedAt).not.toBeNull();
-    expect(cleared.clearedById).toBe(carolId);
+    expect(cleared.clearedById).toBe(alexId);
   });
 
   it("cannot be updated or deleted; a correction is a new row", async () => {
@@ -519,7 +519,7 @@ describe("balance snapshots", () => {
         accountId,
         cents: 41_000n,
         asOf: new Date(Date.now() - 1000),
-        enteredById: carolId,
+        enteredById: alexId,
       },
     });
 

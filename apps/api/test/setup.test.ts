@@ -20,8 +20,8 @@ import { createHarness, migrateTestDatabase, seedHousehold, signIn, type Harness
 let harness: Harness;
 let cookie: string;
 let householdId: string;
-let carolId: string;
-let daxId: string;
+let alexId: string;
+let jordanId: string;
 
 beforeAll(async () => {
   migrateTestDatabase();
@@ -36,8 +36,8 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  carolId = seeded.alex.id;
-  daxId = seeded.jordan.id;
+  alexId = seeded.alex.id;
+  jordanId = seeded.jordan.id;
   cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
@@ -66,7 +66,7 @@ describe("GET /api/setup", () => {
       method: "POST",
       url: "/api/pay-schedules",
       headers: headers(),
-      payload: { userId: daxId, anchorDate: "2026-11-12", defaultCents: "175000" },
+      payload: { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "175000" },
     });
 
     const body = await harness.app
@@ -100,7 +100,7 @@ describe("pay schedules", () => {
       method: "POST",
       url: "/api/pay-schedules",
       headers: headers(),
-      payload: { userId: daxId, anchorDate: "2026-11-12", defaultCents: "175000" },
+      payload: { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "175000" },
     });
 
     expect(response.statusCode).toBe(201);
@@ -120,13 +120,13 @@ describe("pay schedules", () => {
       method: "POST",
       url: "/api/pay-schedules",
       headers: headers(),
-      payload: { userId: daxId, anchorDate: "2026-11-12", defaultCents: "175000" },
+      payload: { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "175000" },
     });
     await harness.app.inject({
       method: "POST",
       url: "/api/pay-schedules",
       headers: headers(),
-      payload: { userId: carolId, anchorDate: "2026-11-19", defaultCents: "180000" },
+      payload: { userId: alexId, anchorDate: "2026-11-19", defaultCents: "180000" },
     });
 
     const after = await harness.app
@@ -159,7 +159,7 @@ describe("pay schedules", () => {
   });
 
   it("allows only one schedule per person", async () => {
-    const payload = { userId: daxId, anchorDate: "2026-11-12", defaultCents: "175000" };
+    const payload = { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "175000" };
 
     expect(
       (await harness.app.inject({ method: "POST", url: "/api/pay-schedules", headers: headers(), payload }))
@@ -184,7 +184,7 @@ describe("pay schedules", () => {
         method: "POST",
         url: "/api/pay-schedules",
         headers: headers(),
-        payload: { userId: daxId, anchorDate: "2026-11-12", defaultCents: "175000" },
+        payload: { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "175000" },
       })
       .then((response) => response.json());
 
@@ -206,7 +206,7 @@ describe("pay schedules", () => {
       method: "POST",
       url: "/api/pay-schedules",
       headers: headers(),
-      payload: { userId: daxId, anchorDate: "2026-02-30", defaultCents: "175000" },
+      payload: { userId: jordanId, anchorDate: "2026-02-30", defaultCents: "175000" },
     });
 
     expect(response.statusCode).toBe(400);
@@ -240,7 +240,7 @@ describe("pay schedules", () => {
         method: "POST",
         url: "/api/pay-schedules",
         headers: headers(),
-        payload: { userId: daxId, anchorDate: "2026-11-12", defaultCents: "175000" },
+        payload: { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "175000" },
       })
       .then((response) => response.json());
 
@@ -263,7 +263,7 @@ describe("household settings", () => {
   it("changes the cushion, and that changes what is safe to spend", async () => {
     const account = await harness.db.prisma.account.findFirstOrThrow({ where: { householdId } });
     await harness.db.prisma.balanceSnapshot.create({
-      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: carolId },
+      data: { accountId: account.id, cents: 41_000n, asOf: new Date(), enteredById: alexId },
     });
 
     const before = await harness.app
@@ -294,7 +294,7 @@ describe("household settings", () => {
       method: "POST",
       url: "/api/pay-schedules",
       headers: headers(),
-      payload: { userId: daxId, anchorDate: "2026-11-12", defaultCents: "175000" },
+      payload: { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "175000" },
     });
 
     const before = await harness.app
@@ -353,7 +353,7 @@ describe("an expense entered once as a recurring bill", () => {
         method: "POST",
         url: "/api/pay-schedules",
         headers: headers(),
-        payload: { userId: daxId, anchorDate: "2026-11-12", defaultCents: "175000" },
+        payload: { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "175000" },
       })
       .then((response) => response.json());
 
@@ -595,7 +595,7 @@ describe("an expense entered once as a recurring bill", () => {
         method: "POST",
         url: "/api/pay-schedules",
         headers: headers(),
-        payload: { userId: daxId, anchorDate: "2026-11-12", defaultCents: "175000" },
+        payload: { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "175000" },
       })
       .then((response) => response.json());
 
@@ -632,7 +632,7 @@ describe("the setup routes need a session", () => {
           method: "POST",
           url: "/api/pay-schedules",
           headers: { "idempotency-key": randomUUID() },
-          payload: { userId: daxId, anchorDate: "2026-11-12", defaultCents: "1" },
+          payload: { userId: jordanId, anchorDate: "2026-11-12", defaultCents: "1" },
         })
       ).statusCode,
     ).toBe(401);

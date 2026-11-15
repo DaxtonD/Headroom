@@ -79,8 +79,8 @@ export async function registerYearRoutes(app: FastifyInstance): Promise<void> {
 
     const series: BiweeklySeries[] = schedules.map((schedule) => ({
       id: schedule.id,
-      // "Alex's pay" rather than "Pay", because the whole point of the screen is
-      // noticing that it is HIS third cheque and not hers.
+      // "Alex's pay" rather than "Pay", because the whole point of the screen
+      // is noticing WHOSE third cheque it is.
       name: `${schedule.user.name}'s pay`,
       anchorDate: toPlainDate(schedule.anchorDate),
       cents: schedule.defaultCents,

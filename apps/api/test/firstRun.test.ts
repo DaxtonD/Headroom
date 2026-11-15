@@ -24,8 +24,8 @@ import { createHarness, migrateTestDatabase, signIn, type Harness } from "./help
 let harness: Harness;
 let cookie: string;
 let householdId: string;
-let daxId: string;
-let carolId: string;
+let jordanId: string;
+let alexId: string;
 
 const PASSWORD = "correct-horse-battery-staple";
 
@@ -75,8 +75,8 @@ beforeEach(async () => {
       colorBg: "#E3E7F7",
     },
   });
-  daxId = first.id;
-  carolId = second.id;
+  jordanId = first.id;
+  alexId = second.id;
 
   cookie = await signIn(harness, "alex@example.test", PASSWORD);
 });
@@ -173,8 +173,8 @@ describe("the whole first-run path, in order", () => {
 
     /* ---- 2. Paydays, one each ---- */
     for (const [userId, anchorDate, cents] of [
-      [daxId, "2026-11-05", "212500"],
-      [carolId, "2026-11-12", "177500"],
+      [jordanId, "2026-11-05", "212500"],
+      [alexId, "2026-11-12", "177500"],
     ] as const) {
       const response = await post("/api/pay-schedules", {
         userId,
@@ -339,7 +339,7 @@ describe("the whole first-run path, in order", () => {
     // The pay arrives before the bill comes out, whatever today is: that is
     // the point of the test, so it cannot be left to the calendar.
     await post("/api/pay-schedules", {
-      userId: daxId,
+      userId: jordanId,
       anchorDate: dateIn(2),
       defaultCents: "212500",
     });
@@ -369,7 +369,7 @@ describe("the whole first-run path, in order", () => {
     // it - otherwise archiving a cheque silently breaks every figure.
     await post("/api/accounts", { name: "Chequing", kind: "chequing" });
     await post("/api/pay-schedules", {
-      userId: daxId,
+      userId: jordanId,
       anchorDate: "2026-11-12",
       defaultCents: "212500",
     });
@@ -392,7 +392,7 @@ describe("the whole first-run path, in order", () => {
     // dated the 13th onwards, and the running balance has to count it.
     await post("/api/accounts", { name: "Chequing", kind: "chequing" });
     await post("/api/pay-schedules", {
-      userId: daxId,
+      userId: jordanId,
       anchorDate: dateIn(2),
       defaultCents: "212500",
     });

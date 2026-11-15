@@ -52,6 +52,10 @@ SKIP = {
     "seed/household-nov-2026.json",
     "scripts/scan_for_real_figures.py",
     "scripts/scan_allowlist.txt",
+    # Generated, and full of base64 integrity hashes. Nobody writes a name or
+    # an amount in here by hand, and a long random token will sooner or later
+    # contain any three letters you care to look for - two of them did.
+    "pnpm-lock.yaml",
 }
 
 
@@ -103,10 +107,15 @@ def collect_names(seed: dict) -> set[str]:
     The household's first names, read from the seed rather than written here.
 
     Same reasoning as the amounts: naming them in a committed file would be the
-    leak this script exists to prevent. Matched on a word boundary and case
-    insensitively, so the owner's GitHub handle - which is public, appears in
-    the remote URL and the image name, and merely starts with one of them - is
-    not a hit.
+    leak this script exists to prevent.
+
+    The match is the whole word a name sits inside, not the name alone, and is
+    reported that way. A first pass matched `\bname\b`, which found `carol` but
+    walked straight past `carolId`, `anchorDax` and `daxpc` - a rename had left
+    eight such identifiers behind and the word-boundary search saw none of
+    them. The owner's GitHub handle legitimately contains a name, is the remote
+    URL and the image name, and is public; it goes in scan_allowlist.txt rather
+    than being carved out of the pattern, so the exception is written down.
     """
     out: set[str] = set()
     for user in seed.get("users", []):
@@ -151,7 +160,12 @@ def main() -> int:
     needles = needles_from(amounts)
     names = collect_names(seed)
     name_pattern = (
-        re.compile(r"\b(" + "|".join(sorted(re.escape(n) for n in names)) + r")\b", re.IGNORECASE)
+        re.compile(
+            r"[A-Za-z0-9_]*(?:"
+            + "|".join(sorted(re.escape(n) for n in names))
+            + r")[A-Za-z0-9_]*",
+            re.IGNORECASE,
+        )
         if names
         else None
     )
@@ -191,12 +205,12 @@ def main() -> int:
                 hits.append(f"  {relative}:{line_number}  {run}\n      {line.strip()[:110]}")
 
             if name_pattern is not None:
-                for found in name_pattern.findall(line):
-                    key = f"{relative}:{found.lower()}"
-                    if key in allowed or found.lower() in allowed:
+                for match in name_pattern.finditer(line):
+                    word = match.group(0).lower()
+                    if f"{relative}:{word}" in allowed or word in allowed:
                         continue
                     name_hits.append(
-                        f"  {relative}:{line_number}  (first name)\n      {line.strip()[:110]}"
+                        f"  {relative}:{line_number}  {match.group(0)}\n      {line.strip()[:110]}"
                     )
 
     print(

@@ -450,6 +450,118 @@ the owner in the running app rather than being caught here, which is the one tha
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
 
+## Banked hours could not be taken out (2026-11-15, reported from use)
+
+Reported plainly: "I can add hours but I don't have a way to deduct hours."
+
+Deduction had been there all along. `sumBankedHours` handles a leading minus
+and is tested with one, the route's schema accepts `-?\d+`, and the form even
+carried a hint saying "To take hours back out, enter a negative figure such as
+−7.5". Every layer was correct and the feature was still impossible to use,
+for two reasons:
+
+1. **The field asks for `inputMode="decimal"`.** That keyboard is digits and a
+   decimal separator. There is no minus key on it. On a phone - which is where
+   this app is used - the instruction could not be followed.
+2. **The hint's example used a real minus sign (U+2212)** while the parser
+   accepted only an ASCII hyphen, so following the instruction *exactly*, by
+   pasting what it showed, was rejected with "Hours look like 7.5 or 7.50."
+
+A hint describing an unreachable keystroke is worse than no hint: it reads as
+a working feature and sends someone looking for their own mistake.
+
+**Fixed by removing the sign from the input entirely.** The sheet now asks
+"Adding or taking out?" as two radio buttons and the field holds a plain
+positive magnitude; the sign is applied on the way out. Nothing depends on a
+character the keyboard does not offer. U+2212 is accepted as a minus anyway,
+in the engine and in the route, because an hours value can still arrive pasted.
+
+Two gaps found in the same place, both fixed:
+
+- **The screen showed only per-person totals**, never the entries behind them.
+  A total was something to trust or not, with no way to see what made it up.
+  There is now a "Show entries" list with the figure, whose it is, the day and
+  the note.
+- **There was no DELETE for an hours entry** - POST only, so a mistyped figure
+  was permanent and the only remedy was an offsetting entry, leaving two wrong
+  rows explaining each other. `DELETE /api/banked-hours/:id` is now there, soft
+  and versioned like every other delete, with a Remove button on each entry.
+  An entry of zero hours is also refused rather than stored as noise.
+
+## Work expenses: two questions answered, one of them with a fix (2026-11-15)
+
+Asked: does the list grow forever, and does it affect the budget numbers?
+
+**It grew forever, and nothing was handling it.** `goals-overview` ran
+`reimbursement.findMany` with no limit and no status filter, and the screen
+rendered everything it returned. Paid-back expenses stayed in the list
+permanently, mixed in with outstanding ones, and every load of Savings fetched
+the lot. On a screen checked several times a day that gets longer every month
+and never shorter.
+
+Now: **everything still owed is sent in full** - that is the part with
+something to do about it, and it is never capped - and paid-back ones are sent
+newest first, capped at 20, with a count. The screen shows outstanding by
+default and puts the history behind "Show paid back (N)", saying so when it is
+showing a slice. The cap is deliberately on the payload as well as the screen:
+hiding rows in the UI while still sending all of them would have fixed the
+scrolling and left the growth.
+
+**The totals are still computed over every row**, which is the part that would
+quietly go wrong if the cap were applied before the arithmetic. There is a test
+for exactly that, and it fails if the summary is computed from the capped list.
+
+**Confirmed: work expenses touch no budget figure.** `computeReimbursements`
+only summarises. The word "reimbursement" appears nowhere in `timeline.ts`, the
+dashboard route or the budget route - only in its own summary function and its
+own CRUD route. So it has no effect on the running balance, safe to spend, left
+this cycle, or the Budget screen's totals. Pure tracking, as intended.
+
+One consequence of that, surfaced and left alone **by decision**: marking an
+expense "Paid back" does not put the money anywhere. The purchase went on the
+Visa, which is not modelled, and no deposit is created for the refund. Offered
+three ways to change that; the answer was to keep it pure tracking, because two
+paths to the same money is how a ledger starts disagreeing with the bank. The
+refund reaches the balance the way every other real movement does - by being
+typed in.
+
+## The names cleanup missed every name inside an identifier (2026-11-15)
+
+Found while answering the two questions above: a `<name>Id` variable was still
+sitting in the API tests, and the gate added the same morning had not noticed.
+
+The first pass matched `\bname\b`. A word-boundary search finds a name standing
+alone and walks straight past every one glued to something else - `<name>Id`,
+`anchor<Name>`, `pay<Name>`, `<name>_pay`, `<name>Hours`, and a `<name>pc`
+inside an example hostname. Eight identifiers, 66 occurrences. The gate
+inherited the same blind spot, so it reported clean on a tree that was not.
+
+(Spelling those eight out here would have put them straight back, which the
+gate said when this entry was first drafted. It was right.)
+
+**The gate now matches the whole word a name sits inside** and reports it that
+way. The owner's GitHub handle legitimately contains a name and is the remote
+URL, the image name and the deployed hostname; it goes in
+`scripts/scan_allowlist.txt` rather than being carved out of the pattern, so
+the one exception is written down in one place instead of being invisible in a
+regex. Mutation-checked against all three shapes the old pattern missed.
+
+`pnpm-lock.yaml` is now skipped: it is generated, and a long enough run of
+base64 will eventually contain any three letters you care to look for. Two of
+its integrity hashes did.
+
+Two other things the first pass got wrong, both fixed here:
+
+- **Test users kept the initials of their old names** - `Alex` with initial
+  "C", `Jordan` with initial "D" - and two tests looked people up by those
+  initials, so they passed while asserting something that no longer made sense.
+- **Nine comment blocks were left ragged or broken** by substituting a short
+  role for a longer name mid-sentence. Two were actually ungrammatical: "The
+  ask was that it plainly:" and "built from The household's own formula". The
+  rest had orphan lines. Rewrapped, and the gendered pronouns the names used to
+  carry are now neutral. Three remain, inside verbatim quotations, where
+  rewriting the words would misrepresent what was said.
+
 ## The names cleanup, and the three real figures it turned up (2026-11-15)
 
 Agreed on 2026-11-09 and left as future work: take both household first names out of a public

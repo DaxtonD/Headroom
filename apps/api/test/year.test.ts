@@ -21,8 +21,8 @@ import { createHarness, migrateTestDatabase, seedHousehold, signIn, type Harness
 let harness: Harness;
 let cookie: string;
 let householdId: string;
-let daxId: string;
-let carolId: string;
+let jordanId: string;
+let alexId: string;
 
 beforeAll(async () => {
   migrateTestDatabase();
@@ -37,18 +37,18 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  daxId = seeded.jordan.id;
-  carolId = seeded.alex.id;
+  jordanId = seeded.jordan.id;
+  alexId = seeded.alex.id;
   cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
 /** Two people paid every fortnight, a week apart. */
 async function seedPay() {
   const jordan = await harness.db.prisma.paySchedule.create({
-    data: { userId: daxId, anchorDate: new Date("2026-01-08T00:00:00Z"), defaultCents: 200_000n },
+    data: { userId: jordanId, anchorDate: new Date("2026-01-08T00:00:00Z"), defaultCents: 200_000n },
   });
   const alex = await harness.db.prisma.paySchedule.create({
-    data: { userId: carolId, anchorDate: new Date("2026-01-15T00:00:00Z"), defaultCents: 180_000n },
+    data: { userId: alexId, anchorDate: new Date("2026-01-15T00:00:00Z"), defaultCents: 180_000n },
   });
   return { jordan, alex };
 }

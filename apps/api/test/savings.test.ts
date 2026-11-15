@@ -30,7 +30,7 @@ import {
 let harness: Harness;
 let cookie: string;
 let householdId: string;
-let daxId: string;
+let jordanId: string;
 
 beforeAll(async () => {
   migrateTestDatabase();
@@ -45,7 +45,7 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  daxId = seeded.jordan.id;
+  jordanId = seeded.jordan.id;
   cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
@@ -63,7 +63,7 @@ const PAY_ANCHOR = "2026-01-01";
 async function seedPaySchedule() {
   return harness.db.prisma.paySchedule.create({
     data: {
-      userId: daxId,
+      userId: jordanId,
       anchorDate: new Date(`${PAY_ANCHOR}T00:00:00Z`),
       defaultCents: 200_000n,
     },
