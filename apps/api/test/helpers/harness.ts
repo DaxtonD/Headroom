@@ -183,7 +183,7 @@ export async function seedHousehold(harness: Harness) {
     data: {
       householdId: household.id,
       name: "Alex",
-      initial: "C",
+      initial: "A",
       email: "alex@example.test",
       passwordHash,
       colorFg: "#2A3C8F",
@@ -195,7 +195,7 @@ export async function seedHousehold(harness: Harness) {
     data: {
       householdId: household.id,
       name: "Jordan",
-      initial: "D",
+      initial: "J",
       email: "jordan@example.test",
       passwordHash,
       colorFg: "#7A4A00",

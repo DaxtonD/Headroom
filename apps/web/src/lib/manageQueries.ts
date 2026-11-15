@@ -533,6 +533,25 @@ export function useCreateBankedHours() {
   });
 }
 
+/**
+ * Remove an hours entry.
+ *
+ * Correcting a mistake used to mean adding an offsetting entry, which left two
+ * wrong rows explaining each other rather than one right one.
+ */
+export function useDeleteBankedHours() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { id: string; version: number }) =>
+      api.delete(`/api/banked-hours/${input.id}`, {
+        baseVersion: input.version,
+        idempotencyKey: newIdempotencyKey(),
+      }),
+    onSuccess: () => invalidateEverything(queryClient),
+  });
+}
+
 export function useCreateAccount() {
   const queryClient = useQueryClient();
 

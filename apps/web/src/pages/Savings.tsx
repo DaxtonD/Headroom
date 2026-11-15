@@ -2,8 +2,7 @@
  * Savings (replaces the Goals screen).
  *
  * The household has one real savings account and is saving as hard as it can
- * in order to pay the mortgage off early with annual lump sums. The ask was
- * that it
+ * in order to pay the mortgage off early with annual lump sums. That was put
  * plainly: they would not need a budget at all if they were not trying to save
  * this much. So this screen answers three questions in that order:
  *
@@ -35,10 +34,11 @@ import { ReimbursementForm } from "../components/ReimbursementForm.js";
 import { SavingsBalanceSheet } from "../components/SavingsBalanceSheet.js";
 import { useLaunchedBy } from "../lib/launchAction.js";
 import { ApiError, OfflineError } from "../lib/api.js";
-import { useCreateAccount, useSetup } from "../lib/manageQueries.js";
+import { useCreateAccount, useDeleteBankedHours, useSetup } from "../lib/manageQueries.js";
 import {
   useAdvanceReimbursement,
   useGoalsOverview,
+  type BankedHoursEntry,
   type GoalProgress,
   type Reimbursement,
 } from "../lib/plannerQueries.js";
@@ -60,11 +60,20 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const overview = useGoalsOverview();
   const setup = useSetup();
   const advance = useAdvanceReimbursement();
+  const removeHours = useDeleteBankedHours();
   const createAccount = useCreateAccount();
   const [error, setError] = useState<string | null>(null);
   // Opened from the screen, or by the manifest shortcut straight to it.
   const openedByShortcut = useLaunchedBy("update-savings");
   const [open, setOpen] = useState<Open>(openedByShortcut ? { kind: "balance" } : null);
+  /*
+   * Both default to closed. The work-expense history and the hours entries are
+   * both append-only lists that only grow, and neither is what the screen is
+   * for: the question on arriving is "what is still owed", not "what happened
+   * in March".
+   */
+  const [showPaid, setShowPaid] = useState(false);
+  const [showEntries, setShowEntries] = useState(false);
 
   if (savings.isPending) {
     return (
@@ -95,6 +104,16 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
     } catch (caught) {
       if (caught instanceof OfflineError || caught instanceof ApiError) setError(caught.message);
       else setError(`Could not update ${item.purchase}. Please try again.`);
+    }
+  };
+
+  const dropHours = async (entry: BankedHoursEntry): Promise<void> => {
+    setError(null);
+    try {
+      await removeHours.mutateAsync({ id: entry.id, version: entry.version });
+    } catch (caught) {
+      if (caught instanceof OfflineError || caught instanceof ApiError) setError(caught.message);
+      else setError("Could not remove those hours. Please try again.");
     }
   };
 
@@ -315,11 +334,11 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             still owed to you.
           </p>
 
-          {overview.data.reimbursements.items.length === 0 ? (
+          {overview.data.reimbursements.outstanding.length === 0 ? (
             <p className="savings__empty">Nothing outstanding.</p>
           ) : (
             <ul className="savings__list">
-              {overview.data.reimbursements.items.map((item) => (
+              {overview.data.reimbursements.outstanding.map((item) => (
                 <li className="savings__expense" key={item.id}>
                   <div className="savings__expense-main">
                     <span className="savings__expense-name">{item.purchase}</span>
@@ -328,22 +347,59 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
                   <Amount cents={item.cents} />
 
-                  {item.status !== "paid" ? (
-                    <button
-                      className="savings__advance"
-                      type="button"
-                      disabled={!canEdit || advance.isPending}
-                      onClick={() =>
-                        void move(item, item.status === "bought" ? "submitted" : "paid")
-                      }
-                    >
-                      {item.status === "bought" ? "Mark submitted" : "Mark paid back"}
-                    </button>
-                  ) : null}
+                  <button
+                    className="savings__advance"
+                    type="button"
+                    disabled={!canEdit || advance.isPending}
+                    onClick={() => void move(item, item.status === "bought" ? "submitted" : "paid")}
+                  >
+                    {item.status === "bought" ? "Mark submitted" : "Mark paid back"}
+                  </button>
                 </li>
               ))}
             </ul>
           )}
+
+          {/*
+            Paid back, behind a button. Keeping the history is the point, but
+            it is the part with nothing left to do about it, and every month
+            adds to it.
+          */}
+          {overview.data.reimbursements.paidCount > 0 ? (
+            <>
+              <button
+                className="savings__more"
+                type="button"
+                aria-expanded={showPaid}
+                onClick={() => setShowPaid((shown) => !shown)}
+              >
+                {showPaid
+                  ? "Hide paid back"
+                  : `Show paid back (${String(overview.data.reimbursements.paidCount)})`}
+              </button>
+
+              {showPaid ? (
+                <ul className="savings__list">
+                  {overview.data.reimbursements.paid.map((item) => (
+                    <li className="savings__expense savings__expense--done" key={item.id}>
+                      <div className="savings__expense-main">
+                        <span className="savings__expense-name">{item.purchase}</span>
+                        <StatusTrail status={item.status} />
+                      </div>
+                      <Amount cents={item.cents} />
+                    </li>
+                  ))}
+                  {overview.data.reimbursements.paidCount >
+                  overview.data.reimbursements.paid.length ? (
+                    <li className="savings__empty">
+                      Showing the {overview.data.reimbursements.paid.length} most recent of{" "}
+                      {overview.data.reimbursements.paidCount}. The totals below count them all.
+                    </li>
+                  ) : null}
+                </ul>
+              ) : null}
+            </>
+          ) : null}
 
           <dl className="savings__totals">
             <div>
@@ -399,6 +455,56 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             ))}
           </ul>
 
+          {/*
+            The entries behind the totals. Without them a total could only be
+            trusted or not: there was no way to see what made it up, and no
+            way to take a wrong one back out.
+          */}
+          {overview.data.bankedHours.entries.length > 0 ? (
+            <>
+              <button
+                className="savings__more"
+                type="button"
+                aria-expanded={showEntries}
+                onClick={() => setShowEntries((shown) => !shown)}
+              >
+                {showEntries
+                  ? "Hide entries"
+                  : `Show entries (${String(overview.data.bankedHours.entries.length)})`}
+              </button>
+
+              {showEntries ? (
+                <ul className="savings__list">
+                  {overview.data.bankedHours.entries.map((entry) => (
+                    <li className="savings__entry" key={entry.id}>
+                      <div className="savings__entry-main">
+                        {/* Hours, never money. */}
+                        <span className="savings__entry-hours hr-amount">{entry.hours} h</span>
+                        <span className="savings__entry-who">
+                          {overview.data.bankedHours.perPerson.find(
+                            (person) => person.id === entry.userId,
+                          )?.name ?? "Someone"}
+                        </span>
+                      </div>
+                      <span className="savings__entry-note">
+                        {formatDayMonthAndYear(entry.createdOn)}
+                        {entry.note === null ? "" : ` \u00b7 ${entry.note}`}
+                      </span>
+                      <button
+                        className="savings__advance"
+                        type="button"
+                        disabled={!canEdit || removeHours.isPending}
+                        onClick={() => void dropHours(entry)}
+                      >
+                        Remove
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+            </>
+          ) : null}
+
           <div className="savings__actions">
             <button
               className="hr-button"
@@ -406,7 +512,7 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
               disabled={!canEdit}
               onClick={() => setOpen({ kind: "hours" })}
             >
-              Add banked hours
+              Add or take out hours
             </button>
           </div>
         </section>

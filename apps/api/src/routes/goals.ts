@@ -15,16 +15,30 @@ import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } fro
 import { runIdempotent } from "../lib/idempotency.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
 import { wireCents } from "../lib/wire.js";
-import { fromPlainDate, toPlainDate } from "../lib/timelineService.js";
-import type { Goal, Reimbursement } from "../generated/prisma/client.js";
+import { fromPlainDate, todayInZone, toPlainDate } from "../lib/timelineService.js";
+import type { BankedHoursEntry, Goal, Reimbursement } from "../generated/prisma/client.js";
 
 const plainDate = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "A date must look like 2026-11-22.");
 
 /** Hours, to two decimals. Never money, so never cents. */
+/**
+ * How many paid-back work expenses the overview sends.
+ *
+ * They are kept forever on purpose - the history is the point - but a screen
+ * that renders all of them gets longer every month and never shorter, and the
+ * payload grows with it. Outstanding ones are never capped.
+ */
+const PAID_HISTORY_LIMIT = 20;
+
 const hoursSchema = z
   .string()
   .trim()
-  .regex(/^-?\d+(\.\d{1,2})?$/, "Hours look like 7.5 or 7.50.");
+  // A real minus sign (U+2212) means the same thing as a hyphen here. The web
+  // form offers "take hours out" as a choice rather than asking for a sign,
+  // but an hours value typed by hand or pasted can carry either.
+  .transform((value) => value.replace(/−/g, "-"))
+  .refine((value) => /^-?\d+(\.\d{1,2})?$/.test(value), "Hours look like 7.5 or 7.50.")
+  .refine((value) => /[1-9]/.test(value), "Zero hours would not change anything.");
 
 const goalCreate = z
   .object({
@@ -32,9 +46,8 @@ const goalCreate = z
     /**
      * Null means "no target": save towards it and stop when it is enough.
      * Asked and answered, 2026-11-08: trips never have a set date or a set
-     * cost. Absent and
-     * explicitly null mean the same thing here, so a client can clear a target
-     * by sending null.
+     * cost. Absent and explicitly null mean the same thing here, so a client
+     * can clear a target by sending null.
      */
     targetCents: wireCents
       .refine((value) => value > 0n, { message: "A target has to be above zero, or left out entirely." })
@@ -118,7 +131,13 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
 
-    const [goals, reimbursements, hours, members] = await Promise.all([
+    const [household, goals, reimbursements, hours, members] = await Promise.all([
+      // For the timezone: an hours entry records an instant, and which day
+      // that was is a question only the household's zone can answer.
+      app.db.prisma.household.findUniqueOrThrow({
+        where: { id: user.householdId },
+        select: { timezone: true },
+      }),
       app.db.prisma.goal.findMany({
         where: { householdId: user.householdId, deletedAt: null },
         orderBy: { createdAt: "asc" },
@@ -149,6 +168,10 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
       }),
     );
 
+    const serialisedReimbursements = reimbursements.map(serialiseReimbursement);
+    const outstandingItems = serialisedReimbursements.filter((item) => item.status !== "paid");
+    const paidItems = serialisedReimbursements.filter((item) => item.status === "paid");
+
     const summary = computeReimbursements(
       reimbursements.map((item) => ({
         purchase: item.purchase,
@@ -165,6 +188,9 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
       userId: entry.userId,
       hours: entry.hours.toString(),
       note: entry.note,
+      // The screen shows the entries that make up each total, so an entry
+      // needs a date to be identifiable - and a wrong one, deletable.
+      createdOn: todayInZone(household.timezone, entry.createdAt),
       version: entry.version,
     }));
 
@@ -181,7 +207,16 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
         isMet: computedGoals[index]?.isMet ?? false,
       })),
       reimbursements: {
-        items: reimbursements.map(serialiseReimbursement),
+        /*
+         * Split, because this list only ever grows. Everything still owed is
+         * sent in full - that is the part with something to do about it - and
+         * paid-back ones are sent newest first, capped, with a count so the
+         * screen can say how many it is not showing. The totals below are
+         * still computed over every row.
+         */
+        outstanding: outstandingItems,
+        paid: paidItems.slice(0, PAID_HISTORY_LIMIT),
+        paidCount: paidItems.length,
         boughtCents: summary.boughtCents,
         submittedCents: summary.submittedCents,
         paidCents: summary.paidCents,
@@ -570,6 +605,78 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /* ---- Banked hours ---- */
+
+  /**
+   * Remove an hours entry.
+   *
+   * There was no way to undo one: the route was POST only, so a mistyped
+   * figure was permanent and the only remedy was an offsetting entry, which
+   * left two wrong rows explaining each other. Soft, versioned and logged
+   * like every other delete here.
+   */
+  app.delete<{ Params: { id: string } }>("/banked-hours/:id", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    const baseVersion = requireBaseVersion(request);
+    const key = requireIdempotencyKey(request);
+
+    const result = await runIdempotent({
+      prisma: app.db.prisma,
+      key,
+      userId: user.id,
+      method: "DELETE",
+      path: `/api/banked-hours/${request.params.id}`,
+      requestHash: hashRequest("DELETE", `/api/banked-hours/${request.params.id}`, {}),
+      ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
+      work: async (tx) => {
+        const existing = await tx.bankedHoursEntry.findFirst({
+          where: { id: request.params.id, householdId: user.householdId, deletedAt: null },
+        });
+        if (!existing) throw new HttpError(404, "not_found", "Those hours are already gone.");
+
+        const applied = await applyVersionedChange<BankedHoursEntry>({
+          tx: tx as unknown as PrismaLike,
+          entity: "banked_hours_entry",
+          id: existing.id,
+          baseVersion,
+          userId: user.id,
+          householdId: user.householdId,
+          action: "soft_delete",
+          changes: { deletedAt: new Date().toISOString() },
+          readRow: () => tx.bankedHoursEntry.findUnique({ where: { id: existing.id } }),
+          writeRow: (nextVersion) =>
+            tx.bankedHoursEntry.update({
+              where: { id: existing.id },
+              data: {
+                deletedAt: new Date(),
+                deletedById: user.id,
+                version: nextVersion,
+                updatedById: user.id,
+                updatedAt: new Date(),
+              },
+            }),
+          snapshot: (row) => ({
+            version: row.version,
+            hours: row.hours.toString(),
+            userId: row.userId,
+          }),
+        });
+
+        await publishChange(tx, {
+          householdId: user.householdId,
+          entity: "banked_hours_entry",
+          id: applied.row.id,
+          version: applied.row.version,
+          by: user.id,
+        });
+
+        return { statusCode: 200, body: { ok: true } };
+      },
+    });
+
+    return reply.status(result.statusCode).send(result.body);
+  });
 
   app.post("/banked-hours", async (request, reply) => {
     const user = request.user;

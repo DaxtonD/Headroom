@@ -1,21 +1,32 @@
 /**
- * Adding banked hours.
+ * Adding or taking out banked hours.
  *
  * Hours are the one quantity in Headroom that is not money (HANDOFF section 14
  * q11): they are never converted to dollars and never pass through
  * `parseCents` or `formatCents`, because a rate would be an invention.
  *
- * Entries add up, so a negative figure is how hours are taken back out — and
- * that is said plainly, since a field that silently accepts a minus sign is
- * worse than one that explains it.
+ * ## Why there is a choice here rather than a minus sign
+ *
+ * Entries add up, so a negative figure is what takes hours back out, and this
+ * form used to say exactly that in a hint: "enter a negative figure such as
+ * −7.5". The whole stack accepted one. It was still impossible to do on a
+ * phone, because the field asks for `inputMode="decimal"` and that keyboard
+ * has digits and a decimal point and no minus key at all. The instruction was
+ * correct and unfollowable.
+ *
+ * So the direction is a choice, and the number is always a plain positive
+ * magnitude. Nothing depends on reaching a character the keyboard does not
+ * offer. The sign is applied here, on the way out.
  */
 import { useId, useState } from "react";
 import { ApiError, OfflineError } from "../lib/api.js";
 import { useCreateBankedHours } from "../lib/manageQueries.js";
 import { Field, Sheet } from "./Sheet.js";
 
-/** Hours look like 7.5 or 7.50, optionally negative. Matches the API. */
-const HOURS = /^-?\d+(\.\d{1,2})?$/;
+/** A positive magnitude: 7, 7.5 or 7.50. The direction is chosen separately. */
+const HOURS = /^\d+(\.\d{1,2})?$/;
+
+type Direction = "add" | "remove";
 
 export function BankedHoursForm({
   people,
@@ -28,6 +39,7 @@ export function BankedHoursForm({
   const ids = { person: useId(), hours: useId(), note: useId() };
 
   const [userId, setUserId] = useState(people[0]?.id ?? "");
+  const [direction, setDirection] = useState<Direction>("add");
   const [hours, setHours] = useState("");
   const [note, setNote] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -39,15 +51,22 @@ export function BankedHoursForm({
       setError("Pick whose hours these are.");
       return;
     }
-    if (!HOURS.test(hours.trim())) {
+
+    const magnitude = hours.trim();
+    if (!HOURS.test(magnitude)) {
       setError("Hours look like 7.5 or 7.50.");
+      return;
+    }
+    if (!/[1-9]/.test(magnitude)) {
+      setError("Enter more than zero hours.");
       return;
     }
 
     try {
       await create.mutateAsync({
         userId,
-        hours: hours.trim(),
+        // The only place a sign is introduced. The field itself never holds one.
+        hours: direction === "remove" ? `-${magnitude}` : magnitude,
         ...(note.trim() === "" ? {} : { note: note.trim() }),
       });
       onClose();
@@ -57,15 +76,15 @@ export function BankedHoursForm({
     }
   };
 
-  const parsed = HOURS.test(hours.trim()) ? Number(hours.trim()) : null;
+  const valid = HOURS.test(hours.trim()) && /[1-9]/.test(hours.trim());
 
   return (
     <Sheet
-      title="Add banked hours"
+      title={direction === "add" ? "Add banked hours" : "Take out banked hours"}
       intro="Hours owed to someone. Tracked as hours only — never turned into a dollar figure."
       error={error}
       saving={create.isPending}
-      saveLabel="Add hours"
+      saveLabel={direction === "add" ? "Add hours" : "Take hours out"}
       onClose={onClose}
       onSubmit={submit}
     >
@@ -85,10 +104,36 @@ export function BankedHoursForm({
         </select>
       </Field>
 
+      <fieldset className="sheet__choices">
+        <legend className="hr-label">Adding or taking out?</legend>
+        <label className="sheet__choice">
+          <input
+            type="radio"
+            name="banked-hours-direction"
+            value="add"
+            checked={direction === "add"}
+            onChange={() => setDirection("add")}
+            disabled={create.isPending}
+          />
+          <span>Adding hours — hours worked and owed back</span>
+        </label>
+        <label className="sheet__choice">
+          <input
+            type="radio"
+            name="banked-hours-direction"
+            value="remove"
+            checked={direction === "remove"}
+            onChange={() => setDirection("remove")}
+            disabled={create.isPending}
+          />
+          <span>Taking hours out — hours taken as time off or paid out</span>
+        </label>
+      </fieldset>
+
       <Field
         label="How many hours?"
         htmlFor={ids.hours}
-        hint="Entries add up. To take hours back out, enter a negative figure such as −7.5."
+        hint="Up to two decimals. Entries add up to the total on the screen."
       >
         <input
           className="hr-input"
@@ -115,12 +160,11 @@ export function BankedHoursForm({
         />
       </Field>
 
-      {parsed !== null && parsed !== 0 ? (
+      {valid ? (
         <div className="sheet__preview">
-          <p className="sheet__preview-title">{parsed > 0 ? "Adding" : "Taking out"}</p>
-          <p className="sheet__preview-amount hr-amount">
-            {Math.abs(parsed)} h
-          </p>
+          <p className="sheet__preview-title">{direction === "add" ? "Adding" : "Taking out"}</p>
+          {/* Hours, never money: no currency formatter touches this. */}
+          <p className="sheet__preview-amount hr-amount">{hours.trim()} h</p>
         </div>
       ) : null}
     </Sheet>

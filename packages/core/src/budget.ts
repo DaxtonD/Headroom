@@ -140,7 +140,12 @@ export function sumBankedHours(entries: readonly BankedHoursEntryInput[]): strin
   let hundredths = 0n;
 
   for (const entry of entries) {
-    const text = entry.hours.trim();
+    /*
+     * U+2212 counts as a minus. The form's own hint offered "−7.5" as the
+     * way to take hours back out while only an ASCII hyphen was accepted, so
+     * following the instruction exactly got the entry rejected.
+     */
+    const text = entry.hours.trim().replace(/−/g, "-");
     const match = /^([-+]?)(\d+)(?:\.(\d{1,2}))?$/.exec(text);
     if (!match) {
       throw new SyntaxError(`"${entry.hours}" is not an hours value (use up to two decimals).`);

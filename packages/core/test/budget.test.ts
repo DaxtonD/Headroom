@@ -163,6 +163,21 @@ describe("sumBankedHours", () => {
     expect(sumBankedHours([])).toBe("0.00");
   });
 
+  it("reads a real minus sign as a minus", () => {
+    /*
+     * U+2212, not a hyphen. The form's own hint used to offer "\u22127.5" as
+     * the way to take hours back out, while only an ASCII hyphen parsed - so
+     * following the instruction to the letter was rejected. Both are a minus.
+     */
+    expect(sumBankedHours([{ userId: "jordan", hours: "\u22127.5" }])).toBe("-7.50");
+    expect(
+      sumBankedHours([
+        { userId: "jordan", hours: "8" },
+        { userId: "jordan", hours: "\u22123.25" },
+      ]),
+    ).toBe("4.75");
+  });
+
   it("refuses something that is not an hours value", () => {
     expect(() => sumBankedHours([{ userId: "jordan", hours: "eight" }])).toThrow(SyntaxError);
     expect(() => sumBankedHours([{ userId: "jordan", hours: "1.234" }])).toThrow(SyntaxError);

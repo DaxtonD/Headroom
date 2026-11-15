@@ -494,3 +494,60 @@
 .savings__goal-name .savings__tag {
   margin-left: var(--hr-space-2);
 }
+
+/*
+ * The "show the rest" button for the two append-only lists on this screen:
+ * paid-back work expenses, and the entries behind the banked-hours totals.
+ * Both are history rather than anything to act on, so they start collapsed.
+ */
+.savings__more {
+  display: block;
+  width: 100%;
+  min-height: var(--hr-touch-min);
+  margin: var(--hr-space-3) 0 0;
+  padding: 0 var(--hr-space-4);
+  border: 1px dashed var(--hr-card-border);
+  border-radius: var(--hr-radius-pill);
+  background: transparent;
+  color: var(--hr-primary);
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+.savings__more:hover {
+  background: var(--hr-green-tint-soft);
+}
+
+/* A paid-back expense has nothing left to do, so it reads quieter. */
+.savings__expense--done {
+  opacity: 0.72;
+}
+
+/* One banked-hours entry: the figure, whose it is, when, and a way out. */
+.savings__entry {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--hr-space-2) var(--hr-space-3);
+  padding: var(--hr-space-3) 0;
+  border-top: 1px solid var(--hr-row-divider);
+}
+.savings__entry-main {
+  display: flex;
+  align-items: baseline;
+  gap: var(--hr-space-2);
+  margin-right: auto;
+}
+.savings__entry-hours {
+  font-weight: 600;
+}
+.savings__entry-who {
+  color: var(--hr-text-muted);
+  font-size: 0.875rem;
+}
+.savings__entry-note {
+  flex-basis: 100%;
+  color: var(--hr-text-muted);
+  font-size: 0.8125rem;
+}

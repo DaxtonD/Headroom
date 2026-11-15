@@ -182,14 +182,14 @@ describe("GET /api/me", () => {
     const body = response.json();
 
     expect(body.user.name).toBe("Alex");
-    expect(body.user.initial).toBe("C");
+    expect(body.user.initial).toBe("A");
     expect(body.household.timezone).toBe("America/Regina");
     expect(body.household.currency).toBe("CAD");
     // Cents cross the wire as strings, because JSON has no bigint.
     expect(body.household.cushionCents).toBe("0");
     expect(body.household.weekendWithdrawalRule).toBe("as_scheduled");
     // Home shows both people's initials, so /api/me has to carry both.
-    expect(body.members.map((member: { initial: string }) => member.initial).sort()).toEqual(["C", "D"]);
+    expect(body.members.map((member: { initial: string }) => member.initial).sort()).toEqual(["A", "J"]);
   });
 
   it("stops working once the session is deleted server-side", async () => {

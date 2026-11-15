@@ -16,7 +16,7 @@ import { createHarness, migrateTestDatabase, seedHousehold, signIn, type Harness
 let harness: Harness;
 let cookie: string;
 let householdId: string;
-let carolId: string;
+let alexId: string;
 
 beforeAll(async () => {
   migrateTestDatabase();
@@ -31,7 +31,7 @@ beforeEach(async () => {
   await harness.reset();
   const seeded = await seedHousehold(harness);
   householdId = seeded.household.id;
-  carolId = seeded.alex.id;
+  alexId = seeded.alex.id;
   cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
@@ -262,7 +262,7 @@ describe("budget line editing", () => {
       where: { id: created.line.id },
     });
     expect(row.deletedAt).not.toBeNull();
-    expect(row.deletedById).toBe(carolId);
+    expect(row.deletedById).toBe(alexId);
   });
 });
 
@@ -454,6 +454,61 @@ describe("GET /api/goals-overview", () => {
     expect(body.reimbursements.outstandingCents).toBe("13000");
   });
 
+  it("sends every outstanding expense but caps the paid-back history", async () => {
+    /*
+     * This list only ever grows, so the screen would get longer every month
+     * and never shorter. Outstanding items are the part with something to do
+     * about them and are never capped; paid-back ones are sent newest first,
+     * capped, with a count so the screen can say what it is not showing. The
+     * totals are still computed over every row, which is the part that would
+     * quietly go wrong if the cap were applied before the arithmetic.
+     */
+    const PAID = 23;
+    for (let index = 0; index < PAID; index += 1) {
+      const created = await harness.app
+        .inject({
+          method: "POST",
+          url: "/api/reimbursements",
+          headers: headers(),
+          payload: { purchase: `Paid ${String(index)}`, cents: "1000", boughtOn: "2026-11-01" },
+        })
+        .then((response) => response.json());
+
+      await harness.app.inject({
+        method: "PATCH",
+        url: `/api/reimbursements/${created.reimbursement.id}`,
+        headers: { ...headers(), "if-match": '"1"' },
+        payload: { paid: true },
+      });
+    }
+
+    for (const purchase of ["Still owed A", "Still owed B"]) {
+      await harness.app.inject({
+        method: "POST",
+        url: "/api/reimbursements",
+        headers: headers(),
+        payload: { purchase, cents: "2500", boughtOn: "2026-11-02" },
+      });
+    }
+
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/goals-overview", headers: { cookie } })
+      .then((response) => response.json());
+
+    expect(body.reimbursements.outstanding).toHaveLength(2);
+    expect(body.reimbursements.paidCount).toBe(PAID);
+    expect(body.reimbursements.paid.length).toBeLessThan(PAID);
+    expect(body.reimbursements.paid.length).toBe(20);
+    expect(
+      body.reimbursements.paid.every((item: { status: string }) => item.status === "paid"),
+    ).toBe(true);
+
+    // Every paid row counts towards the money, capped list or not.
+    expect(body.reimbursements.paidCents).toBe(String(PAID * 1000));
+    expect(body.reimbursements.outstandingCents).toBe("5000");
+    expect(body.reimbursements.totalCents).toBe(String(PAID * 1000 + 5000));
+  });
+
   it("re-marking an expense is a no-op", async () => {
     const created = await harness.app
       .inject({
@@ -489,8 +544,8 @@ describe("GET /api/goals-overview", () => {
     });
 
     for (const entry of [
-      { userId: carolId, hours: "7.5" },
-      { userId: carolId, hours: "0.25" },
+      { userId: alexId, hours: "7.5" },
+      { userId: alexId, hours: "0.25" },
       { userId: jordan.id, hours: "4" },
     ]) {
       const response = await harness.app.inject({
@@ -508,10 +563,77 @@ describe("GET /api/goals-overview", () => {
 
     expect(body.bankedHours.total).toBe("11.75");
 
-    const alex = body.bankedHours.perPerson.find((p: { initial: string }) => p.initial === "C");
+    const alex = body.bankedHours.perPerson.find((p: { initial: string }) => p.initial === "A");
     expect(alex.hours).toBe("7.75");
-    const daxHours = body.bankedHours.perPerson.find((p: { initial: string }) => p.initial === "D");
-    expect(daxHours.hours).toBe("4.00");
+    const jordanHours = body.bankedHours.perPerson.find((p: { initial: string }) => p.initial === "J");
+    expect(jordanHours.hours).toBe("4.00");
+  });
+
+  it("takes hours back out, and refuses an entry worth nothing", async () => {
+    /*
+     * Deducting was always supported by the engine and the route; it was
+     * unreachable from a phone, because the field asked for a numeric keypad
+     * and that keyboard has no minus key. The UI now chooses a direction and
+     * sends the sign, so what matters here is that a negative entry lands and
+     * subtracts, and that a zero one is refused rather than stored as noise.
+     */
+    for (const hours of ["8", "-3.25"]) {
+      const response = await harness.app.inject({
+        method: "POST",
+        url: "/api/banked-hours",
+        headers: headers(),
+        payload: { userId: alexId, hours },
+      });
+      expect(response.statusCode).toBe(201);
+    }
+
+    const zero = await harness.app.inject({
+      method: "POST",
+      url: "/api/banked-hours",
+      headers: headers(),
+      payload: { userId: alexId, hours: "0.00" },
+    });
+    expect(zero.statusCode).toBe(400);
+
+    const body = await harness.app
+      .inject({ method: "GET", url: "/api/goals-overview", headers: { cookie } })
+      .then((response) => response.json());
+
+    expect(body.bankedHours.total).toBe("4.75");
+  });
+
+  it("removes an hours entry, and the total follows", async () => {
+    const created = await harness.app
+      .inject({
+        method: "POST",
+        url: "/api/banked-hours",
+        headers: headers(),
+        payload: { userId: alexId, hours: "6.5", note: "Saturday callout" },
+      })
+      .then((response) => response.json());
+
+    const before = await harness.app
+      .inject({ method: "GET", url: "/api/goals-overview", headers: { cookie } })
+      .then((response) => response.json());
+    expect(before.bankedHours.total).toBe("6.50");
+    // The entries are what the screen lists, so they have to come back with a
+    // day on them and a version to delete against.
+    expect(before.bankedHours.entries).toHaveLength(1);
+    expect(before.bankedHours.entries[0].note).toBe("Saturday callout");
+    expect(before.bankedHours.entries[0].createdOn).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+
+    const removed = await harness.app.inject({
+      method: "DELETE",
+      url: `/api/banked-hours/${created.entry.id}`,
+      headers: { ...headers(), "if-match": '"1"' },
+    });
+    expect(removed.statusCode).toBe(200);
+
+    const after = await harness.app
+      .inject({ method: "GET", url: "/api/goals-overview", headers: { cookie } })
+      .then((response) => response.json());
+    expect(after.bankedHours.total).toBe("0.00");
+    expect(after.bankedHours.entries).toHaveLength(0);
   });
 
   it("refuses hours for someone outside the household", async () => {
@@ -541,7 +663,7 @@ describe("GET /api/goals-overview", () => {
       method: "POST",
       url: "/api/banked-hours",
       headers: headers(),
-      payload: { userId: carolId, hours: "seven and a half" },
+      payload: { userId: alexId, hours: "seven and a half" },
     });
 
     expect(response.statusCode).toBe(400);

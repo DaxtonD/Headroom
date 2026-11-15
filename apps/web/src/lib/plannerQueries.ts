@@ -151,6 +151,17 @@ export interface Reimbursement {
   readonly version: number;
 }
 
+export interface BankedHoursEntry {
+  readonly id: string;
+  readonly userId: string;
+  /** Hours as a decimal string, negative when hours were taken back out. */
+  readonly hours: string;
+  readonly note: string | null;
+  /** The day it was entered, in the household's timezone. */
+  readonly createdOn: string;
+  readonly version: number;
+}
+
 export interface BankedHoursPerson {
   readonly id: string;
   readonly name: string;
@@ -162,7 +173,12 @@ export interface BankedHoursPerson {
 export interface GoalsOverview {
   readonly goals: readonly GoalProgress[];
   readonly reimbursements: {
-    readonly items: readonly Reimbursement[];
+    /** Everything still owed. Never capped - this is the part with work to do. */
+    readonly outstanding: readonly Reimbursement[];
+    /** Paid back, newest first, capped by the server. */
+    readonly paid: readonly Reimbursement[];
+    /** How many paid-back ones exist in total, which may exceed `paid.length`. */
+    readonly paidCount: number;
     readonly boughtCents: Cents;
     readonly submittedCents: Cents;
     readonly paidCents: Cents;
@@ -170,6 +186,7 @@ export interface GoalsOverview {
     readonly totalCents: Cents;
   };
   readonly bankedHours: {
+    readonly entries: readonly BankedHoursEntry[];
     readonly perPerson: readonly BankedHoursPerson[];
     readonly total: string;
   };
@@ -188,14 +205,20 @@ export function useGoalsOverview() {
           remainingCents: string | null;
         })[];
         reimbursements: {
-          items: (Omit<Reimbursement, "cents"> & { cents: string })[];
+          outstanding: (Omit<Reimbursement, "cents"> & { cents: string })[];
+          paid: (Omit<Reimbursement, "cents"> & { cents: string })[];
+          paidCount: number;
           boughtCents: string;
           submittedCents: string;
           paidCents: string;
           outstandingCents: string;
           totalCents: string;
         };
-        bankedHours: { perPerson: BankedHoursPerson[]; total: string };
+        bankedHours: {
+          entries: BankedHoursEntry[];
+          perPerson: BankedHoursPerson[];
+          total: string;
+        };
       }>("/api/goals-overview");
 
       return {
@@ -206,7 +229,12 @@ export function useGoalsOverview() {
           remainingCents: goal.remainingCents === null ? null : toCents(goal.remainingCents),
         })),
         reimbursements: {
-          items: wire.reimbursements.items.map((item) => ({ ...item, cents: toCents(item.cents) })),
+          outstanding: wire.reimbursements.outstanding.map((item) => ({
+            ...item,
+            cents: toCents(item.cents),
+          })),
+          paid: wire.reimbursements.paid.map((item) => ({ ...item, cents: toCents(item.cents) })),
+          paidCount: wire.reimbursements.paidCount,
           boughtCents: toCents(wire.reimbursements.boughtCents),
           submittedCents: toCents(wire.reimbursements.submittedCents),
           paidCents: toCents(wire.reimbursements.paidCents),
