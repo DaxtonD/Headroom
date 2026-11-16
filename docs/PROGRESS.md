@@ -733,6 +733,60 @@ out reading like a schema rather than English - "turned a template off" - and
 were fixed. The rest of the older rows say "a bill" rather than naming one,
 which is honest: it is genuinely all those rows know.
 
+## The instrument was wrong twice (2026-11-15)
+
+The check added to answer "is this device's service worker new enough to
+receive a push" gave a wrong answer two builds running. Both failures are
+worth keeping, because they are the same mistake in two costumes.
+
+**First: it asserted a cause it could not know.** Any silence from the
+worker produced "this device is still running an older background worker".
+Silence has at least three causes - an old worker, no worker, or a worker
+that simply predates the question - and it picked one and stated it flatly.
+The owner cleared the cache, uninstalled the PWA and reinstalled it, and got
+the same confident sentence back.
+
+**Second, after being rewritten to report rather than assert: it reported
+the wrong state.** On a device whose service worker had just been installed
+fresh from the current build, Settings showed `did not answer`. The app and
+the server both read `0e46911`; the worker, which was *also* `0e46911`, said
+nothing.
+
+It asked once, on mount, waited five seconds for `navigator.serviceWorker.ready`,
+and never asked again. A newly installed worker is busy precaching half a
+megabyte and is not active yet, so `ready` had not settled. The answer was
+about timing and was presented as state.
+
+### A one-shot question about something with a lifecycle
+
+That is the actual lesson, and it applies beyond this check. A service
+worker is `installing`, then `waiting`, then `active`; asking at one instant
+and reporting a boolean throws away the only information that would make the
+answer meaningful.
+
+So it now reports the state itself - unsupported, none, installing, waiting,
+active - whether this page is controlled by one, and the build only when
+there is an active worker to ask. It uses `getRegistration`, which answers
+immediately, rather than `ready`, which does not settle while a worker is
+installing. And it looks again every second and a half until a worker is
+active and has answered.
+
+`installing` and `waiting` are both normal and both temporary. Only `none`
+and "active but too old to answer" are news. The earlier version could not
+tell any of them apart.
+
+### What this did not do
+
+It did not fix notifications, and neither did the timezone bug found on the
+way. Those remain: three subscriptions across Mozilla's push service and
+Google's, every key structurally valid, every send accepted, nothing
+displayed on any of three devices.
+
+What has been established is that the server side is sound and the problem
+is on the device, between the push service and a notification appearing.
+The next reading - a worker state that is finally trustworthy - is what
+there was not before.
+
 ## Notifications arrive nowhere, and nothing can say why (2026-11-15)
 
 Reported straight after bug 22 was fixed: subscriptions now save, and no

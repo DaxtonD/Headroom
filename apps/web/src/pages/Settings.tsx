@@ -13,7 +13,8 @@
 import { TEXT_SIZES, THEMES, useAppearance } from "../lib/appearance.js";
 import { BUILD_ID, isStamped, shortBuild } from "../lib/buildId.js";
 import { usePushNotifications } from "../lib/pushNotifications.js";
-import { loadServerBuild, useServerBuild, useWorkerBuild } from "../lib/serverBuild.js";
+import { loadServerBuild, useServerBuild, useWorkerStatus } from "../lib/serverBuild.js";
+import type { WorkerStatus } from "../lib/serverBuild.js";
 import { useSettingsRoute } from "../lib/settingsRoute.js";
 import "./Settings.css";
 
@@ -25,6 +26,30 @@ import "./Settings.css";
  * explanation. "Blocked" in particular is the one this app cannot fix, so it
  * has to say where the fix is.
  */
+/**
+ * What the service worker is doing, in words.
+ *
+ * Five states, because the earlier yes/no was wrong twice - once asserting
+ * a cause it could not know, and once reporting "did not answer" for a
+ * worker that was simply still installing. "Installing" and "waiting" are
+ * both normal and both temporary; only the last two are news.
+ */
+function describeWorker(worker: WorkerStatus): string {
+  switch (worker.state) {
+    case "unsupported":
+      return "this browser has none";
+    case "none":
+      return "not registered";
+    case "installing":
+      return "installing…";
+    case "waiting":
+      return "ready, waiting to take over";
+    case "active":
+      if (worker.buildId === null) return "running, but too old to say which build";
+      return isStamped(worker.buildId) ? shortBuild(worker.buildId) : "not a released build";
+  }
+}
+
 /** "5 hours 51 minutes ahead of", or "3 minutes behind". */
 function describeSkew(seconds: number): string {
   const total = Math.abs(seconds);
@@ -53,7 +78,7 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
   const settings = useSettingsRoute();
   const { serverBuild, clockSkewSeconds, stale, recheck } = useServerBuild();
   const push = usePushNotifications();
-  const workerBuild = useWorkerBuild();
+  const worker = useWorkerStatus();
 
   return (
     <div className="settings">
@@ -273,13 +298,7 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
           */}
           <div>
             <dt>Background worker</dt>
-            <dd>
-              {workerBuild === null
-                ? "did not answer"
-                : isStamped(workerBuild)
-                  ? shortBuild(workerBuild)
-                  : "not a released build"}
-            </dd>
+            <dd>{describeWorker(worker)}</dd>
           </div>
         </dl>
 

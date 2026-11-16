@@ -26,7 +26,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.js";
 import { BUILD_ID, isStamped, shortBuild } from "./buildId.js";
-import { activeWorkerBuild } from "./serverBuild.js";
+import { workerStatus } from "./serverBuild.js";
+import type { WorkerStatus } from "./serverBuild.js";
 
 export type PushState =
   /** Still working out where we stand. */
@@ -266,8 +267,8 @@ export function usePushNotifications(): PushControls {
          * Asked at the same time, because "sent, and nothing appeared" has
          * one likely explanation and it is this one.
          */
-        const workerBuild = await activeWorkerBuild();
-        setTestResult(describeTest(result, workerBuild));
+        const worker = await workerStatus();
+        setTestResult(describeTest(result, worker));
       } catch {
         setError("Could not send a test notification. Try again in a moment.");
       } finally {
@@ -287,7 +288,7 @@ export function usePushNotifications(): PushControls {
  * problem off this app entirely and onto the phone's own settings, which is
  * where nobody would think to look otherwise.
  */
-function describeTest(result: TestResult, workerBuild: string | null): string {
+function describeTest(result: TestResult, worker: WorkerStatus): string {
   if (result.subscriptions === 0) {
     return "This device is not signed up. Turn notifications on first.";
   }
@@ -308,19 +309,29 @@ function describeTest(result: TestResult, workerBuild: string | null): string {
    * too old to answer the question at all. So it says what it knows, names
    * the builds, and lets them be compared against Settings → Version.
    */
-  if (workerBuild === null) {
-    const page = isStamped(BUILD_ID) ? ` This page is ${shortBuild(BUILD_ID)}.` : "";
-    return (
-      "Sent, but the background worker on this device did not answer. It is either not running, " +
-      `or older than this page — either way it cannot receive a notification.${page} ` +
-      "Reload the app, and check Settings → Version."
-    );
+  /*
+   * The worker is the half that receives a push, so its state decides what
+   * "sent" actually means. Each of these is a different situation and the
+   * earlier version collapsed them all into one confident wrong sentence.
+   */
+  if (worker.state === "installing") {
+    return "Sent, but this device's background worker is still starting up. Give it a few seconds and try again.";
   }
-
-  if (isStamped(workerBuild) && isStamped(BUILD_ID) && workerBuild !== BUILD_ID) {
+  if (worker.state === "waiting" || worker.state === "none") {
+    return "Sent, but this device has no background worker in charge yet, so it cannot receive one. Reload the app and try again.";
+  }
+  if (worker.state === "active" && worker.buildId === null) {
+    return "Sent, but this device's background worker predates notifications and cannot receive them. Reload the app, and check Settings → Version.";
+  }
+  if (
+    worker.buildId !== null &&
+    isStamped(worker.buildId) &&
+    isStamped(BUILD_ID) &&
+    worker.buildId !== BUILD_ID
+  ) {
     return (
       `Sent, but this page is build ${shortBuild(BUILD_ID)} and the background worker is ` +
-      `${shortBuild(workerBuild)}. The worker is the half that receives notifications. Reload.`
+      `${shortBuild(worker.buildId)}. The worker is the half that receives notifications. Reload.`
     );
   }
 

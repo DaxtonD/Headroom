@@ -119,32 +119,48 @@ async function waitForTakeover(timeoutMs: number): Promise<boolean> {
   });
 }
 
-/** The registration, or null rather than a promise that never settles. */
-async function workerRegistration(): Promise<ServiceWorkerRegistration | null> {
-  try {
-    return await Promise.race([
-      navigator.serviceWorker.ready,
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
-    ]);
-  } catch {
-    return null;
-  }
+/**
+ * What the service worker is doing on this device, and which build it is.
+ *
+ * ## Why this is not a yes/no
+ *
+ * It was, and the yes/no lied twice. First it said "this device is running
+ * an older background worker" for any silence, which it cannot know. Then,
+ * rewritten to report rather than assert, it still said "did not answer" on
+ * a device whose worker had just been installed fresh from the current
+ * build - because it asked once, on mount, while that worker was still
+ * precaching half a megabyte, and never asked again.
+ *
+ * A one-shot question about something with a lifecycle gives an answer
+ * about timing, not about state. So this reports the state.
+ */
+export type WorkerState =
+  /** This browser has no service workers. */
+  | "unsupported"
+  /** Nothing is registered for this scope. */
+  | "none"
+  /** Downloading and precaching. Normal for a few seconds after a fresh load. */
+  | "installing"
+  /** Ready, but not in charge: an older worker is still running the show. */
+  | "waiting"
+  /** In charge. This is the one that would receive a push. */
+  | "active";
+
+export interface WorkerStatus {
+  readonly state: WorkerState;
+  /** The active worker's build, when it answered. Null if it did not. */
+  readonly buildId: string | null;
+  /** Is this page itself being served by a worker? */
+  readonly controlled: boolean;
 }
 
 /**
- * Ask the active service worker which build it is.
+ * Ask a worker which build it is, over a channel that cannot hang.
  *
- * Returns null when nothing answers, which is the interesting case: a
- * worker from before the push handler existed accepts a subscription and
- * then receives nothing, and that is indistinguishable from every other
- * cause by looking. Silence here names it.
+ * A worker older than this question never replies, which is itself the
+ * answer: it predates the push handler too.
  */
-export async function activeWorkerBuild(timeoutMs = 2000): Promise<string | null> {
-  if (!("serviceWorker" in navigator)) return null;
-
-  const worker = (await workerRegistration())?.active;
-  if (!worker) return null;
-
+async function askBuild(worker: ServiceWorker, timeoutMs: number): Promise<string | null> {
   return new Promise<string | null>((resolve) => {
     const channel = new MessageChannel();
     const timer = setTimeout(() => {
@@ -155,42 +171,92 @@ export async function activeWorkerBuild(timeoutMs = 2000): Promise<string | null
     channel.port1.onmessage = (event: MessageEvent<{ buildId?: unknown }>) => {
       clearTimeout(timer);
       channel.port1.close();
-      resolve(typeof event.data.buildId === "string" ? event.data.buildId : null);
+      resolve(typeof event.data?.buildId === "string" ? event.data.buildId : null);
     };
 
     try {
       worker.postMessage({ type: "WHICH_BUILD" }, [channel.port2]);
     } catch {
       clearTimeout(timer);
+      channel.port1.close();
       resolve(null);
     }
   });
 }
 
+export async function workerStatus(): Promise<WorkerStatus> {
+  if (!("serviceWorker" in navigator)) {
+    return { state: "unsupported", buildId: null, controlled: false };
+  }
+
+  const controlled = navigator.serviceWorker.controller !== null;
+
+  /*
+   * `getRegistration`, not `ready`. `ready` waits for an active worker and
+   * does not settle while one is installing, which is exactly the moment
+   * this is most often asked - and a timeout there tells you nothing, where
+   * "installing" tells you to look again shortly.
+   */
+  let registration: ServiceWorkerRegistration | undefined;
+  try {
+    registration = await navigator.serviceWorker.getRegistration();
+  } catch {
+    return { state: "none", buildId: null, controlled };
+  }
+
+  if (!registration) return { state: "none", buildId: null, controlled };
+
+  if (registration.active) {
+    return { state: "active", buildId: await askBuild(registration.active, 3000), controlled };
+  }
+  if (registration.waiting) return { state: "waiting", buildId: null, controlled };
+  if (registration.installing) return { state: "installing", buildId: null, controlled };
+
+  return { state: "none", buildId: null, controlled };
+}
+
+/** Kept for the notification test, which only cares about the build. */
+export async function activeWorkerBuild(): Promise<string | null> {
+  return (await workerStatus()).buildId;
+}
+
 /**
- * What build the service worker running on this device is.
+ * The worker's state, re-checked while it is still settling.
  *
- * The third answer to "which build is where", after the page and the
- * server. It matters more than it looks: the worker is the half that
- * receives a push, so a worker older than the page means notifications
- * silently do not arrive while every screen looks current.
- *
- * `null` means it did not answer - not running, or too old to know how.
+ * A worker installs in a few seconds, so asking once on mount catches it
+ * mid-install and reports a problem that is about to solve itself. This
+ * keeps looking until there is an active worker that has answered, or until
+ * the install has had long enough to have finished.
  */
-export function useWorkerBuild(): string | null {
-  const [workerBuild, setWorkerBuild] = useState<string | null>(null);
+export function useWorkerStatus(): WorkerStatus {
+  const [status, setStatus] = useState<WorkerStatus>({
+    state: "installing",
+    buildId: null,
+    controlled: false,
+  });
 
   useEffect(() => {
     let cancelled = false;
-    void activeWorkerBuild().then((value) => {
-      if (!cancelled) setWorkerBuild(value);
-    });
+    let attempts = 0;
+
+    const look = (): void => {
+      void workerStatus().then((next) => {
+        if (cancelled) return;
+        setStatus(next);
+        attempts += 1;
+        const settled = next.state === "active" && next.buildId !== null;
+        const giveUp = next.state === "unsupported" || attempts >= 8;
+        if (!settled && !giveUp) setTimeout(look, 1500);
+      });
+    };
+
+    look();
     return () => {
       cancelled = true;
     };
   }, []);
 
-  return workerBuild;
+  return status;
 }
 
 /**

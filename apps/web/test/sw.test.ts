@@ -174,7 +174,7 @@ describe("saying which worker is actually running", () => {
      */
     const settings = read("src/pages/Settings.tsx");
     expect(settings).toContain("Background worker");
-    expect(settings).toContain("useWorkerBuild");
+    expect(settings).toContain("useWorkerStatus");
   });
 
   it("reports what it found rather than asserting why", () => {
@@ -184,8 +184,18 @@ describe("saying which worker is actually running", () => {
      * diagnosis - it cannot tell an old worker from one that is not running.
      */
     const lib = read("src/lib/pushNotifications.ts");
-    expect(lib).toContain("did not answer");
+    // Installing, waiting and "too old to answer" are different situations
+    // and were once one confident wrong sentence.
+    expect(lib).toContain('worker.state === "installing"');
+    expect(lib).toContain('worker.state === "waiting"');
     expect(lib, "it has to name the builds so they can be compared").toContain("shortBuild(");
+
+    const build = read("src/lib/serverBuild.ts");
+    // A worker has a lifecycle, so asking once reports timing, not state.
+    expect(build).toContain("getRegistration()");
+    expect(build, "a one-shot check is what reported a fresh worker as missing").toContain(
+      "attempts >= 8",
+    );
   });
 });
 
