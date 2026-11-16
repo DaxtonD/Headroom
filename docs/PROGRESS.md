@@ -23,12 +23,14 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | "Paid" is a tick, not a transaction | done | | Bug 16. It had been subtracting a bill the typed-in balance already covered. The row now stays on the ledger, marked, and no figure moves |
 | Info button on the headline figures | done | | At the owner's request. Shows the working behind in chequing, safe to spend and left this cycle, from the engine so it cannot disagree |
 | Phone-use fixes: greeting, gear, Back button, page width | done | | Four reported from the installed app; the widest was the shell grid making the whole page grow |
-| M5 PWA + desktop polish | **done** | | Installed and in daily use. Three shortcuts, the app badge, a Content-Security-Policy that hashes the page it protects, and the accessibility pass. Cached Home dropped and the desktop layouts deferred, both on request - see "Scope settled" |
-| M6 Ops: backups, seed import, GHCR, DEPLOY.md | not started | | |
+| M5 PWA + desktop polish | **done** | m5 | Installed and in daily use. Three shortcuts, the app badge, a Content-Security-Policy that hashes the page it protects, and the accessibility pass. Cached Home dropped and the desktop layouts deferred, both on request - see "Scope settled" |
+| M6 Ops | **empty** | | All three items retired or taken over by the owner on 2026-11-14 (see "Scope settled"). Backups are their Duplicati job; `docs/DEPLOY.md` is written; compose is not how this is deployed. GHCR publishes on every green build |
+| Production seeded from the workbooks | done | | Net worth, retirement and the mortgage, at the owner's request on 2026-11-15. Backed up and rehearsed on a restored copy first |
 
 ## Last session
 
-- Date: 2026-11-08
+- Date: 2026-11-15. The entries below this block are newest-first; the bullets in this
+  section describe the run that ended on 2026-11-08 and are kept for the shape of it.
 - **Pushed on 2026-11-09**, on the owner's OK: `main` and the tags `m0`-`m4` are on
   `github.com/DaxtonD/Headroom`, which the owner made **public**. The repository had been empty until
   then, so nothing was rewritten out from under anyone.
@@ -449,6 +451,86 @@ the owner in the running app rather than being caught here, which is the one tha
    round - typed, sent, stored, read back, formatted - through the same engine functions the
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
+
+## Production seeded: net worth, retirement and the mortgage (2026-11-15)
+
+The owner asked for the three screens that had no data to be filled from the
+household's own workbooks - net worth, the retirement outlook and the mortgage
+- and supplied the production connection string, commented out in `.env`.
+Everything else in production they had already entered by hand.
+
+Before this, `asset`, `mortgage`, `prepayment` and `retirement_settings` held
+**zero rows** between them. Those four tables are the whole of what was
+written. Nothing existing was touched.
+
+### Order of operations
+
+1. **Dump production and prove the dump restores** - into the local throwaway
+   Postgres, not into a scratch database on their server, so the only thing
+   that touched the real machine was a read. `backup.mjs verify` does create
+   and drop a scratch database on whatever server `DATABASE_URL` names, so it
+   was pointed at the local one deliberately.
+2. **Check the figures against the engine before writing them.** Every
+   retirement output the workbook prints is reproduced to the cent by
+   `computeRetirement`, and the mortgage terms reproduce the workbook's own
+   amortization schedule and land on its payoff date exactly.
+3. **Rehearse on a restored copy.** The dump was restored locally, the script
+   run against it for real, the API booted against that copy, and the two
+   endpoints the data feeds read back over HTTP. Only then was production
+   written.
+4. **Write in one transaction**, with a guard that refuses outright if any of
+   the three areas already holds a live row. Proven by running it twice on the
+   rehearsal copy: the second run failed and changed nothing.
+5. **Read back from production, and dump again.**
+
+### The script is not in this repository, and cannot be
+
+It carries real household figures, so it lives in the session scratchpad.
+That is the rule working as intended rather than an omission: the figures
+themselves come from the git-ignored seed and from workbooks the owner
+attached, and neither may reach git. Anyone repeating this starts from
+`seed/household-nov-2026.json` and the mortgage workbook, not from a committed
+script.
+
+### Written as facts, derived as everything else
+
+- **Net worth** is five rows - four owned, one owed. No totals stored; the
+  screen derives them.
+- **Retirement** is the eight inputs the engine takes. Every headline figure
+  on that screen is computed from them, and all of them match the workbook.
+- **The mortgage** is one row of terms. It follows the first person's payday
+  plus one day rather than carrying its own anchor, which is how the household
+  actually pays it and is why a third cheque and a third mortgage payment are
+  not always in the same month. The balance date is a real payment date, which
+  the API requires and which a direct SQL insert would otherwise skip past -
+  checked explicitly against `isPaydayOn` instead.
+
+### Judgment calls made, all of them visible in the app and easy to undo
+
+- **The workbook's three planned annual lump sums were included, as planned
+  rather than paid.** They are the whole reason this app has a mortgage screen,
+  and they move the projected payoff by years, so leaving them out would have
+  shown a payoff date the household does not recognise. The model has a
+  first-class "intended but not paid yet" flag and the screen shows the
+  projection both with and without them, so nothing is overstated.
+- **The mortgage liability on the net-worth screen uses the current balance,
+  not the one the budget workbook was written with.** Using the older figure
+  would have left two different mortgage balances on two screens.
+- **The yearly prepayment allowance is left untracked.** The workbook shows
+  what the household intends to pay, which is not the same as what the lender
+  permits, and guessing a lender's term is not something to do silently. The
+  allowance line hides itself when untracked, so nothing wrong is displayed.
+
+### Noticed while in there
+
+Both people in production carry the same initial, so the avatars cannot tell
+them apart. Cosmetic, one field, not touched without being asked.
+
+The mortgage balance now exists in two places - the mortgage terms and the
+net-worth liability - and nothing keeps them in step. `mortgage.ts` warns
+about exactly this ("the failure mode that storing a number in two places
+invites"). Worth a decision later: derive the liability row, or accept that it
+is a snapshot someone updates.
 
 ## Bug 20: the update bar would not go away (2026-11-15, reported from production)
 
@@ -1989,6 +2071,12 @@ From HANDOFF section 14. Each default is built and editable in the app where it 
 10. **A Christmas bonus and an occasional extra cheque** (the blue rows). *Built:* not scheduled; either user can add them as one-offs.
 11. **Banked hours.** *Built:* per user, hours only, no dollar conversion.
 12. **Bank connection.** *Built:* the balance stays manual.
+13. **The lender's yearly prepayment allowance.** The mortgage workbook shows what the
+    household plans to pay, which is not the same as what the mortgage permits.
+    *Built:* left untracked, so the allowance line hides itself rather than quoting a
+    limit nobody confirmed. One field under the mortgage once the real figure is known.
+14. **Two people, one initial.** Both avatars in production show the same letter.
+    *Built:* nothing - left as entered, because a person's initial is theirs to choose.
 
 ## Blocked / needs the owner
 
