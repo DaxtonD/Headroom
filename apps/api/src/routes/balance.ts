@@ -14,6 +14,7 @@
  */
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import { labelKindFor } from "../lib/activityLabels.js";
 import { publishChange } from "../lib/changeStream.js";
 import { HttpError, hashRequest, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
@@ -75,7 +76,8 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
             : // No id means the one the home screen is about.
               { householdId: user.householdId, deletedAt: null, kind: "chequing" },
           orderBy: { createdAt: "asc" },
-          select: { id: true, kind: true },
+          // `name` is for the log: "updated the Chequing balance" needs it.
+          select: { id: true, kind: true, name: true },
         });
         if (!account) {
           throw new HttpError(
@@ -110,7 +112,10 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
               deletedAt: null,
               clearedAt: null,
             },
-            select: { id: true, version: true },
+            // `name` and `kind` are here only for the log: an activity row
+            // records what the thing was called at the time rather than
+            // reading it back off a row that may since have changed or gone.
+            select: { id: true, version: true, name: true, kind: true },
           });
 
           // Anything already cleared is left alone rather than cleared twice
@@ -138,6 +143,8 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
                 fields: ["cleared"],
                 beforeJson: { cleared: false },
                 afterJson: { cleared: true },
+                label: occurrence.name,
+                labelKind: labelKindFor(occurrence.kind),
               },
             });
           }
@@ -159,6 +166,10 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
           userId: user.id,
           householdId: user.householdId,
           snapshot: { cents: snapshot.cents.toString(), asOf: asOf.toISOString() },
+          // A balance snapshot has no name of its own; the account's is what
+          // makes "updated the Chequing balance" possible.
+          label: account.name,
+          labelKind: "balance",
         });
 
         await publishChange(tx, {

@@ -13,6 +13,7 @@
  */
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { activityKey } from "./activityQueries.js";
 import { billsKey, categoriesKey, setupKey } from "./manageQueries.js";
 import { budgetKey, goalsKey, netWorthKey, yearKey } from "./plannerQueries.js";
 import { dashboardKey, payPeriodsKey } from "./queries.js";
@@ -38,6 +39,9 @@ const MONEY_KEYS = [dashboardKey, payPeriodsKey] as const;
  */
 const ALL_KEYS = [
   ...MONEY_KEYS,
+  // The log is the one query that changes on *every* ping, since a ping is
+  // by definition something that was logged.
+  activityKey,
   setupKey,
   billsKey,
   categoriesKey,

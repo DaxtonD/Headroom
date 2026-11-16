@@ -295,6 +295,7 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
             targetCents: created.targetCents?.toString() ?? null,
             savedCents: created.savedCents.toString(),
           },
+          labelKind: "goal",
         });
 
         await publishChange(tx, {
@@ -367,6 +368,7 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
             targetCents: row.targetCents?.toString() ?? null,
             savedCents: row.savedCents.toString(),
           }),
+          labelKind: "goal",
         });
 
         await publishChange(tx, {
@@ -439,6 +441,7 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
             targetCents: row.targetCents?.toString() ?? null,
             savedCents: row.savedCents.toString(),
           }),
+          labelKind: "goal",
         });
 
         await publishChange(tx, {
@@ -494,6 +497,8 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
           userId: user.id,
           householdId: user.householdId,
           snapshot: { purchase: created.purchase, cents: created.cents.toString() },
+          label: created.purchase,
+          labelKind: "work expense",
         });
 
         await publishChange(tx, {
@@ -597,6 +602,8 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
             submitted: row.submittedAt !== null,
             paid: row.paidAt !== null,
           }),
+          label: typeof changes["purchase"] === "string" ? changes["purchase"] : existing.purchase,
+          labelKind: "work expense",
         });
 
         await publishChange(tx, {
@@ -678,6 +685,7 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
             hours: row.hours.toString(),
             userId: row.userId,
           }),
+          labelKind: "banked hours entry",
         });
 
         await publishChange(tx, {
@@ -737,6 +745,7 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
           userId: user.id,
           householdId: user.householdId,
           snapshot: { hours: created.hours.toString(), userId: created.userId },
+          labelKind: "banked hours entry",
         });
 
         await publishChange(tx, {

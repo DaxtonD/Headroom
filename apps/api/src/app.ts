@@ -16,6 +16,7 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyError, type FastifyInstance } from "fastify";
 import type { Database } from "./db.js";
 import type { Env } from "./env.js";
+import { registerActivityRoutes } from "./routes/activity.js";
 import { registerAuthRoutes } from "./routes/auth.js";
 import { registerBalanceRoutes } from "./routes/balance.js";
 import { registerBudgetRoutes } from "./routes/budget.js";
@@ -200,6 +201,7 @@ export async function buildApp({ env, db, changeStream }: BuildAppOptions): Prom
   await app.register(registerTemplateRoutes, { prefix: "/api" });
   await app.register(registerBudgetRoutes, { prefix: "/api" });
   await app.register(registerGoalRoutes, { prefix: "/api" });
+  await app.register(registerActivityRoutes, { prefix: "/api" });
   await app.register(registerYearRoutes, { prefix: "/api" });
   await app.register(registerSavingsRoutes, { prefix: "/api" });
   await app.register(registerNetWorthRoutes, { prefix: "/api" });

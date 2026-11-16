@@ -21,6 +21,7 @@ import { publishChange } from "../lib/changeStream.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { wireCents } from "../lib/wire.js";
+import { labelKindFor } from "../lib/activityLabels.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
 import { fromPlainDate, toPlainDate } from "../lib/timelineService.js";
 import type { ActivityAction, Occurrence } from "../generated/prisma/client.js";
@@ -265,6 +266,7 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
               },
             }),
           snapshot: snapshotOccurrence,
+          labelKind: labelKindFor(existing.kind),
         });
 
         await publishChange(tx, {
@@ -371,6 +373,7 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
           userId: user.id,
           householdId: user.householdId,
           snapshot: snapshotOccurrence(created),
+          labelKind: labelKindFor(created.kind),
         });
 
         await publishChange(tx, {
@@ -452,6 +455,7 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
               },
             }),
           snapshot: snapshotOccurrence,
+          labelKind: labelKindFor(existing.kind),
         });
 
         await publishChange(tx, {

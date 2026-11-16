@@ -12,6 +12,7 @@ import { useState } from "react";
 import { Navigate, Route, Routes } from "react-router";
 import { Shell } from "./components/Shell.js";
 import { AppBadge } from "./components/AppBadge.js";
+import { ActivityPanel } from "./components/ActivityPanel.js";
 import { UpdateBalanceSheet } from "./components/UpdateBalanceSheet.js";
 import { clearAppBadge } from "./lib/appBadge.js";
 import { useLaunchedBy } from "./lib/launchAction.js";
@@ -42,6 +43,12 @@ export function App(): React.JSX.Element {
   };
   // Opened by the button on the ledger, or by the manifest shortcut.
   const [balanceSheetOpen, setBalanceSheetOpen] = useState(useLaunchedBy("update-balance"));
+  /*
+   * Panel state, not a route: the log is read alongside whatever screen you
+   * are on and closes back to it. A route would make it somewhere you go,
+   * and coming back would mean remembering where you were.
+   */
+  const [activityOpen, setActivityOpen] = useState(false);
 
   // Only listen once there is someone to listen for.
   const live = useLiveUpdates(Boolean(session.data));
@@ -78,6 +85,8 @@ export function App(): React.JSX.Element {
       you={{ name: session.data.user.name }}
       live={live}
       onSignOut={signOut}
+      activityOpen={activityOpen}
+      onToggleActivity={() => setActivityOpen((open) => !open)}
     >
       <AppBadge />
 
@@ -120,6 +129,8 @@ export function App(): React.JSX.Element {
       {balanceSheetOpen ? (
         <UpdateBalanceSheet onClose={() => setBalanceSheetOpen(false)} />
       ) : null}
+
+      {activityOpen ? <ActivityPanel onClose={() => setActivityOpen(false)} /> : null}
     </Shell>
   );
 }

@@ -720,6 +720,15 @@ model Activity {
   fields      String[]
   beforeJson  Json?
   afterJson   Json?
+  /// What the thing was called when this happened - "Mortgage", "Chequing".
+  /// Written here rather than looked up later, because a log that reads back
+  /// through live rows reports today's name for yesterday's event, and says
+  /// nothing at all once the row is gone.
+  label       String?
+  /// What sort of thing it was, in the household's own words: "bill",
+  /// "payday", "work expense", "balance". The verb depends on it - a
+  /// paycheque is received where a bill is paid.
+  labelKind   String?
 
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   user      User      @relation(fields: [userId], references: [id])

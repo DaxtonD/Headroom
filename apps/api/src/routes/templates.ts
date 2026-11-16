@@ -16,6 +16,7 @@ import {
 } from "../lib/generateService.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
+import { labelKindFor } from "../lib/activityLabels.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
 import { wireCents } from "../lib/wire.js";
 import type { Template } from "../generated/prisma/client.js";
@@ -188,6 +189,7 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
           userId: user.id,
           householdId: user.householdId,
           snapshot: snapshotTemplate(created),
+          labelKind: labelKindFor(created.kind),
         });
 
         await publishChange(tx, {
@@ -280,6 +282,7 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
             });
           },
           snapshot: snapshotTemplate,
+          labelKind: labelKindFor(existing.kind),
         });
 
         await publishChange(tx, {

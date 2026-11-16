@@ -188,6 +188,14 @@ export interface ApplyVersionedChangeOptions<TRow> {
   readonly writeRow: (nextVersion: number) => Promise<TRow>;
   /** Reduce a row to the values worth logging. */
   readonly snapshot: (row: TRow) => Record<string, unknown>;
+  /**
+   * What to call this thing in the log, if its snapshot has no `name`.
+   *
+   * Most rows name themselves, so most callers pass nothing.
+   */
+  readonly label?: string | null;
+  /** What sort of thing it is: "bill", "payday", "work expense", "balance". */
+  readonly labelKind?: string | null;
 }
 
 export interface ApplyVersionedChangeResult<TRow> {
@@ -272,10 +280,31 @@ export async function applyVersionedChange<TRow extends { version: number }>(
       // assemble from it.
       beforeJson: asJson(pick(beforeSnapshot, Object.keys(changes))),
       afterJson: asJson(pick(afterSnapshot, Object.keys(changes))),
+      /*
+       * The name as it is *after* this change, so renaming something reads
+       * as a rename of the new name rather than of the old one - and the
+       * `before` snapshot right above still says what it used to be.
+       */
+      label: labelFrom(options.label, afterSnapshot),
+      labelKind: options.labelKind ?? null,
     },
   });
 
   return { row: after, merged };
+}
+
+/**
+ * What to call the thing this row is about.
+ *
+ * An explicit label wins; otherwise the snapshot's own `name`, which most of
+ * them have. Null when neither exists, and the log then falls back to the
+ * kind of thing it was rather than inventing a name for it.
+ */
+function labelFrom(explicit: string | null | undefined, snapshot: Record<string, unknown>): string | null {
+  if (typeof explicit === "string" && explicit.trim() !== "") return explicit.trim();
+  const name = snapshot["name"];
+  if (typeof name === "string" && name.trim() !== "") return name.trim();
+  return null;
 }
 
 /**
@@ -307,6 +336,10 @@ export async function logCreation(
     readonly userId: string;
     readonly householdId: string;
     readonly snapshot: Record<string, unknown>;
+    /** Only needed when the snapshot has no `name` of its own. */
+    readonly label?: string | null;
+    /** What sort of thing it is: "bill", "payday", "work expense", "balance". */
+    readonly labelKind?: string | null;
   },
 ): Promise<void> {
   await tx.activity.create({
@@ -320,6 +353,8 @@ export async function logCreation(
       fields: Object.keys(options.snapshot),
       beforeJson: undefined,
       afterJson: asJson(options.snapshot),
+      label: labelFrom(options.label, options.snapshot),
+      labelKind: options.labelKind ?? null,
     },
   });
 }

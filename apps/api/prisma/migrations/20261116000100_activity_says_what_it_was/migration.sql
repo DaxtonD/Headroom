@@ -1,0 +1,36 @@
+-- An activity row remembers what the thing was called.
+--
+-- The log already recorded who did what to which row, which is everything a
+-- conflict check needs and nothing a person can read. "Alex verified
+-- occurrence 4f3a..." is not a sentence anybody wants.
+--
+-- The obvious fix - join back to the row and read its name - is the wrong
+-- one twice over. It reports today's name for yesterday's event, so renaming
+-- a bill quietly rewrites history; and the row may be gone, which is exactly
+-- when the log matters most. An append-only log that depends on mutable rows
+-- is not append-only.
+--
+-- So the name travels with the event. `labelKind` goes with it because the
+-- verb depends on the noun: a paycheque is received where a bill is paid, and
+-- both are `clear` on an occurrence.
+--
+-- Both are nullable, and every row written before today has neither.
+ALTER TABLE "activity" ADD COLUMN "label"     TEXT;
+ALTER TABLE "activity" ADD COLUMN "labelKind" TEXT;
+
+-- No back-fill, deliberately.
+--
+-- The first draft of this migration ended with an UPDATE that lifted the name
+-- out of `afterJson` into `label` for rows that had one. It failed, with
+-- "Table activity is insert-only" - the trigger from
+-- 20261107000100_integrity_guards, doing precisely its job.
+--
+-- Two things worth keeping about that. The failure appeared only against a
+-- database with rows in it: the trigger is FOR EACH ROW, so against the empty
+-- test database the same UPDATE passed, and the suite was green. And had it
+-- reached production, `migrate deploy` runs on container start, so the API
+-- would not have booted.
+--
+-- The back-fill was not needed anyway. Where a name exists it is already in
+-- `afterJson`, and the log reads it from there. Nothing had to be rewritten;
+-- it only had to be read from where it already was.

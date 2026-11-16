@@ -1,0 +1,146 @@
+/*
+ * The activity panel.
+ *
+ * It comes in from the right rather than up from the bottom, which is what
+ * every editing sheet does. That is on purpose: a sheet is something you fill
+ * in and dismiss, and this is something you read alongside the screen behind
+ * it. On a phone it is nearly full width anyway; the difference is that the
+ * screen you were on stays visible at the edge, so it reads as "a drawer over
+ * this" rather than "a new place you have gone".
+ */
+
+.activity-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: flex-end;
+  background: var(--hr-scrim);
+}
+
+.activity-panel {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 420px);
+  height: 100dvh;
+  overflow-y: auto;
+  padding: var(--hr-space-4);
+  /* Clear of the status bar at the top and the gesture bar at the bottom. */
+  padding-top: calc(var(--hr-space-4) + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(var(--hr-space-5) + env(safe-area-inset-bottom, 0px));
+  background: var(--hr-card);
+  border-left: 1px solid var(--hr-card-border);
+}
+
+.activity-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  margin-bottom: var(--hr-space-3);
+}
+
+.activity-panel__title {
+  margin: 0;
+  font-size: 1.375rem;
+}
+
+/* The heading takes focus when the panel opens; it is not a control. */
+.activity-panel__title:focus {
+  outline: none;
+}
+.activity-panel__title:focus-visible {
+  outline: 2px solid var(--hr-focus);
+  outline-offset: 3px;
+}
+
+.activity-panel__note {
+  margin: var(--hr-space-3) 0;
+  color: var(--hr-text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+}
+
+.activity-panel__more {
+  margin-top: var(--hr-space-4);
+  align-self: flex-start;
+}
+
+.activity-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.activity-list__day {
+  margin: var(--hr-space-4) 0 var(--hr-space-1);
+  color: var(--hr-text-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.activity-list__item:first-child .activity-list__day {
+  margin-top: 0;
+}
+
+.activity-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--hr-space-3);
+  padding: var(--hr-space-2) 0;
+  border-top: 1px solid var(--hr-row-divider);
+}
+
+.activity-list__item:first-child .activity-row,
+.activity-list__day + .activity-row {
+  border-top: none;
+}
+
+/*
+ * The initial, in the person's own colours - the same pair the avatars and
+ * verification badges use, so the colour alone answers "who".
+ */
+.activity-row__who {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.625rem;
+  height: 1.625rem;
+  border-radius: 50%;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  /* Baseline alignment would hang the circle off the first line. */
+  align-self: flex-start;
+  margin-top: 0.1rem;
+}
+
+.activity-row__said {
+  flex: 1 1 auto;
+  margin: 0;
+  min-width: 0;
+  font-size: 0.9375rem;
+  line-height: 1.45;
+  /* A long bill name must wrap rather than push the time off the panel. */
+  overflow-wrap: anywhere;
+}
+
+.activity-row__at {
+  flex: 0 0 auto;
+  color: var(--hr-text-muted);
+  font-size: 0.8125rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * On a wide screen it sits against the right edge as a column. The app
+ * already switches the tab bar to a left nav at this width, so the two
+ * frame the content between them.
+ */
+@media (min-width: 1024px) {
+  .activity-panel {
+    width: 440px;
+  }
+}

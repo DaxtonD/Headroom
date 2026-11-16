@@ -34,12 +34,17 @@ export function Shell({
   you,
   live,
   onSignOut,
+  activityOpen,
+  onToggleActivity,
   children,
 }: {
   /** Whoever is signed in on this phone. */
   you: { readonly name: string };
   live: LiveStatus;
   onSignOut: () => void;
+  /** The activity panel is open, so the button reads as pressed. */
+  activityOpen: boolean;
+  onToggleActivity: () => void;
   children: React.ReactNode;
 }): React.JSX.Element {
   const settings = useSettingsRoute();
@@ -68,6 +73,23 @@ export function Shell({
             a one-way trip, since a link to the page you are already on does
             nothing at all.
           */}
+          {/*
+            Activity sits next to Settings for the same reason Settings is
+            here: the five tabs are as many as a phone holds, and this is
+            read now and then rather than several times a day. A toggle, so
+            a second tap closes it and leaves you where you were.
+          */}
+          <button
+            className={`shell-header__settings ${
+              activityOpen ? "shell-header__settings--active" : ""
+            }`}
+            type="button"
+            aria-pressed={activityOpen}
+            aria-label={activityOpen ? "Close activity" : "Activity"}
+            onClick={onToggleActivity}
+          >
+            <ActivityIcon />
+          </button>
           <button
             className={`shell-header__settings ${
               settings.isOpen ? "shell-header__settings--active" : ""
@@ -111,6 +133,38 @@ export function Shell({
 
       <main className="shell-main">{children}</main>
     </div>
+  );
+}
+
+/**
+ * Activity: Lucide's `history` icon, inlined.
+ *
+ * A clock with an arrow going back round it, which is as close to "what has
+ * happened" as a 22-pixel glyph gets. Chosen over a list or a bell: a list
+ * says nothing about time, and a bell means notifications, which is a
+ * different thing in this app and now a real setting of its own.
+ *
+ * Taken verbatim from lucide-static 0.456.0, ISC - see
+ * `THIRD-PARTY-NOTICES.md`, same as the gear below it.
+ */
+function ActivityIcon(): React.JSX.Element {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+      <path d="M3 3v5h5" />
+      <path d="M12 7v5l4 2" />
+    </svg>
   );
 }
 

@@ -532,6 +532,83 @@ about exactly this ("the failure mode that storing a number in two places
 invites"). Worth a decision later: derive the liability row, or accept that it
 is a snapshot someone updates.
 
+## The activity log (2026-11-15, at the owner's request)
+
+"A log that can be viewed to show activity" - who verified what, who submitted
+a work expense.
+
+Almost all of it already existed. `activity` has been written on every
+mutation since M2, because the conflict detection needs it: two people editing
+the same bill is answered by asking what happened since the version the client
+saw. Production already held 143 real rows. Nobody could read any of them.
+
+### Where it lives: a panel, at the owner's suggestion
+
+Offered a tab, a section of the Ledger, or its own screen from Settings; the
+owner suggested a sidebar, which is better than all three. A panel suits what
+the log is - something you glance at *while* looking at something else, and
+close back to where you were. A tab would have taken the bar back to six on a
+phone, and a section of the Ledger would have added height to the one screen
+that has to open instantly with the balance at the top.
+
+Opened from a button beside the gear, for the same reason the gear is there.
+It reuses `useOverlayDismissal`, so the close button, Escape, Android's Back
+and a tap outside all work, which is the whole reason that helper exists.
+
+### The wording is in the engine, not in the screen
+
+`describeActivity` lives in `@headroom/core`. Two things need these sentences
+and they must never disagree: the log, and the push notification that says the
+same thing on the other phone. Worded in two places, they would drift apart
+the first time either was edited, and the household would be told two
+different stories about one event.
+
+No amounts, ever - the household chose that for notifications, and the log
+uses the same sentence so the two cannot drift.
+
+### What the rows now remember
+
+An activity row records *what the thing was called*, and what sort of thing it
+was. Reading the name back off the live row would have been the obvious
+alternative and is wrong twice: it reports today's name for yesterday's event,
+so renaming a bill rewrites history, and the row may be gone - which is
+exactly when a log matters.
+
+`labelKind` is there because the verb depends on the noun. A paycheque is
+*received* where a bill is *paid*, and in the database both are `clear` on an
+occurrence. The same action with two meanings is Bug 16's shape, and the log
+had to not repeat it: `paid` is the ledger's tick, `cleared` is the
+balance-update checklist, and they read differently now.
+
+### The migration that would have stopped production booting
+
+The first draft ended with an UPDATE lifting names out of `afterJson` into the
+new column. **The suite was green.** It failed the moment it met a database
+with rows in it: "Table activity is insert-only", the trigger from
+`20261107000100_integrity_guards` doing exactly its job. `migrate deploy` runs
+on container start, so the API would not have come up.
+
+The suite could not have caught it. The trigger is `FOR EACH ROW`, and
+migrations run against an empty test database, so an UPDATE touching no rows
+fires nothing. Found by restoring a production dump locally and running the
+migration against that - which is now the thing to do for any migration that
+touches existing rows.
+
+The back-fill was never needed: a creation already stored the whole row it
+created, so the name was in `afterJson` all along. It is read from there.
+
+A new static check refuses any migration that UPDATEs or DELETEs `activity` or
+`balance_snapshot`, or that disables a trigger to get around them. It needs no
+database, so it fails on any machine, and it goes red on the exact statement
+that caused it.
+
+### Checked against the real thing
+
+The 143 production rows were restored locally and rendered. Two sentences came
+out reading like a schema rather than English - "turned a template off" - and
+were fixed. The rest of the older rows say "a bill" rather than naming one,
+which is honest: it is genuinely all those rows know.
+
 ## Bug 20: the update bar would not go away (2026-11-15, reported from production)
 
 Reported the day the build stamps landed: "the app continues to prompt that a
