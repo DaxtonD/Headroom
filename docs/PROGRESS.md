@@ -849,6 +849,60 @@ The keys were never the problem, and were provably fine: `setVapidDetails`
 runs at server start and rejects a pair that is not a valid P-256 key, so a
 server that boots has usable keys. Worth remembering as a diagnostic.
 
+## Bug 23: the server's clock is nearly six hours fast (2026-11-15, found in production)
+
+Found while chasing the notifications, by reading production's own row
+timestamps. This is the real bug behind bug 21, and it is much bigger than
+that one looked.
+
+Measured against the database's own `now()`:
+
+| what wrote it | how far ahead |
+|---|---|
+| the newest session's last-seen | 5h 51m |
+| the newest activity row | 5h 30m |
+| the newest push subscription | 5h 51m |
+| the newest balance's `asOf` | 5h 29m |
+
+**The database's clock is correct** - it agreed with this machine to the
+second. Everything the *app container* writes is nearly six hours ahead.
+
+### Why this is worse than a wrong timestamp
+
+The app derives **today** from its own clock, and every figure on every
+screen is derived from today: which pay period you are in, what is still to
+come, safe to spend, left this cycle. At 22:23 on the 15th the server
+believed it was 04:15 on the 16th. After about six in the evening, Headroom
+has been a day ahead - quietly, with nothing on any screen to say so.
+
+Bug 21 - a balance that saves and does not appear - was one visible symptom
+of this, and the fix there (a new snapshot outranks the last one by
+construction) still stands and still helps. But the cause was never a clock
+that "had been wrong and was corrected". It is wrong now.
+
+### Not fixable from here
+
+The clock belongs to the machine running the container, which is the owner's
+Unraid box. Nothing in this repository can correct it, and nothing in this
+repository should try: a server that silently compensates for its own wrong
+clock is far harder to reason about than one that is right.
+
+### Built: it can no longer happen silently
+
+`/api/health` reports `databaseTime` and `clockSkewSeconds` beside
+`serverTime`, and Settings shows a warning when the two are more than two
+minutes apart - naming the size and direction of the gap.
+
+Two clocks that must agree, and until now only one of them was ever visible.
+That is the same shape as bugs 19 and 20: the problem was findable, but only
+by someone who already suspected it.
+
+### Why no test caught it
+
+Nothing could. One machine runs both clocks in every test, so they always
+agree. What is testable is that the comparison exists and is reported, and
+that is what `clock.test.ts` covers.
+
 ## Bug 21: a balance could be typed, saved, and ignored (2026-11-15, found in production)
 
 Not reported - found while testing something else against a restored copy of

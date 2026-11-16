@@ -25,6 +25,19 @@ import "./Settings.css";
  * explanation. "Blocked" in particular is the one this app cannot fix, so it
  * has to say where the fix is.
  */
+/** "5 hours 51 minutes ahead of", or "3 minutes behind". */
+function describeSkew(seconds: number): string {
+  const total = Math.abs(seconds);
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const parts = [
+    ...(hours > 0 ? [`${String(hours)} hour${hours === 1 ? "" : "s"}`] : []),
+    ...(minutes > 0 ? [`${String(minutes)} minute${minutes === 1 ? "" : "s"}`] : []),
+  ];
+  const span = parts.length > 0 ? parts.join(" ") : "seconds";
+  return `${span} ${seconds > 0 ? "ahead of" : "behind"}`;
+}
+
 const NOTIFICATION_NOTE: Record<ReturnType<typeof usePushNotifications>["state"], string> = {
   checking: "Checking…",
   unsupported: "This browser cannot show notifications.",
@@ -38,7 +51,7 @@ const NOTIFICATION_NOTE: Record<ReturnType<typeof usePushNotifications>["state"]
 export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.Element {
   const [appearance, setAppearance] = useAppearance();
   const settings = useSettingsRoute();
-  const { serverBuild, stale, recheck } = useServerBuild();
+  const { serverBuild, clockSkewSeconds, stale, recheck } = useServerBuild();
   const push = usePushNotifications();
   const workerBuild = useWorkerBuild();
 
@@ -269,6 +282,21 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
             </dd>
           </div>
         </dl>
+
+        {/*
+          Two clocks that have to agree. Found in production nearly six
+          hours apart, which put every balance's date in the future and -
+          far worse - moved the server's idea of *today*, which every figure
+          on every screen is derived from. Nothing said so at the time.
+        */}
+        {clockSkewSeconds !== null && Math.abs(clockSkewSeconds) > 120 ? (
+          <p className="hr-alert settings__section-note" role="alert">
+            <strong>The server&rsquo;s clock is wrong.</strong> It is{" "}
+            {describeSkew(clockSkewSeconds)} its own database. Dates and
+            &ldquo;today&rdquo; will be off until the clock on the machine running Headroom is
+            corrected.
+          </p>
+        ) : null}
 
         <div className="settings__actions">
           <button className="hr-button hr-button--secondary" type="button" onClick={recheck}>

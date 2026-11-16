@@ -16,15 +16,25 @@ import { useEffect, useState } from "react";
 import { BUILD_ID, isStaleBuild } from "./buildId.js";
 
 /** Cache-busted, because the whole point is to not be told what we had. */
-async function fetchServerBuild(): Promise<string | null> {
+interface Health {
+  readonly buildId: string | null;
+  /** Seconds the app's clock is ahead of the database's. Null if unknown. */
+  readonly clockSkewSeconds: number | null;
+}
+
+async function fetchHealth(): Promise<Health | null> {
   try {
     const response = await fetch("/api/health", {
       cache: "no-store",
       headers: { accept: "application/json" },
     });
     if (!response.ok) return null;
-    const body = (await response.json()) as { buildId?: unknown };
-    return typeof body.buildId === "string" ? body.buildId : null;
+    const body = (await response.json()) as { buildId?: unknown; clockSkewSeconds?: unknown };
+    return {
+      buildId: typeof body.buildId === "string" ? body.buildId : null,
+      clockSkewSeconds:
+        typeof body.clockSkewSeconds === "number" ? body.clockSkewSeconds : null,
+    };
   } catch {
     // Offline, or the server is down. Neither says anything about staleness.
     return null;
@@ -34,6 +44,13 @@ async function fetchServerBuild(): Promise<string | null> {
 export interface ServerBuild {
   /** What the server reports, once known. */
   readonly serverBuild: string | null;
+  /**
+   * How far the server's clock is from its database's, in seconds.
+   *
+   * It decides what day it is, and every figure on every screen is derived
+   * from that - so this is not a timestamp detail. Null when unknown.
+   */
+  readonly clockSkewSeconds: number | null;
   /** The app is definitely running a build the server is no longer serving. */
   readonly stale: boolean;
   /** Ask again now. */
@@ -42,14 +59,17 @@ export interface ServerBuild {
 
 export function useServerBuild(): ServerBuild {
   const [serverBuild, setServerBuild] = useState<string | null>(null);
+  const [clockSkewSeconds, setClockSkew] = useState<number | null>(null);
   const [asked, setAsked] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
 
     const ask = (): void => {
-      void fetchServerBuild().then((value) => {
-        if (!cancelled && value !== null) setServerBuild(value);
+      void fetchHealth().then((health) => {
+        if (cancelled || health === null) return;
+        if (health.buildId !== null) setServerBuild(health.buildId);
+        setClockSkew(health.clockSkewSeconds);
       });
     };
 
@@ -70,6 +90,7 @@ export function useServerBuild(): ServerBuild {
 
   return {
     serverBuild,
+    clockSkewSeconds,
     stale: serverBuild !== null && isStaleBuild(BUILD_ID, serverBuild),
     recheck: () => setAsked((count) => count + 1),
   };
