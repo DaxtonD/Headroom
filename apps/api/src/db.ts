@@ -28,6 +28,32 @@ import type { Env } from "./env.js";
  * silently lose precision above 2^53.
  */
 
+/**
+ * Every connection this app opens talks UTC, whatever the server is set to.
+ *
+ * Found in production, and it cost a day to find. Postgres there is
+ * configured `TimeZone = America/Regina`, and a `Date` handed to Prisma was
+ * being written **six hours late** - Saskatchewan's whole offset. Balances
+ * were dated in the future, which meant a balance could be typed, saved, and
+ * then ignored because an older row still had the later `asOf`.
+ *
+ * Every clock involved was correct. The shift happens on the way into the
+ * database: the value is serialised without an offset, and the server then
+ * reads it in whatever zone it is set to.
+ *
+ * Nothing caught it because the throwaway Postgres the tests run against is
+ * UTC, like almost every Postgres image, and on a UTC server the bug cannot
+ * occur. `test/databaseTimezone.test.ts` now runs against a Regina session on
+ * purpose, and fails without this line.
+ *
+ * Fixing it here rather than asking for the server to be reconfigured: this
+ * app stores absolute instants and does every conversion in
+ * `@headroom/core` against the household's own timezone, so the server's
+ * setting should be irrelevant. This makes that true instead of assumed, and
+ * it cannot be undone by someone editing postgresql.conf.
+ */
+const SESSION_OPTIONS = "-c timezone=UTC";
+
 export interface Database {
   readonly prisma: PrismaClient;
   readonly pool: pg.Pool;
@@ -44,6 +70,7 @@ export function createDatabase(env: Env): Database {
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 10_000,
     application_name: "headroom-api",
+    options: SESSION_OPTIONS,
   });
 
   const adapter = new PrismaPg(pool);
@@ -74,6 +101,8 @@ export async function createListener(env: Env): Promise<pg.Client> {
   const client = new pg.Client({
     connectionString: env.DATABASE_URL,
     application_name: "headroom-listener",
+    // The same UTC session as the pool; see SESSION_OPTIONS above.
+    options: SESSION_OPTIONS,
   });
   await client.connect();
   return client;

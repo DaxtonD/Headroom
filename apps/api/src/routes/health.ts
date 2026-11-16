@@ -15,6 +15,7 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
     let database: "up" | "down" = "down";
     let databaseError: string | undefined;
     let databaseTime: string | undefined;
+    let databaseTimezone: string | undefined;
 
     try {
       /*
@@ -28,9 +29,11 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
        *
        * Two clocks that must agree, and only one of them was ever visible.
        */
-      const rows = await app.db.prisma.$queryRaw<{ now: Date }[]>`SELECT now() as now`;
+      const rows = await app.db.prisma.$queryRaw<{ now: Date; tz: string }[]>`
+        SELECT now() as now, current_setting('TimeZone') as tz`;
       database = "up";
       databaseTime = rows[0]?.now.toISOString();
+      databaseTimezone = rows[0]?.tz;
     } catch (error) {
       databaseError = error instanceof Error ? error.message : "unknown error";
       app.log.error({ err: error }, "health check: database unreachable");
@@ -69,6 +72,14 @@ export async function registerHealthRoutes(app: FastifyInstance): Promise<void> 
           // second either way means nothing here anyway.
           : Math.trunc((Date.now() - new Date(databaseTime).getTime()) / 1000),
       timezone: app.env.TZ,
+      /*
+       * The zone *this app's own connections* talk in, which `db.ts` pins to
+       * UTC. Production's server is configured America/Regina, and before
+       * the pin that meant every timestamp the app wrote landed six hours
+       * late. Reported because the diagnosis took a day and this one line
+       * would have ended it in a minute.
+       */
+      databaseTimezone: databaseTimezone ?? null,
       uptimeSeconds: Math.floor((Date.now() - STARTED_AT) / 1000),
     });
   });

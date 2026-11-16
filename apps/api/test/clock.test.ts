@@ -29,6 +29,7 @@ interface HealthBody {
   readonly serverTime: string;
   readonly databaseTime: string | null;
   readonly clockSkewSeconds: number | null;
+  readonly databaseTimezone: string | null;
 }
 
 async function health(): Promise<HealthBody> {
@@ -50,6 +51,17 @@ describe("the health check", () => {
     expect(typeof body.clockSkewSeconds).toBe("number");
     // One machine runs both here, so they are the same clock.
     expect(Math.abs(body.clockSkewSeconds ?? 9999)).toBeLessThan(60);
+  });
+
+  it("says which zone the app's own connections talk in", async () => {
+    /*
+     * The line that would have ended a day of diagnosis in a minute.
+     * Production's server is America/Regina; `db.ts` pins every connection
+     * this app opens to UTC so the server's setting cannot shift a
+     * timestamp. Anything but UTC here means that pin has come undone.
+     */
+    const body = await health();
+    expect(body.databaseTimezone).toBe("UTC");
   });
 
   it("is still reachable without signing in, and still says nothing about the household", async () => {

@@ -849,59 +849,79 @@ The keys were never the problem, and were provably fine: `setVapidDetails`
 runs at server start and rejects a pair that is not a valid P-256 key, so a
 server that boots has usable keys. Worth remembering as a diagnostic.
 
-## Bug 23: the server's clock is nearly six hours fast (2026-11-15, found in production)
+## Bug 23: the database was adding six hours to every timestamp (2026-11-15)
 
 Found while chasing the notifications, by reading production's own row
-timestamps. This is the real bug behind bug 21, and it is much bigger than
-that one looked.
+timestamps. This is the real cause behind bug 21, and the first diagnosis of
+it in this log was **wrong**, which is worth keeping rather than quietly
+editing out.
 
-Measured against the database's own `now()`:
+### The wrong answer, and why it was wrong
 
-| what wrote it | how far ahead |
-|---|---|
-| the newest session's last-seen | 5h 51m |
-| the newest activity row | 5h 30m |
-| the newest push subscription | 5h 51m |
-| the newest balance's `asOf` | 5h 29m |
+Every timestamp the app wrote was exactly six hours ahead of the database's
+`now()`. The obvious reading was a fast clock, and that is what was written
+here and told to the owner - including the claim that the app must therefore
+think it is tomorrow after six in the evening.
 
-**The database's clock is correct** - it agreed with this machine to the
-second. Everything the *app container* writes is nearly six hours ahead.
+The owner then checked, and the clocks were fine:
 
-### Why this is worse than a wrong timestamp
+    docker exec Headroom  date -u   ->  Mon Nov 16 04:48:43 UTC 2026
+    docker exec postgres14 date -u  ->  Mon Nov 16 04:48:44 UTC 2026
+    date (host)                     ->  Sun Nov 15 22:50:01 CST 2026
 
-The app derives **today** from its own clock, and every figure on every
-screen is derived from today: which pay period you are in, what is still to
-come, safe to spend, left this cycle. At 22:23 on the 15th the server
-believed it was 04:15 on the 16th. After about six in the evening, Headroom
-has been a day ahead - quietly, with nothing on any screen to say so.
+22:50 CST **is** 04:50 UTC. Host and both containers agree to the second.
+The "six hours ahead" reading had been taken at face value when the number
+itself - exactly Saskatchewan's offset - was the clue.
 
-Bug 21 - a balance that saves and does not appear - was one visible symptom
-of this, and the fix there (a new snapshot outranks the last one by
-construction) still stands and still helps. But the cause was never a clock
-that "had been wrong and was corrected". It is wrong now.
+### The right answer
 
-### Not fixable from here
+Production's Postgres is configured `TimeZone = America/Regina`, not UTC. A
+`Date` handed to Prisma is serialised **without an offset**, so the server
+reads it in whatever zone it is set to, and a UTC instant lands six hours
+late. Reproduced exactly: write `2026-06-15T18:30:00Z`, read back
+`2026-06-16T00:30:00Z`.
 
-The clock belongs to the machine running the container, which is the owner's
-Unraid box. Nothing in this repository can correct it, and nothing in this
-repository should try: a server that silently compensates for its own wrong
-clock is far harder to reason about than one that is right.
+So the correction to the earlier entry: **"today" was never wrong.**
+`todayInZone` works from the app's own clock, which was always right. The
+ledger has been computing against the correct day throughout.
 
-### Built: it can no longer happen silently
+What *was* affected is anything stored and compared later:
 
-`/api/health` reports `databaseTime` and `clockSkewSeconds` beside
-`serverTime`, and Settings shows a warning when the two are more than two
-minutes apart - naming the size and direction of the gap.
+- `balance_snapshot.asOf` - bug 21, the balance that saves and does not
+  appear. Real, and the reason this was found at all.
+- `activity.at` - the log shows times six hours ahead for everything
+  written before the fix. History, and left alone: `activity` is
+  insert-only and a log that rewrites itself is not a log.
+- session and idempotency expiry - six hours longer than intended. Harmless
+  and self-correcting.
 
-Two clocks that must agree, and until now only one of them was ever visible.
-That is the same shape as bugs 19 and 20: the problem was findable, but only
-by someone who already suspected it.
+Plain `@db.Date` columns were **not** affected, which is the only reason
+this was merely bad rather than catastrophic: six hours past midnight UTC is
+still the same morning, so no ledger date ever moved a day. That was luck,
+and there is now a test so it stops being luck.
 
-### Why no test caught it
+### Fixed where the app can control it
 
-Nothing could. One machine runs both clocks in every test, so they always
-agree. What is testable is that the comparison exists and is reported, and
-that is what `clock.test.ts` covers.
+Every connection the app opens now sets `timezone=UTC`, in `db.ts`, for both
+the pool and the `LISTEN` connection. Asking for the server to be
+reconfigured would also have worked, but this app stores absolute instants
+and does every conversion in `@headroom/core` against the household's own
+timezone - the server's setting *should* be irrelevant, and this makes that
+true rather than assumed. It also cannot be undone by editing
+postgresql.conf.
+
+### Why nothing caught it
+
+The throwaway Postgres the tests run against is UTC, like almost every
+Postgres image, and on a UTC server the bug cannot happen. The entire suite
+could be green while production shifted every write by six hours.
+
+`databaseTimezone.test.ts` now sets the test database's own default to
+`America/Regina` - exactly production's shape - and checks that the app is
+unaffected anyway. Three of its six tests fail if the UTC pin is removed.
+
+`/api/health` reports `databaseTimezone` beside the two clocks. That one
+line would have ended the diagnosis in a minute instead of a day.
 
 ## Bug 21: a balance could be typed, saved, and ignored (2026-11-15, found in production)
 
