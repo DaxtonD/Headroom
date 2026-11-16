@@ -30,16 +30,27 @@ import { HttpError } from "../lib/http.js";
 /**
  * A browser's own subscription, exactly as `PushSubscription.toJSON()` gives
  * it. The shape is the browser's, so this validates rather than designs it.
+ *
+ * **Not `.strict()`, and that is the point.** It was, and it rejected every
+ * real subscription in production: `toJSON()` also returns `expirationTime`,
+ * which every browser sends and no hand-written test payload had. Being
+ * strict about a shape somebody else defines means any field a future
+ * browser adds breaks signing up, with a 400 and no clue why.
+ *
+ * So unknown fields are dropped. `expirationTime` is named rather than
+ * merely tolerated, because "we see this and deliberately ignore it" is
+ * worth saying out loud - it is the push service's own expiry guess, and
+ * what actually tells us a subscription is dead is a 404 or 410 at send
+ * time, which `lib/push.ts` acts on.
  */
-const subscribeBody = z
-  .object({
-    endpoint: z.string().url().max(2048),
-    keys: z.object({
-      p256dh: z.string().min(1).max(256),
-      auth: z.string().min(1).max(256),
-    }),
-  })
-  .strict();
+const subscribeBody = z.object({
+  endpoint: z.string().url().max(2048),
+  expirationTime: z.union([z.number(), z.string(), z.null()]).optional(),
+  keys: z.object({
+    p256dh: z.string().min(1).max(256),
+    auth: z.string().min(1).max(256),
+  }),
+});
 
 const unsubscribeBody = z.object({ endpoint: z.string().url().max(2048) }).strict();
 
@@ -76,7 +87,21 @@ export async function registerPushRoutes(app: FastifyInstance): Promise<void> {
 
     const parsed = subscribeBody.safeParse(request.body ?? {});
     if (!parsed.success) {
-      throw new HttpError(400, "invalid_request", "That is not a push subscription.");
+      /*
+       * Name the field. The first version of this said only "That is not a
+       * push subscription", which is exactly as much help as saying nothing
+       * - the body comes from the browser, so the one thing worth knowing
+       * is which part of it we did not like.
+       */
+      const issue = parsed.error.issues[0];
+      const where = issue?.path.join(".") ?? "";
+      throw new HttpError(
+        400,
+        "invalid_request",
+        where === ""
+          ? "That is not a push subscription."
+          : `That is not a push subscription: ${where} ${issue?.message ?? "is wrong"}.`,
+      );
     }
     const input = parsed.data;
 

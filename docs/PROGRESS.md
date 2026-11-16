@@ -733,6 +733,59 @@ out reading like a schema rather than English - "turned a template off" - and
 were fixed. The rest of the older rows say "a bill" rather than naming one,
 which is honest: it is genuinely all those rows know.
 
+## Bug 22: no browser could sign up for notifications (2026-11-15, reported from production)
+
+Reported within the hour of the feature going out. Turning notifications on
+produced a 400:
+
+    "That is not a push subscription."
+
+It was. `PushSubscription.toJSON()` returns `endpoint`, `keys` **and
+`expirationTime`**, and the schema validating it was `.strict()`, so the one
+field the parser had not been told about rejected the whole thing.
+
+### Why the tests did not catch it
+
+The test payload was written by hand to match the parser. That tests the
+parser against itself and proves nothing about what a browser sends - the
+one thing that mattered, since the shape is the browser's and not ours.
+
+The fixture is now the real `toJSON()` output, including `expirationTime`,
+and six tests go red if the schema goes back to being strict.
+
+### The real lesson is about strictness, not about one field
+
+`.strict()` is right for a body this app defines: an unknown field there is
+a client sending something nobody implemented, and silence would hide a bug.
+It is wrong for a body somebody else defines. The browser may add a field
+whenever the spec grows, and being strict turns that into "nobody can turn
+notifications on", with a 400 and no clue why.
+
+Unknown fields are now dropped. `expirationTime` is named rather than merely
+tolerated, so the next person can see it was considered: it is the push
+service's own expiry guess, and what actually proves a subscription dead is
+a 404 or 410 at send time, which is already acted on.
+
+### And the message said nothing
+
+"That is not a push subscription" is exactly as much help as silence. The
+body comes from the browser, so the only useful thing to say is which part
+of it was wrong. It now names the field. Every other route in this app
+already did this - it passes the first Zod issue's message through - and
+this one had a hand-written string instead.
+
+### Not a Firebase problem
+
+The owner had generated the key pair in the Firebase console, reasonably
+assuming Chrome on Android needed one. It does not: Web Push with VAPID
+needs no Firebase project at all. Chrome happens to route through FCM as the
+*push service*, which is why the endpoints are `fcm.googleapis.com` URLs,
+but nothing here talks to Google directly and no project is required.
+
+The keys were never the problem, and were provably fine: `setVapidDetails`
+runs at server start and rejects a pair that is not a valid P-256 key, so a
+server that boots has usable keys. Worth remembering as a diagnostic.
+
 ## Bug 21: a balance could be typed, saved, and ignored (2026-11-15, found in production)
 
 Not reported - found while testing something else against a restored copy of

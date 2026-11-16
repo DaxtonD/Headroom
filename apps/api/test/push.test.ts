@@ -133,8 +133,16 @@ describe("what is worth interrupting somebody for", () => {
 });
 
 describe("signing a browser up", () => {
+  /*
+   * What a browser actually sends: `PushSubscription.toJSON()`, including
+   * `expirationTime`. The first version of this test left that out, the
+   * schema was `.strict()`, and every real sign-up in production was
+   * rejected with a 400 while this suite stayed green. A payload invented
+   * to match the parser tests the parser against itself.
+   */
   const subscription = {
-    endpoint: "https://push.example.test/abc123",
+    endpoint: "https://fcm.googleapis.com/fcm/send/abc123",
+    expirationTime: null,
     keys: { p256dh: "a-public-key", auth: "an-auth-secret" },
   };
 
@@ -506,5 +514,78 @@ describe("from a real change to a real notification", () => {
       }),
     ).resolves.toBeUndefined();
     expect(sent).toHaveLength(0);
+  });
+});
+
+describe("the body a browser actually sends", () => {
+  /*
+   * The shape belongs to the browser, not to us. Validating it strictly
+   * means any field a future browser adds stops people signing up, with a
+   * 400 and nothing to go on - which is exactly what `expirationTime` did.
+   */
+  /** Seed once per test; two calls in one test would collide on the email. */
+  async function household(): Promise<string> {
+    await seedHousehold(harness);
+    return signIn(harness, "alex@example.test", "correct-horse-battery-staple");
+  }
+
+  async function subscribeWith(
+    cookie: string,
+    body: unknown,
+  ): Promise<{ status: number; message: string }> {
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/api/push/subscriptions",
+      headers: { cookie },
+      payload: body,
+    });
+    return {
+      status: response.statusCode,
+      message: (response.json() as { message?: string }).message ?? "",
+    };
+  }
+
+  it("accepts expirationTime, which every browser sends", async () => {
+    const result = await subscribeWith(await household(), {
+      endpoint: "https://fcm.googleapis.com/fcm/send/real",
+      expirationTime: null,
+      keys: { p256dh: "a-public-key", auth: "an-auth-secret" },
+    });
+    expect(result.status, result.message).toBe(201);
+  });
+
+  it("accepts an expiry that is a number, as the spec allows", async () => {
+    const result = await subscribeWith(await household(), {
+      endpoint: "https://fcm.googleapis.com/fcm/send/dated",
+      expirationTime: 1893456000000,
+      keys: { p256dh: "a-public-key", auth: "an-auth-secret" },
+    });
+    expect(result.status, result.message).toBe(201);
+  });
+
+  it("ignores a field no browser sends today", async () => {
+    // The next thing added to the spec must not take notifications down.
+    const result = await subscribeWith(await household(), {
+      endpoint: "https://fcm.googleapis.com/fcm/send/future",
+      expirationTime: null,
+      somethingNew: { nested: true },
+      keys: { p256dh: "a-public-key", auth: "an-auth-secret" },
+    });
+    expect(result.status, result.message).toBe(201);
+  });
+
+  it("still refuses something that is genuinely not a subscription, and says which part", async () => {
+    const cookie = await household();
+    const missingKeys = await subscribeWith(cookie, {
+      endpoint: "https://fcm.googleapis.com/fcm/send/x",
+    });
+    expect(missingKeys.status).toBe(400);
+    expect(missingKeys.message, "the message has to name the field").toContain("keys");
+
+    const noEndpoint = await subscribeWith(cookie, {
+      keys: { p256dh: "a-public-key", auth: "an-auth-secret" },
+    });
+    expect(noEndpoint.status).toBe(400);
+    expect(noEndpoint.message).toContain("endpoint");
   });
 });
