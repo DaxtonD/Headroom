@@ -25,6 +25,8 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { api } from "./api.js";
+import { BUILD_ID, isStamped, shortBuild } from "./buildId.js";
+import { activeWorkerBuild } from "./serverBuild.js";
 
 export type PushState =
   /** Still working out where we stand. */
@@ -121,42 +123,6 @@ interface TestResult {
   readonly sent: number;
   readonly gone: number;
   readonly failed: number;
-}
-
-/**
- * Ask the active service worker which build it is.
- *
- * Returns null when nothing answers, which is the interesting case: a
- * worker from before the push handler existed accepts a subscription and
- * then receives nothing, and that is indistinguishable from every other
- * cause by looking. Silence here names it.
- */
-export async function activeWorkerBuild(timeoutMs = 2000): Promise<string | null> {
-  if (!("serviceWorker" in navigator)) return null;
-
-  const worker = (await registration())?.active;
-  if (!worker) return null;
-
-  return new Promise<string | null>((resolve) => {
-    const channel = new MessageChannel();
-    const timer = setTimeout(() => {
-      channel.port1.close();
-      resolve(null);
-    }, timeoutMs);
-
-    channel.port1.onmessage = (event: MessageEvent<{ buildId?: unknown }>) => {
-      clearTimeout(timer);
-      channel.port1.close();
-      resolve(typeof event.data.buildId === "string" ? event.data.buildId : null);
-    };
-
-    try {
-      worker.postMessage({ type: "WHICH_BUILD" }, [channel.port2]);
-    } catch {
-      clearTimeout(timer);
-      resolve(null);
-    }
-  });
 }
 
 export interface PushControls {
@@ -334,8 +300,29 @@ function describeTest(result: TestResult, workerBuild: string | null): string {
   if (result.sent === 0) {
     return "Nothing was sent.";
   }
+  /*
+   * Three different answers, because the first version of this gave one
+   * confident one - "this device is still running an older background
+   * worker" - and that turned out to be a guess dressed as a diagnosis. It
+   * cannot tell a worker that is old from one that is not running from one
+   * too old to answer the question at all. So it says what it knows, names
+   * the builds, and lets them be compared against Settings → Version.
+   */
   if (workerBuild === null) {
-    return "Sent, but this device is still running an older background worker, which cannot receive notifications. Reload the app — twice if the first does nothing — and try again.";
+    const page = isStamped(BUILD_ID) ? ` This page is ${shortBuild(BUILD_ID)}.` : "";
+    return (
+      "Sent, but the background worker on this device did not answer. It is either not running, " +
+      `or older than this page — either way it cannot receive a notification.${page} ` +
+      "Reload the app, and check Settings → Version."
+    );
   }
+
+  if (isStamped(workerBuild) && isStamped(BUILD_ID) && workerBuild !== BUILD_ID) {
+    return (
+      `Sent, but this page is build ${shortBuild(BUILD_ID)} and the background worker is ` +
+      `${shortBuild(workerBuild)}. The worker is the half that receives notifications. Reload.`
+    );
+  }
+
   return "Sent. If nothing appears within a few seconds, the phone is holding it back rather than the app — check notification settings and battery saving for your browser.";
 }

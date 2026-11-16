@@ -157,13 +157,35 @@ describe("saying which worker is actually running", () => {
     expect(code).toContain("port.postMessage");
   });
 
-  it("is asked by the app, and silence is treated as an old worker", () => {
-    const lib = read("src/lib/pushNotifications.ts");
+  it("is asked over a channel that cannot hang", () => {
+    const lib = read("src/lib/serverBuild.ts");
     expect(lib).toContain('postMessage({ type: "WHICH_BUILD" }');
     expect(lib).toContain("MessageChannel");
     // A worker that never answers must not leave the screen waiting.
     expect(lib).toContain("setTimeout");
-    expect(lib).toContain("older background worker");
+  });
+
+  it("is shown beside the other two builds, not only after a test", () => {
+    /*
+     * The worker is the half that receives a push. A worker older than the
+     * page means notifications silently do not arrive while every screen
+     * looks current, so it belongs next to "this app" and "the server"
+     * rather than behind a button.
+     */
+    const settings = read("src/pages/Settings.tsx");
+    expect(settings).toContain("Background worker");
+    expect(settings).toContain("useWorkerBuild");
+  });
+
+  it("reports what it found rather than asserting why", () => {
+    /*
+     * The first version said "this device is still running an older
+     * background worker" for every silence, which is a guess dressed as a
+     * diagnosis - it cannot tell an old worker from one that is not running.
+     */
+    const lib = read("src/lib/pushNotifications.ts");
+    expect(lib).toContain("did not answer");
+    expect(lib, "it has to name the builds so they can be compared").toContain("shortBuild(");
   });
 });
 

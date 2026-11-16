@@ -13,7 +13,7 @@
 import { TEXT_SIZES, THEMES, useAppearance } from "../lib/appearance.js";
 import { BUILD_ID, isStamped, shortBuild } from "../lib/buildId.js";
 import { usePushNotifications } from "../lib/pushNotifications.js";
-import { loadServerBuild, useServerBuild } from "../lib/serverBuild.js";
+import { loadServerBuild, useServerBuild, useWorkerBuild } from "../lib/serverBuild.js";
 import { useSettingsRoute } from "../lib/settingsRoute.js";
 import "./Settings.css";
 
@@ -40,6 +40,7 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
   const settings = useSettingsRoute();
   const { serverBuild, stale, recheck } = useServerBuild();
   const push = usePushNotifications();
+  const workerBuild = useWorkerBuild();
 
   return (
     <div className="settings">
@@ -248,6 +249,22 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
                 ? "could not ask"
                 : isStamped(serverBuild)
                   ? shortBuild(serverBuild)
+                  : "not a released build"}
+            </dd>
+          </div>
+          {/*
+            The third answer, and the one that was still being guessed at.
+            The service worker is the half that receives a notification, so
+            a worker older than this page means nothing arrives while every
+            screen looks perfectly current.
+          */}
+          <div>
+            <dt>Background worker</dt>
+            <dd>
+              {workerBuild === null
+                ? "did not answer"
+                : isStamped(workerBuild)
+                  ? shortBuild(workerBuild)
                   : "not a released build"}
             </dd>
           </div>

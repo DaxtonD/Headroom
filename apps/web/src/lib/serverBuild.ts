@@ -98,6 +98,80 @@ async function waitForTakeover(timeoutMs: number): Promise<boolean> {
   });
 }
 
+/** The registration, or null rather than a promise that never settles. */
+async function workerRegistration(): Promise<ServiceWorkerRegistration | null> {
+  try {
+    return await Promise.race([
+      navigator.serviceWorker.ready,
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 5000)),
+    ]);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ask the active service worker which build it is.
+ *
+ * Returns null when nothing answers, which is the interesting case: a
+ * worker from before the push handler existed accepts a subscription and
+ * then receives nothing, and that is indistinguishable from every other
+ * cause by looking. Silence here names it.
+ */
+export async function activeWorkerBuild(timeoutMs = 2000): Promise<string | null> {
+  if (!("serviceWorker" in navigator)) return null;
+
+  const worker = (await workerRegistration())?.active;
+  if (!worker) return null;
+
+  return new Promise<string | null>((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => {
+      channel.port1.close();
+      resolve(null);
+    }, timeoutMs);
+
+    channel.port1.onmessage = (event: MessageEvent<{ buildId?: unknown }>) => {
+      clearTimeout(timer);
+      channel.port1.close();
+      resolve(typeof event.data.buildId === "string" ? event.data.buildId : null);
+    };
+
+    try {
+      worker.postMessage({ type: "WHICH_BUILD" }, [channel.port2]);
+    } catch {
+      clearTimeout(timer);
+      resolve(null);
+    }
+  });
+}
+
+/**
+ * What build the service worker running on this device is.
+ *
+ * The third answer to "which build is where", after the page and the
+ * server. It matters more than it looks: the worker is the half that
+ * receives a push, so a worker older than the page means notifications
+ * silently do not arrive while every screen looks current.
+ *
+ * `null` means it did not answer - not running, or too old to know how.
+ */
+export function useWorkerBuild(): string | null {
+  const [workerBuild, setWorkerBuild] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void activeWorkerBuild().then((value) => {
+      if (!cancelled) setWorkerBuild(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  return workerBuild;
+}
+
 /**
  * Get onto the build the server is serving, whatever the worker is doing.
  *
