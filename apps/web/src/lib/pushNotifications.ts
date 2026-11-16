@@ -123,6 +123,42 @@ interface TestResult {
   readonly failed: number;
 }
 
+/**
+ * Ask the active service worker which build it is.
+ *
+ * Returns null when nothing answers, which is the interesting case: a
+ * worker from before the push handler existed accepts a subscription and
+ * then receives nothing, and that is indistinguishable from every other
+ * cause by looking. Silence here names it.
+ */
+export async function activeWorkerBuild(timeoutMs = 2000): Promise<string | null> {
+  if (!("serviceWorker" in navigator)) return null;
+
+  const worker = (await registration())?.active;
+  if (!worker) return null;
+
+  return new Promise<string | null>((resolve) => {
+    const channel = new MessageChannel();
+    const timer = setTimeout(() => {
+      channel.port1.close();
+      resolve(null);
+    }, timeoutMs);
+
+    channel.port1.onmessage = (event: MessageEvent<{ buildId?: unknown }>) => {
+      clearTimeout(timer);
+      channel.port1.close();
+      resolve(typeof event.data.buildId === "string" ? event.data.buildId : null);
+    };
+
+    try {
+      worker.postMessage({ type: "WHICH_BUILD" }, [channel.port2]);
+    } catch {
+      clearTimeout(timer);
+      resolve(null);
+    }
+  });
+}
+
 export interface PushControls {
   readonly state: PushState;
   /** Set when something actually went wrong, as opposed to being switched off. */
@@ -260,7 +296,12 @@ export function usePushNotifications(): PushControls {
     void (async () => {
       try {
         const result = await api.post<TestResult>("/api/push/test");
-        setTestResult(describeTest(result));
+        /*
+         * Asked at the same time, because "sent, and nothing appeared" has
+         * one likely explanation and it is this one.
+         */
+        const workerBuild = await activeWorkerBuild();
+        setTestResult(describeTest(result, workerBuild));
       } catch {
         setError("Could not send a test notification. Try again in a moment.");
       } finally {
@@ -280,7 +321,7 @@ export function usePushNotifications(): PushControls {
  * problem off this app entirely and onto the phone's own settings, which is
  * where nobody would think to look otherwise.
  */
-function describeTest(result: TestResult): string {
+function describeTest(result: TestResult, workerBuild: string | null): string {
   if (result.subscriptions === 0) {
     return "This device is not signed up. Turn notifications on first.";
   }
@@ -292,6 +333,9 @@ function describeTest(result: TestResult): string {
   }
   if (result.sent === 0) {
     return "Nothing was sent.";
+  }
+  if (workerBuild === null) {
+    return "Sent, but this device is still running an older background worker, which cannot receive notifications. Reload the app — twice if the first does nothing — and try again.";
   }
   return "Sent. If nothing appears within a few seconds, the phone is holding it back rather than the app — check notification settings and battery saving for your browser.";
 }

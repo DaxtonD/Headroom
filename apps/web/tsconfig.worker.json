@@ -15,7 +15,9 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "noEmit": true,
-    "types": []
+    // For `import.meta.env`, which is how the build stamp reaches the
+    // worker. It brings no DOM types with it.
+    "types": ["vite/client"]
   },
   "include": ["src/sw.ts"]
 }

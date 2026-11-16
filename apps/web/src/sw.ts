@@ -45,9 +45,37 @@ declare let self: ServiceWorkerGlobalScope & {
  * this app follows the rule that nothing about the household's money happens
  * without them saying so, and a page that reloads itself mid-edit breaks it.
  */
+/** Stamped in at build time, the same value the page and the API carry. */
+const BUILD_ID: string = String(import.meta.env.VITE_BUILD_ID ?? "dev") || "dev";
+
 self.addEventListener("message", (event: ExtendableMessageEvent) => {
   const data = event.data as { type?: unknown } | null;
-  if (data && data.type === "SKIP_WAITING") void self.skipWaiting();
+  if (!data) return;
+
+  if (data.type === "SKIP_WAITING") {
+    void self.skipWaiting();
+    return;
+  }
+
+  /*
+   * "Which worker is actually running, and can it receive a push?"
+   *
+   * A push subscription belongs to the service worker *registration*, but a
+   * push is delivered to whichever worker is **active**. A browser still
+   * running a worker from before this file existed accepts the subscription
+   * quite happily and then has no `push` listener to receive anything - the
+   * server sends, the push service accepts, and nothing appears. There is
+   * no way to tell that apart from a dozen other causes by looking.
+   *
+   * So the worker answers for itself. A reply means a worker new enough to
+   * have this handler, which is the same generation that has the push one.
+   * Silence means an older worker is still in charge, and the cure is the
+   * ordinary one: get fully onto the new build.
+   */
+  if (data.type === "WHICH_BUILD") {
+    const port = event.ports[0];
+    if (port) port.postMessage({ type: "BUILD", buildId: BUILD_ID, canPush: true });
+  }
 });
 
 /* -------------------------------------------------------------------------- */

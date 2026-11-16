@@ -123,10 +123,47 @@ describe("it still refuses to take over on its own", () => {
     expect(code).not.toMatch(/clients\s*\.\s*claim\s*\(/);
   });
 
+  it("still answers SKIP_WAITING now that it answers other messages too", () => {
+    // One listener handling two message types is one `return` away from
+    // handling neither.
+    expect(code).toContain('data.type === "SKIP_WAITING"');
+    expect(code).toContain('data.type === "WHICH_BUILD"');
+  });
+
   it("calls skipWaiting in one place only", () => {
     // Anywhere other than the message handler is the autoUpdate behaviour
     // wearing a different hat.
     expect([...code.matchAll(/skipWaiting\s*\(/g)]).toHaveLength(1);
+  });
+});
+
+describe("saying which worker is actually running", () => {
+  /*
+   * A push subscription belongs to the registration; a push is delivered to
+   * whichever worker is *active*. An install still running a worker from
+   * before the push handler existed accepts the subscription and then
+   * receives nothing - the server sends, the push service accepts, and
+   * nothing appears. Nothing distinguishes that from a dozen other causes.
+   *
+   * A worker new enough to answer is the same generation as one that can
+   * receive a push, so silence is the diagnosis.
+   */
+  it("carries the same build stamp the page and the API carry", () => {
+    expect(sw).toContain("import.meta.env.VITE_BUILD_ID");
+  });
+
+  it("replies on the port it was given", () => {
+    expect(code).toContain("event.ports[0]");
+    expect(code).toContain("port.postMessage");
+  });
+
+  it("is asked by the app, and silence is treated as an old worker", () => {
+    const lib = read("src/lib/pushNotifications.ts");
+    expect(lib).toContain('postMessage({ type: "WHICH_BUILD" }');
+    expect(lib).toContain("MessageChannel");
+    // A worker that never answers must not leave the screen waiting.
+    expect(lib).toContain("setTimeout");
+    expect(lib).toContain("older background worker");
   });
 });
 
