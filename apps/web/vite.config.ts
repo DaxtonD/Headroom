@@ -32,11 +32,41 @@ export default defineConfig({
       injectRegister: null,
       includeAssets: ["favicon.ico", "apple-touch-icon.png"],
 
+      /*
+       * Our own service worker, not a generated one.
+       *
+       * `generateSW` writes the whole file, so there is nowhere to put a
+       * `push` listener - and notifications were the one thing the household
+       * asked for that cannot be done from the page. `injectManifest` hands
+       * `src/sw.ts` the precache list and otherwise leaves it alone.
+       *
+       * Everything the generated worker did, that file now does explicitly:
+       * the navigation fallback with `/api` excluded, the font caching, the
+       * outdated-cache cleanup, and the refusal to activate itself without
+       * being asked. `test/sw.test.ts` is what keeps that true.
+       */
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.ts",
+
       manifest,
 
-      workbox: {
-        // The built shell. Fonts are not here: they come from Google and are
-        // cached at runtime below.
+      injectManifest: {
+        /*
+         * A classic worker, not a module one.
+         *
+         * `injectManifest` defaults to building an ES module, which then has
+         * to be registered with `{ type: "module" }`. Chrome has supported
+         * that since 2021 and Android is the target here - but a module
+         * worker that a browser will not register fails by the whole app
+         * silently having no service worker at all: no offline shell, no
+         * update bar, no notifications, and nothing on screen to say so.
+         * The generated worker was classic, this one stays classic, and
+         * nothing is given up for it.
+         */
+        rollupFormat: "iife",
+        // The built shell. Fonts are not here: they come from Google, and
+        // `src/sw.ts` caches them at runtime instead.
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         /*
          * The big icons are read once by the launcher when the app is
@@ -46,37 +76,8 @@ export default defineConfig({
          * will not ask for.
          */
         globIgnores: ["**/icon-512.png", "**/icon-maskable-512.png"],
-        /*
-         * Every route is the same HTML document, so a cold start on /manage
-         * has to be served it. `/api` is excluded: a request for data must
-         * reach the server or fail honestly, never be answered with a page.
-         */
-        navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/api\//],
         // 3 MB: the bundle is ~450 kB and the icons are most of the rest.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
-        // A worker left behind by an older build must not keep serving it.
-        cleanupOutdatedCaches: true,
-        clientsClaim: false,
-        skipWaiting: false,
-        runtimeCaching: [
-          {
-            // The webfont stylesheet changes rarely and blocks first paint.
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\//,
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "google-fonts-stylesheets" },
-          },
-          {
-            // The font files themselves never change under a given URL.
-            urlPattern: /^https:\/\/fonts\.gstatic\.com\//,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts-files",
-              expiration: { maxEntries: 16, maxAgeSeconds: 60 * 60 * 24 * 365 },
-              cacheableResponse: { statuses: [0, 200] },
-            },
-          },
-        ],
       },
 
       devOptions: {

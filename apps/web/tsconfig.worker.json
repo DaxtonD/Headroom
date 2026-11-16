@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "target": "ES2022",
+    /*
+     * WebWorker, not DOM. A service worker has no `document` and no `window`,
+     * and the point of a separate config is that reaching for either is a
+     * compile error here rather than a blank screen on somebody's phone.
+     * The two libraries cannot be loaded together - they declare many of the
+     * same names differently - which is the whole reason `src/sw.ts` is
+     * excluded from the app's own tsconfig.
+     */
+    "lib": ["ES2022", "WebWorker"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "types": []
+  },
+  "include": ["src/sw.ts"]
+}

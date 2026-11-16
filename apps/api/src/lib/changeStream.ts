@@ -23,6 +23,14 @@ import type { Env } from "../env.js";
 
 export const CHANGE_CHANNEL = "headroom_changed";
 
+/**
+ * The household id that means "all of them".
+ *
+ * Not a uuid, so it can never collide with a real household, and never
+ * reachable from a request - see {@link ChangeStream.subscribeAll}.
+ */
+const EVERY_HOUSEHOLD = "*";
+
 export interface ChangePing {
   readonly householdId: string;
   readonly entity: string;
@@ -148,14 +156,29 @@ export class ChangeStream {
 
   private fanOut(ping: ChangePing): void {
     for (const subscriber of this.subscribers.values()) {
-      // A household only ever hears about its own data.
-      if (subscriber.householdId !== ping.householdId) continue;
+      // A household only ever hears about its own data. `EVERY_HOUSEHOLD` is
+      // the server itself listening, not a client.
+      if (subscriber.householdId !== EVERY_HOUSEHOLD && subscriber.householdId !== ping.householdId) {
+        continue;
+      }
       try {
         subscriber.send(ping);
       } catch (error) {
         this.log.warn({ err: error }, "could not deliver a change to a client");
       }
     }
+  }
+
+  /**
+   * Listen to every household, for the server's own purposes.
+   *
+   * Only the push notifier uses this, and it is never reachable from a
+   * request: a client subscribes through {@link subscribe} with its own
+   * household and can never widen that. Kept as a distinct entry point
+   * rather than a magic household id passed in from anywhere.
+   */
+  subscribeAll(send: Subscriber): () => void {
+    return this.subscribe(EVERY_HOUSEHOLD, send);
   }
 
   /** Register a client. Returns the function that unregisters it. */

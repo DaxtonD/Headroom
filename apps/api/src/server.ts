@@ -10,6 +10,7 @@ import { purgeExpiredSessions } from "./auth/session.js";
 import { createDatabase } from "./db.js";
 import { generateForAllHouseholds } from "./lib/generateService.js";
 import { ChangeStream } from "./lib/changeStream.js";
+import { startPushNotifier } from "./lib/pushNotifier.js";
 import { purgeIdempotencyKeys } from "./lib/idempotency.js";
 import { EnvValidationError, getEnv } from "./env.js";
 
@@ -48,6 +49,21 @@ async function main(): Promise<void> {
   });
 
   await changeStream.start();
+
+  /*
+   * Notifications listen to the same stream the phones do, so a change that
+   * rolls back can never be announced, and no request path can fail because
+   * a push service is down.
+   */
+  const stopPushNotifier = startPushNotifier({
+    stream: changeStream,
+    prisma: db.prisma,
+    env,
+    log: {
+      info: (object, message) => app.log.info(object as object, message),
+      warn: (object, message) => app.log.warn(object as object, message),
+    },
+  });
 
   const sessionPurgeTimer = setInterval(() => {
     purgeExpiredSessions(db.prisma)
@@ -100,6 +116,7 @@ async function main(): Promise<void> {
     clearInterval(keyPurgeTimer);
     clearInterval(generationTimer);
     try {
+      stopPushNotifier();
       await changeStream.stop();
       await app.close();
       await db.close();

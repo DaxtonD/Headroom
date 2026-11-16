@@ -57,6 +57,15 @@ export interface RequestOptions {
    */
   readonly idempotencyKey?: string;
   readonly signal?: AbortSignal;
+  /**
+   * A body for a request that has no body argument of its own.
+   *
+   * Only DELETE needs this, and only to say *which* of a collection to
+   * remove when the thing has no id of ours - a push subscription is
+   * identified by the push service's own endpoint URL. Putting it in the
+   * query string instead would write it into every access log for no gain.
+   */
+  readonly body?: unknown;
 }
 
 /** A fresh key for one user action. Reuse it for every retry of that action. */
@@ -133,5 +142,5 @@ export const api = {
   put: <T>(path: string, body: unknown, options?: RequestOptions) =>
     request<T>("PUT", path, body, options),
   delete: <T>(path: string, options?: RequestOptions) =>
-    request<T>("DELETE", path, undefined, options),
+    request<T>("DELETE", path, options?.body, options),
 };

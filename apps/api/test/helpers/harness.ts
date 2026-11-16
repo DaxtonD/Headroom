@@ -123,6 +123,7 @@ export interface Harness {
 const TABLES = [
   "activity",
   "idempotency_key",
+  "push_subscription",
   "balance_snapshot",
   "occurrence",
   "template",

@@ -532,6 +532,130 @@ about exactly this ("the failure mode that storing a number in two places
 invites"). Worth a decision later: derive the liability row, or accept that it
 is a snapshot someone updates.
 
+## Push notifications (2026-11-15, at the owner's request)
+
+"An option in settings will be available to enable notifications."
+
+### What gets sent, and what does not
+
+The four things asked for: a chequing or savings balance updated, something
+on the ledger verified or marked paid, a work expense bought or submitted.
+
+`worthTelling` is a list of what is **in**, not a list of what is out. A new
+kind of change should arrive silent and be added on purpose, rather than
+start interrupting two people because nobody remembered to exclude it.
+
+One thing was deliberately left out that looks like it belongs: ticking bills
+off in the balance-update checklist. That happens *inside* saving a balance,
+so notifying on it would send a second message about one action - and several
+at once when a few are ticked together, which is the normal case. It is still
+in the log.
+
+**Never the person who did it.** You do not need telling what you just typed.
+
+### No amounts, decided by the owner
+
+Asked, and the answer was no figures - just what happened. That matches the
+rule the live-update ping has followed since M2, and it matters more here: a
+notification goes through a third party's push service and lands on a lock
+screen anybody holding the phone can read. The payload is encrypted to the
+browser's own key, so the push service cannot read it, but "unreadable in
+transit" and "unreadable on a lock screen" are different claims and only the
+second one was being asked about.
+
+The sentence is the same one the activity log shows, from the same function
+in `@headroom/core`. Two wordings would have drifted apart the first time
+either was edited.
+
+### It listens to the change stream rather than the routes
+
+Every mutation already announces itself after commit, through Postgres
+`NOTIFY`. Notifications are that same event delivered differently, so they
+listen to the same thing. Two properties come free: `pg_notify` is
+transactional, so a change that rolls back can never be notified about; and
+no route knows notifications exist, so no save can fail because a push
+service is down.
+
+### The service worker is ours now
+
+This is the part with real risk. `generateSW` writes the whole worker from
+the Vite config, so there is nowhere to put a `push` listener. The build
+moved to `injectManifest`, which means four behaviours that were a tested
+library's problem are now this repository's: the precache, the navigation
+fallback, the `/api` exclusion, and the refusal to activate without being
+asked.
+
+`src/sw.ts` reproduces each one, and the built file was compared against the
+old one: same precache entries, same cache names, same `\/api\/` denylist,
+same single `skipWaiting` behind a message, still no `clients.claim()`. The
+image was built and the worker read back out of it.
+
+Two choices worth keeping:
+
+- **Classic, not a module.** `injectManifest` defaults to an ES module worker,
+  which needs `{ type: "module" }` to register. A browser that will not take
+  one fails by there being no service worker at all - no offline shell, no
+  update bar, no notifications, and nothing on screen to say so.
+  `rollupFormat: "iife"` keeps it as it was.
+- **Its own tsconfig.** A service worker has no `document` and no `window`.
+  `tsconfig.worker.json` checks it against WebWorker instead of DOM, so
+  reaching for either is a compile error rather than a blank screen.
+
+### Five states, five sentences
+
+Notifications can be off for five reasons and only one of them is an error:
+the browser cannot do it, the server has no VAPID keys, the person has
+blocked them, they have not turned them on, or something went wrong.
+Collapsing those gives a toggle that does nothing when pressed and says
+nothing about why. Each has its own state and its own line, and "blocked" says
+where the fix is, because the app cannot undo it.
+
+Permission is asked for on the button press, never on arrival - an unprompted
+permission dialog is the most reliable way to be refused, and "denied" is
+permanent as far as this app is concerned.
+
+### Per browser, and the screen says so
+
+A subscription belongs to one browser on one device. Turning them on on a
+phone does nothing for a laptop. Leaving that implicit is how somebody turns
+notifications "off" and goes on being buzzed.
+
+Either person can switch a browser off, not just whoever turned it on: one
+phone may be used by both of them, and "stop this buzzing" has to work in
+that state.
+
+### Dead subscriptions
+
+A subscription dies when notifications are turned off, site data is cleared,
+or the service expires it, and nothing announces it. A 404 or 410 from the
+push service is the only signal there is, and the row is deleted. Anything
+else is a table that grows forever.
+
+Other failures are not the subscription's fault and only raise a counter -
+deleting on the first one would quietly unsubscribe the household during an
+outage. Five consecutive failures is indistinguishable from gone; one success
+clears the count.
+
+### Still not done by me
+
+**The VAPID keys.** They are a credential and they belong to the owner.
+Generate the pair once with `npx web-push generate-vapid-keys` and set all
+three variables in the container's environment on Unraid *and* in the local
+`.env`. Until then `/api/push/key` answers `configured: false` and Settings
+says notifications are not set up, which is the correct behaviour rather than
+a broken one.
+
+Changing the pair later invalidates every subscription silently, so it is
+worth treating as permanent once a phone is subscribed.
+
+### Not clicked by anybody
+
+There is still no DOM test environment and no browser here. The toggle, the
+permission flow, the notification itself and the tap that opens the app are
+covered by unit tests and static checks and have never been exercised for
+real. The decision, the sending, the pruning and the whole chain from a
+change to a payload are tested against a real Postgres.
+
 ## The activity log (2026-11-15, at the owner's request)
 
 "A log that can be viewed to show activity" - who verified what, who submitted

@@ -213,6 +213,7 @@ model User {
   bankedHours      BankedHoursEntry[]
   activities       Activity[]
   idempotencyKeys  IdempotencyKey[]
+  pushSubscriptions PushSubscription[]
 
   @@index([householdId])
   @@map("user")
@@ -736,6 +737,40 @@ model Activity {
   @@index([entity, entityId, versionAfter])
   @@index([householdId, at])
   @@map("activity")
+}
+
+/// One browser, signed up for notifications.
+///
+/// Per browser rather than per person: the same person on a phone and a
+/// laptop is two subscriptions, and turning notifications off on one must not
+/// turn them off on the other. `endpoint` is the push service's own URL for
+/// that browser and is unique by definition, which is what makes re-saving an
+/// unchanged subscription harmless.
+///
+/// Nothing here is a secret of ours - the keys are the browser's own public
+/// key and auth secret, used to encrypt a payload only that browser can read.
+/// Deleted outright rather than soft-deleted: a dead endpoint is not history
+/// worth keeping, and the push service tells us when one has gone.
+model PushSubscription {
+  id        String @id @default(uuid()) @db.Uuid
+  userId    String @db.Uuid
+  /// The push service URL. Unique across every user and device.
+  endpoint  String @unique
+  p256dh    String
+  auth      String
+  /// Which browser this is, so a person can tell their devices apart.
+  userAgent String?
+
+  createdAt DateTime  @default(now()) @db.Timestamptz(6)
+  /// The last time the push service accepted a notification for it.
+  lastOkAt  DateTime? @db.Timestamptz(6)
+  /// Consecutive failures. A subscription the service rejects is removed.
+  failures  Int       @default(0)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscription")
 }
 
 /// One row per mutating request. A replay returns the stored response; the

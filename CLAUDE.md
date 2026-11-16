@@ -79,6 +79,12 @@ Keep this list current as you build.
   what came back, so "I have a dump" and "I can get my data back" are the same claim. Runs
   `pg_dump` in a container, so nothing has to be installed. Dumps go in `backups/`, which is
   git-ignored because they contain the household's real figures.
+- `npx web-push generate-vapid-keys`: the one-off key pair notifications need.
+  Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` and `VAPID_SUBJECT` together - the server
+  refuses to start on a partial set - in the container's environment and in `.env`. With
+  none of them set, notifications are simply off and Settings says so. Changing the pair
+  later silently invalidates every subscription, so treat it as permanent once a phone is
+  subscribed.
 - `curl <origin>/api/health`: what is actually running. `buildId` is the commit the image was
   built from, stamped in by CI. The web bundle carries the same value and Settings shows both,
   so an installed app sitting on a stale service-worker cache is visible rather than guessed at

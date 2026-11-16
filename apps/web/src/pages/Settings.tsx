@@ -12,14 +12,34 @@
  */
 import { TEXT_SIZES, THEMES, useAppearance } from "../lib/appearance.js";
 import { BUILD_ID, isStamped, shortBuild } from "../lib/buildId.js";
+import { usePushNotifications } from "../lib/pushNotifications.js";
 import { loadServerBuild, useServerBuild } from "../lib/serverBuild.js";
 import { useSettingsRoute } from "../lib/settingsRoute.js";
 import "./Settings.css";
+
+/**
+ * What to say for each state.
+ *
+ * Five of the six are not errors, and collapsing them into "notifications
+ * are off" is what produces a toggle that does nothing when pressed with no
+ * explanation. "Blocked" in particular is the one this app cannot fix, so it
+ * has to say where the fix is.
+ */
+const NOTIFICATION_NOTE: Record<ReturnType<typeof usePushNotifications>["state"], string> = {
+  checking: "Checking…",
+  unsupported: "This browser cannot show notifications.",
+  unconfigured: "Notifications are not set up on this server yet.",
+  blocked:
+    "Notifications are blocked for Headroom in this browser. Allow them in the browser’s own site settings, then come back.",
+  off: "Get told when the other of you updates a balance, deals with something on the ledger, or buys or submits a work expense. This device only.",
+  on: "On for this device. The other of you gets told what you do here, and you get told what they do — never your own.",
+};
 
 export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.Element {
   const [appearance, setAppearance] = useAppearance();
   const settings = useSettingsRoute();
   const { serverBuild, stale, recheck } = useServerBuild();
+  const push = usePushNotifications();
 
   return (
     <div className="settings">
@@ -124,6 +144,49 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
           </p>
           <p className="settings__sample-meta">Comes out automatically on Fri, Nov 13</p>
         </div>
+      </section>
+
+      {/* --------------------------------------------------- notifications ---- */}
+      {/*
+        Per browser, and it says so.
+
+        A subscription belongs to one browser on one device, so turning
+        these on here does nothing for the other phone. Leaving that implicit
+        is how somebody turns notifications "off" and keeps being buzzed.
+
+        Permission is asked for on the button press, never on arrival. A
+        prompt nobody asked for is the most reliable way to be refused, and
+        "denied" is a state this app cannot undo - only the person can, in
+        their browser's own settings.
+      */}
+      <section className="hr-card settings__section" aria-labelledby="settings-notifications">
+        <h2 className="settings__section-title" id="settings-notifications">
+          Notifications
+        </h2>
+        <p className="settings__section-note">{NOTIFICATION_NOTE[push.state]}</p>
+
+        {push.error ? (
+          <p className="hr-alert settings__section-note" role="alert">
+            {push.error}
+          </p>
+        ) : null}
+
+        {push.state === "off" || push.state === "on" ? (
+          <div className="settings__actions">
+            <button
+              className={`hr-button ${push.state === "on" ? "hr-button--secondary" : ""}`}
+              type="button"
+              disabled={push.busy}
+              onClick={push.state === "on" ? push.turnOff : push.turnOn}
+            >
+              {push.busy
+                ? "Working…"
+                : push.state === "on"
+                  ? "Turn off on this device"
+                  : "Turn on for this device"}
+            </button>
+          </div>
+        ) : null}
       </section>
 
       {/* --------------------------------------------------------- version ---- */}

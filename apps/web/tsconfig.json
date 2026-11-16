@@ -10,5 +10,8 @@
     "allowImportingTsExtensions": false,
     "types": ["vite/client", "vite-plugin-pwa/react"]
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"]
+  "include": ["src/**/*.ts", "src/**/*.tsx", "vite.config.ts"],
+  // The service worker has no DOM. It is checked by tsconfig.worker.json,
+  // against the WebWorker library instead, which cannot be loaded here.
+  "exclude": ["src/sw.ts"]
 }
