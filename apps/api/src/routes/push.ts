@@ -26,6 +26,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { hasWebPush } from "../env.js";
 import { HttpError } from "../lib/http.js";
+import { configurePush, sendToAll } from "../lib/push.js";
 
 /**
  * A browser's own subscription, exactly as `PushSubscription.toJSON()` gives
@@ -131,6 +132,59 @@ export async function registerPushRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return reply.code(201).send({ subscribed: true });
+  });
+
+  /**
+   * Send one to yourself, on purpose.
+   *
+   * The one case where the "never the person who did it" rule is wrong. A
+   * notification that does not arrive has a long chain behind it - the
+   * browser, its push service, the subscription, the VAPID pair, the
+   * server's own listener - and every link fails silently. This exercises
+   * all of it except the listener and reports what the push service said,
+   * so "notifications are on and nothing arrives" stops being a question
+   * nobody can answer from the outside.
+   *
+   * It goes only to the devices the caller has signed up, never to anyone
+   * else's: a test should not buzz the other person's phone.
+   */
+  app.post("/push/test", async (request, reply) => {
+    const user = request.user;
+    if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
+
+    if (!hasWebPush(app.env)) {
+      throw new HttpError(
+        503,
+        "push_not_configured",
+        "Notifications are not set up on this server yet.",
+      );
+    }
+
+    // Normally done once at startup. Repeated here so a test still works if
+    // the notifier failed to start, which is one of the things being tested.
+    configurePush(app.env);
+
+    const mine = await app.db.prisma.pushSubscription.findMany({
+      where: { userId: user.id },
+      select: { id: true, endpoint: true, p256dh: true, auth: true },
+    });
+
+    if (mine.length === 0) {
+      return reply.send({ subscriptions: 0, sent: 0, gone: 0, failed: 0 });
+    }
+
+    const result = await sendToAll(
+      app.db.prisma,
+      mine,
+      {
+        body: "Notifications are working on this device.",
+        url: "/",
+        tag: "headroom:test",
+      },
+      app.log,
+    );
+
+    return reply.send({ subscriptions: mine.length, ...result });
   });
 
   app.delete("/push/subscriptions", async (request, reply) => {

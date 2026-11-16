@@ -145,7 +145,19 @@ export async function notifyForPing(deps: PushNotifierDeps, ping: ChangePing): P
     },
   })) as (Omit<Entry, "after"> & { afterJson: unknown }) | null;
 
-  if (entry === null) return;
+  if (entry === null) {
+    /*
+     * Unexpected. The ping is published inside the same transaction that
+     * writes the activity row, so if one committed the other did too.
+     * Worth a line rather than a silent return: it would mean the two have
+     * drifted apart, and nothing else would ever say so.
+     */
+    deps.log.warn(
+      { entity: ping.entity, version: ping.version },
+      "a change announced itself with no activity row to match",
+    );
+    return;
+  }
 
   const event: Entry = {
     action: entry.action,
@@ -172,7 +184,19 @@ export async function notifyForPing(deps: PushNotifierDeps, ping: ChangePing): P
     select: { id: true, endpoint: true, p256dh: true, auth: true },
   });
 
-  if (recipients.length === 0) return;
+  if (recipients.length === 0) {
+    /*
+     * The most likely reason for "notifications are on and nothing
+     * arrives": every subscribed device belongs to the person who made the
+     * change. That is correct behaviour, and completely invisible without
+     * this line - which is the whole reason it is here.
+     */
+    deps.log.info(
+      { entity: event.entity, action: event.action },
+      "nothing to notify: nobody is subscribed except whoever made the change",
+    );
+    return;
+  }
 
   const result = await sendToAll(
     deps.prisma,
@@ -188,6 +212,11 @@ export async function notifyForPing(deps: PushNotifierDeps, ping: ChangePing): P
       tag: `${event.entity}:${event.label ?? ""}`,
     },
     deps.log,
+  );
+
+  deps.log.info(
+    { entity: event.entity, action: event.action, ...result },
+    "notification sent",
   );
 
   if (result.gone > 0) {

@@ -171,6 +171,12 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
           </p>
         ) : null}
 
+        {push.testResult ? (
+          <p className="settings__section-note" role="status">
+            {push.testResult}
+          </p>
+        ) : null}
+
         {push.state === "off" || push.state === "on" ? (
           <div className="settings__actions">
             <button
@@ -185,6 +191,23 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
                   ? "Turn off on this device"
                   : "Turn on for this device"}
             </button>
+            {/*
+              Only once they are on, and deliberately to this device rather
+              than the other person's. Notifications normally go the other
+              way, which makes "it does not work" impossible to test alone -
+              and impossible to tell apart from "nothing happened worth
+              telling you about".
+            */}
+            {push.state === "on" ? (
+              <button
+                className="hr-button hr-button--secondary"
+                type="button"
+                disabled={push.busy}
+                onClick={push.sendTest}
+              >
+                Send a test
+              </button>
+            ) : null}
           </div>
         ) : null}
       </section>

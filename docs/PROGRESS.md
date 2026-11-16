@@ -733,6 +733,69 @@ out reading like a schema rather than English - "turned a template off" - and
 were fixed. The rest of the older rows say "a bill" rather than naming one,
 which is honest: it is genuinely all those rows know.
 
+## Notifications arrive nowhere, and nothing can say why (2026-11-15)
+
+Reported straight after bug 22 was fixed: subscriptions now save, and no
+device gets anything.
+
+### What was ruled out first, properly
+
+The chain from a change to a push had one untested link. `push.test.ts`
+calls `notifyForPing` directly, which proves the decision, the wording and
+the recipients but assumes the ping ever arrives - so `startPushNotifier`
+subscribing to a `ChangeStream` that is really listening to Postgres was
+never exercised. The whole feature could be off with every test green.
+
+`pushWiring.test.ts` now closes that: a real `ChangeStream` with its own
+LISTEN connection, the notifier started on it, a balance saved through the
+real route, and a wait for the push. It passes, so the server-side chain is
+sound and the problem is somewhere this repository cannot see.
+
+### The real failure here was observability, again
+
+This is bug 19's lesson arriving a second time. "Notifications are on and
+nothing arrives" had **five** indistinguishable causes:
+
+1. every subscribed device belongs to whoever made the change - correct
+   behaviour, and completely silent;
+2. the change was not one of the four worth telling anybody about;
+3. the push service rejected it;
+4. the subscription had expired;
+5. the phone accepted it and chose not to show it.
+
+Nothing in the logs told them apart, because the only lines were failures.
+A feature whose working state and its broken state look identical from the
+outside is one nobody can support.
+
+### Built: a test that goes to you
+
+**Send a test** in Settings, next to the toggle. It is the one place the
+"never the person who did it" rule is deliberately inverted, because a
+notification that normally goes to somebody else cannot be tested alone -
+and cannot be told apart from "nothing happened worth telling you about".
+
+It reports what the push service made of it, and each outcome is a
+different sentence pointing somewhere different: not signed up, expired,
+refused, or sent. "Sent, and nothing appeared" is the valuable one: it moves
+the problem off this app entirely and onto the phone's own notification and
+battery settings, which is where nobody would think to look.
+
+### Built: the notifier says why it stayed quiet
+
+A line for "nobody is subscribed except whoever made the change", a line for
+each notification sent with its counts, and a warning if a ping ever arrives
+with no activity row to match - which would mean the two had drifted apart,
+and nothing else would ever say so.
+
+### Still a suspect, not yet proven
+
+A subscription is created against a service worker *registration*, and the
+push is delivered to whichever worker is **active**. An install still
+running the previously generated worker would accept the subscription and
+then have no `push` listener to receive anything. The test button will show
+this as "sent" with nothing appearing, and the cure is the ordinary one:
+get fully onto the new build.
+
 ## Bug 22: no browser could sign up for notifications (2026-11-15, reported from production)
 
 Reported within the hour of the feature going out. Turning notifications on

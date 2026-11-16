@@ -116,6 +116,13 @@ async function currentPushState(): Promise<PushState> {
   return existing ? "on" : "off";
 }
 
+interface TestResult {
+  readonly subscriptions: number;
+  readonly sent: number;
+  readonly gone: number;
+  readonly failed: number;
+}
+
 export interface PushControls {
   readonly state: PushState;
   /** Set when something actually went wrong, as opposed to being switched off. */
@@ -123,6 +130,10 @@ export interface PushControls {
   readonly busy: boolean;
   readonly turnOn: () => void;
   readonly turnOff: () => void;
+  /** Send one to this device, and say what the push service made of it. */
+  readonly sendTest: () => void;
+  /** What the last test said, in a sentence. */
+  readonly testResult: string | null;
 }
 
 export function usePushNotifications(): PushControls {
@@ -137,6 +148,7 @@ export function usePushNotifications(): PushControls {
   );
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [testResult, setTestResult] = useState<string | null>(null);
 
   /*
    * The effect asks an external system and sets state in the answer's
@@ -232,5 +244,54 @@ export function usePushNotifications(): PushControls {
     })();
   }, []);
 
-  return { state, error, busy, turnOn, turnOff };
+  /**
+   * Send one to this device on purpose.
+   *
+   * Notifications normally go to the other person, which makes "it does not
+   * work" impossible to test alone and impossible to tell apart from "there
+   * was nothing to tell you about". This exercises the same path and says
+   * what came back.
+   */
+  const sendTest = useCallback((): void => {
+    setBusy(true);
+    setError(null);
+    setTestResult(null);
+
+    void (async () => {
+      try {
+        const result = await api.post<TestResult>("/api/push/test");
+        setTestResult(describeTest(result));
+      } catch {
+        setError("Could not send a test notification. Try again in a moment.");
+      } finally {
+        setBusy(false);
+      }
+    })();
+  }, []);
+
+  return { state, error, busy, turnOn, turnOff, sendTest, testResult };
+}
+
+/**
+ * What the server made of the test, in words.
+ *
+ * Each outcome means something different and only one of them is "it
+ * worked". "Accepted but nothing appeared" is the useful one: it moves the
+ * problem off this app entirely and onto the phone's own settings, which is
+ * where nobody would think to look otherwise.
+ */
+function describeTest(result: TestResult): string {
+  if (result.subscriptions === 0) {
+    return "This device is not signed up. Turn notifications on first.";
+  }
+  if (result.gone > 0 && result.sent === 0) {
+    return "This device's subscription had expired, so it has been forgotten. Turn notifications off and on again.";
+  }
+  if (result.failed > 0 && result.sent === 0) {
+    return "The push service would not take it. The server log says why.";
+  }
+  if (result.sent === 0) {
+    return "Nothing was sent.";
+  }
+  return "Sent. If nothing appears within a few seconds, the phone is holding it back rather than the app — check notification settings and battery saving for your browser.";
 }

@@ -589,3 +589,83 @@ describe("the body a browser actually sends", () => {
     expect(noEndpoint.message).toContain("endpoint");
   });
 });
+
+describe("sending one to yourself on purpose", () => {
+  /*
+   * The one place the "never the person who did it" rule is deliberately
+   * inverted. A notification that does not arrive has a long chain behind
+   * it and every link fails silently; this is how somebody alone with one
+   * phone finds out which link.
+   */
+  it("reaches this person's devices and reports what the service said", async () => {
+    const { alex, jordan } = await seedHousehold(harness);
+    for (const endpoint of ["https://fcm.googleapis.com/fcm/send/mine-1", "https://fcm.googleapis.com/fcm/send/mine-2"]) {
+      await harness.db.prisma.pushSubscription.create({
+        data: { userId: alex.id, endpoint, p256dh: "key", auth: "secret" },
+      });
+    }
+    // The other person's phone must stay quiet; a test is not an event.
+    await harness.db.prisma.pushSubscription.create({
+      data: {
+        userId: jordan.id,
+        endpoint: "https://fcm.googleapis.com/fcm/send/theirs",
+        p256dh: "key",
+        auth: "secret",
+      },
+    });
+
+    const cookie = await signIn(harness, "alex@example.test", "correct-horse-battery-staple");
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/api/push/test",
+      headers: { cookie },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toEqual({ subscriptions: 2, sent: 2, gone: 0, failed: 0 });
+    expect(sent.map((item) => item.endpoint).sort()).toEqual([
+      "https://fcm.googleapis.com/fcm/send/mine-1",
+      "https://fcm.googleapis.com/fcm/send/mine-2",
+    ]);
+  });
+
+  it("says plainly when this device is not signed up", async () => {
+    await seedHousehold(harness);
+    const cookie = await signIn(harness, "alex@example.test", "correct-horse-battery-staple");
+
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/api/push/test",
+      headers: { cookie },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ subscriptions: 0, sent: 0 });
+    expect(sent).toHaveLength(0);
+  });
+
+  it("reports a subscription the service has forgotten, and drops it", async () => {
+    const { alex } = await seedHousehold(harness);
+    const endpoint = "https://fcm.googleapis.com/fcm/send/expired";
+    await harness.db.prisma.pushSubscription.create({
+      data: { userId: alex.id, endpoint, p256dh: "key", auth: "secret" },
+    });
+    rejectWith.set(endpoint, 410);
+
+    const cookie = await signIn(harness, "alex@example.test", "correct-horse-battery-staple");
+    const response = await harness.app.inject({
+      method: "POST",
+      url: "/api/push/test",
+      headers: { cookie },
+    });
+
+    expect(response.json()).toMatchObject({ subscriptions: 1, sent: 0, gone: 1 });
+    expect(await harness.db.prisma.pushSubscription.count()).toBe(0);
+  });
+
+  it("refuses an unsigned request", async () => {
+    await seedHousehold(harness);
+    const response = await harness.app.inject({ method: "POST", url: "/api/push/test" });
+    expect(response.statusCode).toBe(401);
+  });
+});
