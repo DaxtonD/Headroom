@@ -76,13 +76,43 @@ export function useServerBuild(): ServerBuild {
 }
 
 /**
+ * How long to give a worker that has been told to take over.
+ *
+ * Activation is normally immediate. Three seconds is long enough that a
+ * working worker is never given up on, and short enough that a tap on
+ * "Reload" still feels like a reload.
+ */
+const TAKEOVER_TIMEOUT_MS = 3000;
+
+/** Resolves true if a different worker takes control in time, false if not. */
+async function waitForTakeover(timeoutMs: number): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const done = (result: boolean): void => {
+      clearTimeout(timer);
+      navigator.serviceWorker.removeEventListener("controllerchange", onChange);
+      resolve(result);
+    };
+    const onChange = (): void => done(true);
+    const timer = setTimeout(() => done(false), timeoutMs);
+    navigator.serviceWorker.addEventListener("controllerchange", onChange);
+  });
+}
+
+/**
  * Get onto the build the server is serving, whatever the worker is doing.
  *
- * Tries the polite route first: a waiting worker is told to take over, which
- * is the same thing the update bar does. If there is no waiting worker then
- * the lifecycle is not cooperating, and the registration is removed outright
- * so the next load has to come from the network. The precache is rebuilt
- * immediately afterwards, so the cost is one online load.
+ * Tries the polite route first: a waiting worker is told to take over. Then -
+ * and this is the part that was missing - it *waits* to see whether it did.
+ * Reloading the instant the message is posted reloads through the old worker,
+ * which serves the old bundle again, so the tap appears to do nothing and the
+ * bar comes straight back.
+ *
+ * If no worker takes control in time, the lifecycle is not cooperating and
+ * the registration is removed outright, so the next load has to come from the
+ * network. That also covers the case where there was no waiting worker to
+ * talk to in the first place. The precache rebuilds immediately afterwards,
+ * so the cost is one online load - and spending that on a worker that was
+ * merely slow is a far better trade than leaving someone stuck.
  *
  * Always ends in a reload, including when none of it worked, because a reload
  * is what the person asked for.
@@ -103,9 +133,16 @@ export async function loadServerBuild(): Promise<void> {
       );
 
       const waiting = registrations.find((registration) => registration.waiting)?.waiting;
+
+      let tookOver = false;
       if (waiting) {
+        // Listen before posting: activation can be quicker than this stack.
+        const takeover = waitForTakeover(TAKEOVER_TIMEOUT_MS);
         waiting.postMessage({ type: "SKIP_WAITING" });
-      } else {
+        tookOver = await takeover;
+      }
+
+      if (!tookOver) {
         await Promise.all(
           registrations.map(async (registration) => {
             try {

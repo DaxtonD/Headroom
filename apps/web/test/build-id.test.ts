@@ -18,7 +18,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { isStaleBuild, isStamped, shortBuild } from "../src/lib/buildId.js";
+import { isSameBuild, isStaleBuild, isStamped, shortBuild, shouldOfferRefresh } from "../src/lib/buildId.js";
 
 const REPO = resolve(import.meta.dirname, "..", "..", "..");
 
@@ -58,10 +58,93 @@ describe("comparing builds", () => {
     expect(isStamped("6efc9d7")).toBe(true);
   });
 
+  it("knows the same build when it sees it, and only then", () => {
+    expect(isSameBuild("abc1234", "abc1234")).toBe(true);
+    expect(isSameBuild("abc1234", "def5678")).toBe(false);
+    // Not the opposite of stale: two unknowns are not a match either.
+    expect(isSameBuild("dev", "dev")).toBe(false);
+    expect(isSameBuild("unknown", "unknown")).toBe(false);
+  });
+
   it("shortens a sha but leaves anything else alone", () => {
     expect(shortBuild("6efc9d7a1b2c3d4e5f60718293a4b5c6d7e8f901")).toBe("6efc9d7");
     expect(shortBuild("dev")).toBe("dev");
     expect(shortBuild("v1.2.3")).toBe("v1.2.3");
+  });
+});
+
+describe("offering a refresh", () => {
+  /*
+   * Reported from production: "the app continues to prompt that a new
+   * version of Headroom is available despite the app and server version
+   * matching." A service worker parked in `waiting` re-announces itself on
+   * every open and stays parked until every client closes, which an
+   * installed app that is only ever backgrounded never does. Tapping the bar
+   * could not clear it, because the build it offered was the one running.
+   */
+  it("says nothing when the server is serving the build already running", () => {
+    expect(shouldOfferRefresh(true, "abc1234", "abc1234")).toBe(false);
+  });
+
+  it("still offers a build that really is newer", () => {
+    expect(shouldOfferRefresh(true, "abc1234", "def5678")).toBe(true);
+  });
+
+  it("offers nothing when the worker has nothing waiting", () => {
+    expect(shouldOfferRefresh(false, "abc1234", "def5678")).toBe(false);
+    expect(shouldOfferRefresh(false, "abc1234", null)).toBe(false);
+  });
+
+  it("errs towards offering when it cannot tell", () => {
+    /*
+     * The suppression runs on positive evidence only. Hiding a real update
+     * because the server could not be reached, or because a hand-built image
+     * carries no stamp, is the worse of the two failures: the household
+     * would be stuck on an old build with nothing on screen saying so, which
+     * is the bug this whole mechanism was added for.
+     */
+    expect(shouldOfferRefresh(true, "abc1234", null)).toBe(true);
+    expect(shouldOfferRefresh(true, "dev", "abc1234")).toBe(true);
+    expect(shouldOfferRefresh(true, "abc1234", "unknown")).toBe(true);
+    expect(shouldOfferRefresh(true, "dev", "dev")).toBe(true);
+  });
+
+  it("is what the bar actually asks", () => {
+    /*
+     * Structural, because the logic above is only worth anything if the
+     * component consults it. Rendering on a bare `needRefresh` is exactly
+     * the bug, and it reads as perfectly reasonable code.
+     */
+    const source = read("apps/web/src/components/UpdateReady.tsx");
+    expect(source).toContain("shouldOfferRefresh(needRefresh, BUILD_ID, serverBuild)");
+    expect(source, "a bare needRefresh check is the bug").not.toMatch(/if \(!needRefresh\) return/);
+  });
+
+  it("reloads by the route that does not trust the worker", () => {
+    /*
+     * Both bars reload through `loadServerBuild`, which waits to see whether
+     * a worker took over and unregisters it when it did not.
+     * `updateServiceWorker` posts the same message and reloads immediately,
+     * so the reload is served by the worker still in charge - the old one -
+     * and the bar comes straight back.
+     */
+    const source = read("apps/web/src/components/UpdateReady.tsx");
+    const reloads = [...source.matchAll(/onClick=\{\(\) => void (\w+)\(/g)].map((m) => m[1]);
+    expect(reloads).not.toHaveLength(0);
+    for (const call of reloads) expect(call).toBe("loadServerBuild");
+  });
+
+  it("waits for the handover before reloading", () => {
+    // Posting SKIP_WAITING and reloading in the same breath reloads through
+    // the worker that is still in charge, which serves the old bundle again.
+    const source = read("apps/web/src/lib/serverBuild.ts");
+    expect(source).toContain("controllerchange");
+    const post = source.indexOf('postMessage({ type: "SKIP_WAITING" })');
+    const wait = source.indexOf("await takeover");
+    expect(post).toBeGreaterThan(-1);
+    expect(wait).toBeGreaterThan(post);
+    // And when nobody takes over, the registration goes.
+    expect(source).toMatch(/if \(!tookOver\)/);
   });
 });
 

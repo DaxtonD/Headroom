@@ -34,15 +34,30 @@
  * A stale build is reported more firmly than a waiting one, because by then
  * the app is not merely behind - it is behind and the mechanism that was
  * supposed to say so did not.
+ *
+ * ## The server also gets a veto
+ *
+ * The same comparison answers a question the worker cannot: whether there is
+ * anywhere newer to go at all. A worker parked in `waiting` goes on
+ * announcing itself every time the app is opened, for as long as it sits
+ * there - and it sits there until every client closes, which an installed app
+ * that is only ever backgrounded never does. The household saw "a new version
+ * is ready" on every open while Settings said the app and the server were on
+ * the same build, and no amount of tapping could clear it, because the build
+ * it was offering was the one already running.
+ *
+ * So `shouldOfferRefresh` requires the server to actually be serving
+ * something else. Only positive evidence keeps the bar down: if the server
+ * cannot be reached, or either side is unstamped, it shows as before.
  */
 import { useRegisterSW } from "virtual:pwa-register/react";
+import { BUILD_ID, shouldOfferRefresh } from "../lib/buildId.js";
 import { loadServerBuild, useServerBuild } from "../lib/serverBuild.js";
 import "./UpdateReady.css";
 
 export function UpdateReady(): React.JSX.Element | null {
   const {
     needRefresh: [needRefresh, setNeedRefresh],
-    updateServiceWorker,
   } = useRegisterSW({
     onRegisteredSW(_url, registration) {
       // Look for a new build when the app is reopened, which for this
@@ -55,7 +70,7 @@ export function UpdateReady(): React.JSX.Element | null {
     },
   });
 
-  const { stale } = useServerBuild();
+  const { serverBuild, stale } = useServerBuild();
 
   // The firmer message wins: being stale means the worker route already
   // failed, so saying "a new version is ready" would understate it.
@@ -75,7 +90,7 @@ export function UpdateReady(): React.JSX.Element | null {
     );
   }
 
-  if (!needRefresh) return null;
+  if (!shouldOfferRefresh(needRefresh, BUILD_ID, serverBuild)) return null;
 
   return (
     <div className="update-ready" role="status">
@@ -91,7 +106,14 @@ export function UpdateReady(): React.JSX.Element | null {
         >
           Later
         </button>
-        <button className="hr-button" type="button" onClick={() => void updateServiceWorker(true)}>
+        {/*
+          The same reload the stale bar uses, rather than the one the service
+          worker offers. Both ask a waiting worker to take over, but this one
+          waits to see whether it did and removes the registration when it did
+          not - so one tap gets there even when the lifecycle is the thing
+          that is broken.
+        */}
+        <button className="hr-button" type="button" onClick={() => void loadServerBuild()}>
           Reload
         </button>
       </div>

@@ -450,6 +450,66 @@ the owner in the running app rather than being caught here, which is the one tha
    UI uses. The lesson generalises: test across the seam, not just either side of it.
 8. **`prisma.config.ts` loaded the root `.env` unconditionally**, which could have aimed destructive test fixtures at the real database. An explicit `DATABASE_URL` now always wins.
 
+## Bug 20: the update bar would not go away (2026-11-15, reported from production)
+
+Reported the day the build stamps landed: "the app continues to prompt that a
+new version of Headroom is available despite the app and server version
+matching."
+
+Both halves of that sentence were true, and together they are the diagnosis.
+The bar was the service worker's `needRefresh` bar, not the staleness one -
+the staleness one compares build stamps and so was correctly silent. The
+worker, meanwhile, had a new worker parked in `waiting`, and a parked worker
+re-announces itself on every single open.
+
+**It stays parked until every client closes.** An installed app that is only
+ever backgrounded never closes, so the bar had become permanent. And nothing
+the household could do would clear it, because the build it was offering was
+the build already running - there was nowhere newer to go.
+
+### The worker now needs a second opinion
+
+`shouldOfferRefresh` asks the one thing that knows: what the server says it is
+serving. If that is this bundle's own stamp, the bar stays down.
+
+Suppression runs on **positive evidence only**. An unreachable server, or
+either side unstamped, still shows the bar. Hiding a real update because the
+check could not be made is the worse of the two failures - it is precisely bug
+19, where the household sat on an old build with nothing on screen saying so.
+
+### The Reload button was also racing
+
+Both bars now reload through one route. The old one posted `SKIP_WAITING` and
+reloaded in the same breath, which reloads **through the worker still in
+charge** - the old one - so the new bundle never arrives and the bar comes
+straight back. A tap that appears to do nothing is how a household learns to
+stop tapping.
+
+So the reload waits up to three seconds for a worker to actually take control,
+and if none does, unregisters the registration outright so the next load has
+to come from the network. Spending one online load on a worker that was merely
+slow is a far better trade than leaving someone stuck.
+
+### Ruled out
+
+The generated `sw.js` *does* carry a `SKIP_WAITING` listener when
+`skipWaiting` is false - checked in workbox-build's own template rather than
+assumed, because the whole mechanism rests on it.
+
+`skipWaiting` stays `false`. A new build must not swap itself in under someone
+halfway through typing a balance, and that has not changed. What has changed
+is that a worker which cannot finish the job no longer gets to nag about it
+forever.
+
+### Tested
+
+Four mutations, each turning the suite red: rendering the bar on a bare
+`needRefresh`; sending Reload back through `updateServiceWorker`; treating an
+unreachable server as up to date; and dropping the wait for the handover.
+
+Not clicked in a browser - there is still no DOM test environment here. The
+logic is covered; the wiring is checked structurally.
+
 ## Bug 19: the installed app would not update, and nothing could say so (2026-11-15)
 
 Reported, after a day of chasing the wrong thing: "the PWA doesn't update when

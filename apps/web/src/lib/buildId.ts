@@ -41,6 +41,45 @@ export function isStaleBuild(appBuild: string, serverBuild: string): boolean {
   return appBuild !== serverBuild;
 }
 
+/**
+ * Is the app already running exactly what the server is serving?
+ *
+ * The mirror of `isStaleBuild`, and not its opposite: when either side is
+ * unstamped both are false, because then nothing is known either way.
+ */
+export function isSameBuild(appBuild: string, serverBuild: string): boolean {
+  if (!isStamped(appBuild) || !isStamped(serverBuild)) return false;
+  return appBuild === serverBuild;
+}
+
+/**
+ * Is there genuinely a newer build to offer?
+ *
+ * A waiting service worker is not proof that there is. The household was
+ * shown "a new version is ready" on every single open while Settings said
+ * the app and the server were on the same build - a worker parked in
+ * `waiting` keeps announcing itself for as long as it sits there, and it sits
+ * there until every client closes. Tapping the bar could not clear it,
+ * because there was nothing newer to go to.
+ *
+ * So the worker gets a second opinion from the one thing that knows: what the
+ * server says it is serving. If that is the build already running, the bar
+ * stays down.
+ *
+ * It only ever stays down on positive evidence. An unreachable server, or
+ * either side unstamped, still shows the bar - hiding a real update because
+ * the check could not be made is the worse failure of the two.
+ */
+export function shouldOfferRefresh(
+  needRefresh: boolean,
+  appBuild: string,
+  serverBuild: string | null,
+): boolean {
+  if (!needRefresh) return false;
+  if (serverBuild === null) return true;
+  return !isSameBuild(appBuild, serverBuild);
+}
+
 /** Enough of a commit sha to recognise, without being a wall of hex. */
 export function shortBuild(value: string): string {
   return isStamped(value) && /^[0-9a-f]{12,}$/i.test(value) ? value.slice(0, 7) : value;
