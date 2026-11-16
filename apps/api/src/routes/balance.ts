@@ -100,8 +100,33 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
           );
         }
 
-        // The server clock decides when this balance was true.
-        const asOf = new Date();
+        /*
+         * The server clock decides when this balance was true - but a newer
+         * snapshot has to win, and that cannot be left to the clock alone.
+         *
+         * Found in production: one snapshot carried an `asOf` nearly four
+         * hours ahead, written while the host's clock was wrong and since
+         * corrected. Every screen picks the balance with the latest `asOf`,
+         * so that row outranked everything typed afterwards. The household
+         * could type the right figure, get a 201 back, and watch the screen
+         * go on showing the old one - for as long as it took real time to
+         * catch up. A balance that saves and does not appear is the worst
+         * shape a bug can take here, because the obvious reading is that the
+         * app lost it.
+         *
+         * So the newest snapshot is newest by construction. A millisecond
+         * past the last one is a date in the future only until the clock
+         * catches up, and it is the lesser wrong: the alternative is an
+         * entry that silently does nothing.
+         */
+        const now = new Date();
+        const latest = await tx.balanceSnapshot.findFirst({
+          where: { accountId: account.id },
+          orderBy: [{ asOf: "desc" }],
+          select: { asOf: true },
+        });
+        const asOf =
+          latest !== null && latest.asOf >= now ? new Date(latest.asOf.getTime() + 1) : now;
 
         const clearedIds = input.clearedOccurrenceIds ?? [];
         if (clearedIds.length > 0) {

@@ -609,6 +609,45 @@ out reading like a schema rather than English - "turned a template off" - and
 were fixed. The rest of the older rows say "a bill" rather than naming one,
 which is honest: it is genuinely all those rows know.
 
+## Bug 21: a balance could be typed, saved, and ignored (2026-11-15, found in production)
+
+Not reported - found while testing something else against a restored copy of
+the production database, which is the only reason it was found at all.
+
+One balance snapshot in production carries an `asOf` nearly four hours in the
+future. It was written while the host's clock was wrong; the clock has since
+been corrected, and the production database's clock now agrees with this
+machine's to the second. The row stayed.
+
+Every screen picks the snapshot with the latest `asOf`. So that one row
+outranked everything entered after it. Reproduced on the restored copy: type
+a new chequing balance, get `201 Created` back, and the dashboard goes on
+showing the old figure.
+
+**The shape of this is worse than the size of it.** It would have cleared
+itself once real time caught up, so by morning it would be unreproducible.
+The only symptom is "I typed it and nothing happened", which reads as the app
+having lost the entry - so the household's next move would be to type it
+again, and that would not work either.
+
+### Fixed by construction, not by hoping
+
+A new snapshot is now guaranteed to outrank the previous one: if the newest
+`asOf` for that account is already ahead of the clock, the new row takes one
+millisecond past it. Per account, so one account's bad clock cannot drag
+another's forward.
+
+That does put an `asOf` slightly in the future - but only until the clock
+catches up, and only on an account already affected. The alternative is an
+entry that silently does nothing, which is not a trade worth making.
+
+### Why no test had this
+
+`asOf` is always the server's own clock, so nothing in the suite had ever
+produced a snapshot the clock disagreed with. Four tests now do it
+deliberately, including typing three corrections in a row, and two of them go
+red if the ordering is left to the clock.
+
 ## Bug 20: the update bar would not go away (2026-11-15, reported from production)
 
 Reported the day the build stamps landed: "the app continues to prompt that a
