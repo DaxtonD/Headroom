@@ -10,7 +10,7 @@
  */
 import type { Cents } from "@headroom/core";
 import { formatCents } from "@headroom/core";
-import { initialOf } from "../lib/people.js";
+import { firstNameOf, initialOf } from "../lib/people.js";
 import "./Badges.css";
 
 export interface Person {
@@ -116,6 +116,47 @@ export function InitialBubble({
     >
       <span aria-hidden="true">{initialOf(person)}</span>
       <span className="hr-visually-hidden">{person.name}</span>
+    </span>
+  );
+}
+
+/**
+ * A person's first name, in their own colours.
+ *
+ * The alternative to `InitialBubble`, for the places where one letter is not
+ * enough. An initial only tells two people apart when their names start with
+ * different letters, and there is no rule that they do - in the household
+ * this was built for they do not, so every row of the activity log opened
+ * with the same letter whoever had done the thing.
+ *
+ * Deliberately readable rather than `aria-hidden`: where this is used it is
+ * the only thing naming who acted, so hiding it would leave a screen reader
+ * with "verified the mortgage" and no subject.
+ *
+ * Built on `.chip` so it is the same shape and size as every other chip on a
+ * row; only the colours are the person's own, and they come from the server
+ * rather than from CSS because they are a property of the person.
+ */
+export function NameChip({
+  person,
+  colorFg,
+  colorBg,
+}: {
+  // Only the name: this is used with the activity log's person as well as
+  // with `Person`, and the stored initial is none of its business.
+  person: { readonly name: string };
+  colorFg?: string;
+  colorBg?: string;
+}): React.JSX.Element {
+  return (
+    <span
+      className="chip name-chip"
+      style={{
+        color: colorFg ?? "var(--hr-neutral-fg)",
+        background: colorBg ?? "var(--hr-neutral-bg)",
+      }}
+    >
+      {firstNameOf(person.name)}
     </span>
   );
 }

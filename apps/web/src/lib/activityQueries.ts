@@ -18,6 +18,13 @@ export const activityKey = ["activity"] as const;
 export interface ActivityPerson {
   readonly id: string;
   readonly name: string;
+  /**
+   * The stored letter. Sent by the server and deliberately not displayed:
+   * it is typed in when an account is made and nothing keeps it distinct, so
+   * two people can and did share one. The log shows the name instead - see
+   * `NameChip` - and `initialOf` derives the letter wherever one is still
+   * wanted.
+   */
   readonly initial: string;
   readonly colorFg: string;
   readonly colorBg: string;

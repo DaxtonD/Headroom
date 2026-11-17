@@ -19,10 +19,10 @@
  * and nothing about the code showed it.
  */
 import { useEffect, useRef } from "react";
-import { activitySentence } from "@headroom/core";
+import { describeActivity } from "@headroom/core";
 import { useActivity, type ActivityEntry } from "../lib/activityQueries.js";
 import { useOverlayDismissal } from "../lib/overlayDismissal.js";
-import { firstNameOf } from "../lib/people.js";
+import { NameChip } from "./Badges.js";
 import "./ActivityPanel.css";
 
 export function ActivityPanel({ onClose }: { onClose: () => void }): React.JSX.Element {
@@ -107,19 +107,27 @@ function ActivityList({ entries }: { entries: readonly ActivityEntry[] }): React
             {newDay ? <p className="activity-list__day">{day}</p> : null}
             <div className="activity-row">
               {/*
-                The person's own colours, the same pair used on every badge
-                in the app, so who did what is answerable at a glance without
-                reading the name.
+                The name, not an initial.
+
+                This row used to open with a coloured circle holding one
+                letter, and in the household it was built for both people's
+                letters were the same - so the one thing the circle was there
+                for, saying whose row this is, it could not do. The name
+                itself cannot have that problem. The colours stay, because
+                they are answered faster than any word is read.
+
+                It also stops the name being said twice: the sentence used to
+                begin with it, and now `describeActivity` leaves it to the
+                chip. The notification still says the whole sentence, having
+                nowhere to put a chip.
               */}
-              <span
-                className="activity-row__who"
-                style={{ color: entry.by.colorFg, background: entry.by.colorBg }}
-                aria-hidden="true"
-              >
-                {entry.by.initial}
-              </span>
               <p className="activity-row__said">
-                {activitySentence(firstNameOf(entry.by.name), entry)}
+                <NameChip
+                  person={entry.by}
+                  colorFg={entry.by.colorFg}
+                  colorBg={entry.by.colorBg}
+                />{" "}
+                {describeActivity(entry)}
               </p>
               <time className="activity-row__at" dateTime={entry.at}>
                 {timeOf(entry.at)}

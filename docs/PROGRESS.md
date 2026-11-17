@@ -733,6 +733,50 @@ out reading like a schema rather than English - "turned a template off" - and
 were fixed. The rest of the older rows say "a bill" rather than naming one,
 which is honest: it is genuinely all those rows know.
 
+## The activity log said "D" for both people (2026-11-16, reported from production)
+
+Every row of the log opened with a coloured circle holding one letter, and in
+this household both letters were the same. The circle exists to answer one
+question - whose row is this - and it was answering it wrongly about half the
+time, silently, with nothing broken and nothing logged.
+
+The cause was known and had already been fixed once. The letter is an
+`initial` column typed in when an account is created, and nothing keeps two
+people's distinct; `lib/people.ts` was written on 2026-11-15 to derive one
+from the name instead, and every badge in the app was moved over to it. The
+activity panel was written after that and read `by.initial` straight off the
+wire, so the fix never reached it. One component, missed, with no test that
+could see it.
+
+### The fix is a name, not a better letter
+
+At the owner's request the circle is gone and the row opens with the person's
+first name in a chip, in their own colours. A name cannot have the problem the
+letter had. The colours stay because they are read faster than any word.
+
+It also removed a redundancy nobody had noticed: the sentence beside the
+circle already began with the name, so each row said who twice. The panel now
+uses the engine's `describeActivity` ("verified Mortgage") and leaves the name
+to the chip. Push notifications still use `activitySentence`, which prefixes
+the actor, because a lock screen has nowhere to put a chip. Both wordings come
+from the same engine function, so they still cannot drift.
+
+Accessibility went the other way round as a result. The old circle was
+correctly `aria-hidden`, since the sentence named the actor; the chip must not
+be, since now it is the only thing that does. A test asserts that.
+
+### What was actually missing
+
+Not the letter logic - `people.test.ts` already covered that thoroughly. What
+was missing was anything checking that *this* component used it. The new
+`apps/web/test/activity-row.test.ts` is a source check, which is a weak test
+of appearance and an adequate test of "the panel does not read `by.initial`",
+which is the regression. Its wording half is real.
+
+`NameChip` now sits beside `InitialBubble` in `Badges.tsx` as the alternative
+for anywhere one letter is not enough, built on the existing `.chip` so it is
+the same shape and size as every other chip on a row.
+
 ## The instrument was wrong twice (2026-11-15)
 
 The check added to answer "is this device's service worker new enough to
@@ -2559,8 +2603,12 @@ From HANDOFF section 14. Each default is built and editable in the app where it 
     household plans to pay, which is not the same as what the mortgage permits.
     *Built:* left untracked, so the allowance line hides itself rather than quoting a
     limit nobody confirmed. One field under the mortgage once the real figure is known.
-14. **Two people, one initial.** Both avatars in production show the same letter.
-    *Built:* nothing - left as entered, because a person's initial is theirs to choose.
+14. **Two people, one initial.** Both accounts in production carry the same stored letter.
+    *Built:* the column is left exactly as entered, because a person's initial is theirs to
+    choose, and nothing displays it any more. Badges derive the letter from the name
+    (`lib/people.ts`, 2026-11-15) and the activity log shows the whole first name in a chip
+    (2026-11-16, the last place still reading the column). Nothing to decide unless the
+    household wants the stored letter corrected for its own sake.
 
 ## Blocked / needs the owner
 

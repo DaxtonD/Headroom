@@ -96,6 +96,20 @@
   color: var(--hr-warning-fg);
 }
 
+/*
+ * A name chip. The colours arrive as an inline style, because they belong to
+ * the person rather than to the theme; everything about the shape is the
+ * ordinary chip above. The display face matches `.initial-bubble`, since the
+ * two are alternatives for the same job.
+ *
+ * It sits inside a sentence, so it aligns on the text's baseline instead of
+ * hanging below it, which is what an `inline-flex` box does by default.
+ */
+.name-chip {
+  font-family: var(--hr-font-display);
+  vertical-align: baseline;
+}
+
 /* ---- Initials ---- */
 
 .initial-bubble {

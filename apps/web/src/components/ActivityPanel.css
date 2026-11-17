@@ -99,24 +99,14 @@
 }
 
 /*
- * The initial, in the person's own colours - the same pair the avatars and
- * verification badges use, so the colour alone answers "who".
+ * Who did it is a name chip at the start of the sentence, not a column of its
+ * own. Names are not all the same length, so a column would either be ragged
+ * or be sized for the longest name in the household and waste the width on
+ * everyone else. Inline, it wraps with the sentence and needs no width at all.
+ *
+ * The chip itself is `.name-chip` in `Badges.css`, beside the initial bubble
+ * it replaced here.
  */
-.activity-row__who {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.625rem;
-  height: 1.625rem;
-  border-radius: 50%;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  /* Baseline alignment would hang the circle off the first line. */
-  align-self: flex-start;
-  margin-top: 0.1rem;
-}
-
 .activity-row__said {
   flex: 1 1 auto;
   margin: 0;
