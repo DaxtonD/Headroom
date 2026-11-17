@@ -733,6 +733,74 @@ out reading like a schema rather than English - "turned a template off" - and
 were fixed. The rest of the older rows say "a bill" rather than naming one,
 which is honest: it is genuinely all those rows know.
 
+## The icons are drawn now (2026-11-17, at the owner's request)
+
+The owner supplied a complete icon package - a vector master, every PWA size,
+and two Unraid tiles - and asked for it in place of the icons the app had been
+shipping. It is in, at the paths everything already used.
+
+### What changed
+
+`apps/web/public/` now holds eight authored files rather than five generated
+ones. Two of them are new: a 384px icon, and a 192px maskable so a launcher
+can take the size that suits its density instead of downscaling the 512. An
+SVG favicon arrived with them and is linked ahead of the `.ico`, because a
+browser that understands it prefers it and it stays sharp at whatever size the
+tab strip asks for.
+
+The paths were left flat. The package's README suggests serving everything
+from an `/icons/` folder, which is sound generic advice and would have meant
+touching the manifest, the page, the service worker, the Vite config and two
+test files to arrive at exactly what already works. Nothing was gained by it.
+
+The masters are `assets/headroom-icon.svg` (vector, and the thing to edit) and
+`assets/headroom-icon.png`, now the package's 1024px export rather than the
+old 1254px one. `assets/Headroom.png` was the superseded logo at 1.5 MB,
+referenced by nothing once the Unraid template was repointed, and was removed.
+
+### `scripts/make_icons.py` was removed with them
+
+It derived every icon from one PNG, and its whole premise - one master, the
+rest generated - stopped being true the moment the icons became artwork
+authored at each size. Left in place it was a trap: running it, as CLAUDE.md
+told the next session to do after any logo change, would have replaced a
+hand-tuned maskable with a script's crop of the plain icon. The script also
+needs Pillow, which is not installed on the machine this was done on, so the
+failure would have been "nobody can regenerate" or "somebody regenerated and
+quietly lost the good ones", depending on who ran it.
+
+It is in git history if the situation ever reverses. CLAUDE.md now says the
+icons are drawn and what to replace when the logo changes.
+
+### One test asserted more than it meant
+
+`pwa.test.ts` required **every** maskable icon to be at least 512px wide. The
+reasoning was right - a maskable has to survive being cropped to its middle
+80% - but it applies to the largest one, not to all of them, and adding an
+ordinary 192px maskable turned it red. It now checks the widest, with the
+reason written down.
+
+That is the test working, incidentally: it went red for the one icon whose
+dimensions are load-bearing rather than for a path or a filename.
+
+### Still the app's own colours
+
+The package ships navy `#022557` and green, and suggests `theme_color`
+`#022557` with a white background. Those were **not** adopted. The manifest's
+`theme_color` is `#123b33` and its background is `--hr-ground`, both chosen so
+the status bar and the splash screen match the app's own hero and ground - and
+the app has five themes whose colours the appearance store keeps the meta tag
+in step with. Changing them is a visual decision about the app rather than
+about its icons, so it is left to the household. Logged under "Questions".
+
+### Unraid
+
+`unraid/Headroom.xml` pointed its `<Icon>` at the old 1.5 MB logo. It now
+points at `unraid/headroom-unraid.png`, 512px and drawn for the purpose, which
+sits beside the template that names it. `headroom-unraid-on-white.png` is
+committed next to it for a black or grey Unraid theme, where the navy half of
+the mark would otherwise disappear.
+
 ## Four ideas written down, none of them started (2026-11-16)
 
 The owner asked what would make the app genuinely better rather than merely
@@ -1734,6 +1802,10 @@ Settings that closes Settings is a lie to anyone who cannot see which screen the
 
 ### The icon
 
+> **Superseded on 2026-11-17.** A drawn icon package replaced all of this, and
+> `scripts/make_icons.py` was removed with it. What follows describes how the icons were made
+> until then; see "The icons are drawn now" for what is true today.
+
 The owner drew one. `assets/headroom-icon.png` is the master and everything under `apps/web/public/`
 is generated from it by `scripts/make_icons.py`; the generated files are never edited by hand.
 Icons drift otherwise - a new logo lands in the favicon and not in the maskable one, and nobody
@@ -2680,6 +2752,11 @@ is possible at all, so it is the cheapest to ask.
     are worse than totals that admit a gap.
 19. **How far should a what-if reach?** Threading a proposed purchase through the retirement
     projection is honest and possibly not useful. Show it always, on request, or not at all?
+20. **The app's colours, now the icons are navy and green.** The icon package suggests a
+    navy `theme_color` and a white splash. The manifest still uses the app's own hero and
+    ground colours, because those are tied to the five themes and to what the appearance store
+    keeps the status bar in step with. *Built:* the app's colours, unchanged. Say the word if
+    the status bar and splash should follow the new logo instead.
 
 ## Blocked / needs the owner
 

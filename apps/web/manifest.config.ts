@@ -24,13 +24,31 @@ export const manifest: Partial<ManifestOptions> = {
   // `--hr-ground`, so the splash screen is the colour of the app.
   background_color: "#f5f4ef",
   categories: ["finance", "productivity"],
+  /*
+   * Drawn, not generated. Every file here is authored artwork from the icon
+   * package in `assets/`, which is why `any` and `maskable` are separate
+   * entries rather than one `"any maskable"`: the maskable ones carry the
+   * padding Android's crop needs, and a browser asked to use them where a
+   * plain icon is expected draws something noticeably small.
+   */
   icons: [
     { src: "icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: "icon-384.png", sizes: "384x384", type: "image/png", purpose: "any" },
     { src: "icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    /*
+     * Android crops these to whatever shape its launcher uses, so the mark
+     * sits inside the safe zone on a solid background - a maskable icon with
+     * transparent corners gets them filled with something that is not our
+     * choosing. Two sizes so a launcher can take the one that suits its
+     * density instead of downscaling the big one.
+     */
     {
-      // Android crops this to whatever shape its launcher uses, so it
-      // is drawn smaller and on a solid background. See
-      // scripts/make_icons.py.
+      src: "icon-maskable-192.png",
+      sizes: "192x192",
+      type: "image/png",
+      purpose: "maskable",
+    },
+    {
       src: "icon-maskable-512.png",
       sizes: "512x512",
       type: "image/png",

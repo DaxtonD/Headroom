@@ -29,7 +29,9 @@
   <Category>Productivity:</Category>
   <WebUI/>
   <TemplateURL>https://raw.githubusercontent.com/DaxtonD/Headroom/main/unraid/Headroom.xml</TemplateURL>
-  <Icon>https://raw.githubusercontent.com/DaxtonD/Headroom/main/assets/Headroom.png</Icon>
+  <!-- 512px, transparent, drawn for this. Swap to headroom-unraid-on-white.png
+       on a black or grey Unraid theme, where the navy half disappears. -->
+  <Icon>https://raw.githubusercontent.com/DaxtonD/Headroom/main/unraid/headroom-unraid.png</Icon>
   <ExtraParams/>
   <PostArgs/>
   <CPUset/>

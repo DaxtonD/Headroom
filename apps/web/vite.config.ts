@@ -30,7 +30,7 @@ export default defineConfig({
        */
       registerType: "prompt",
       injectRegister: null,
-      includeAssets: ["favicon.ico", "apple-touch-icon.png"],
+      includeAssets: ["favicon.ico", "favicon.svg", "apple-touch-icon.png"],
 
       /*
        * Our own service worker, not a generated one.
@@ -69,14 +69,35 @@ export default defineConfig({
         // `src/sw.ts` caches them at runtime instead.
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         /*
-         * The big icons are read once by the launcher when the app is
-         * installed, which only happens online, and never by the page. They
-         * are 185 kB of the precache if left in - a quarter of everything a
-         * phone downloads before the app will open offline, for two files it
-         * will not ask for.
+         * No `globIgnores` for the big icons, because it never worked.
+         *
+         * It used to list `icon-512.png` and `icon-maskable-512.png`, with a
+         * comment explaining that they are read once by the launcher at
+         * install time and never by the page, and that keeping them out saved
+         * 185 kB of precache. Reading the built worker on 2026-11-17 showed
+         * all of them in the precache anyway: `globIgnores` applies to the
+         * glob pass, and the plugin then adds every icon the manifest names
+         * regardless of it. The setting excluded them from one list and the
+         * plugin put them straight back.
+         *
+         * It is not worth engineering around now. The drawn icons are a
+         * fraction of the size of the generated ones - every icon together is
+         * about 57 kB, against 185 kB for two of the old ones - so the saving
+         * that justified the trick has mostly disappeared with the files.
+         *
+         * The manifest's icons also arrive in the precache a second time,
+         * from `includeAssets` and the glob pass both matching them. The
+         * duplicate entries carry identical revisions, so Workbox collapses
+         * them; it is only a conflicting revision for the same URL that makes
+         * it throw at install, which would leave the app with no worker at
+         * all.
+         *
+         * This is why the build log says 21 entries for 13 files. The number
+         * went up when the dead setting came out and nothing was cached that
+         * had not been cached before.
          */
-        globIgnores: ["**/icon-512.png", "**/icon-maskable-512.png"],
-        // 3 MB: the bundle is ~450 kB and the icons are most of the rest.
+        // 3 MB, with a lot of room to spare: the bundle is ~450 kB and every
+        // icon now fits in 57 kB together.
         maximumFileSizeToCacheInBytes: 3 * 1024 * 1024,
       },
 
