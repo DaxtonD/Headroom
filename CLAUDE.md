@@ -6,6 +6,8 @@ Household budget web app / PWA for a two-person household, replacing the spreads
 - Running log: `docs/PROGRESS.md`. **If you are resuming (new session or after context compaction), read it first** and continue from the first unfinished item.
 - Seed data and golden expected values: `seed/household-nov-2026.json` (check with `python3 seed/check_seed.py`).
 - Mockup sources (reference only): `design/`.
+- Ideas raised but **not** decided: `docs/IDEAS.md`. Nothing in it is agreed, scheduled or
+  started. Do not begin any of it without the owner saying so.
 
 ## Operating mode
 

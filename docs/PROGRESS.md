@@ -733,6 +733,57 @@ out reading like a schema rather than English - "turned a template off" - and
 were fixed. The rest of the older rows say "a bill" rather than naming one,
 which is honest: it is genuinely all those rows know.
 
+## Four ideas written down, none of them started (2026-11-16)
+
+The owner asked what would make the app genuinely better rather than merely
+finished, then asked for the answer documented rather than built: "All good
+ideas, I'm just not ready to implement yet." It is in `docs/IDEAS.md`, with
+file and line references for everything claimed, and **nothing in it has been
+begun**.
+
+The four, in the order recommended:
+
+1. **The balance entry records; it should reconcile.** The expected balance
+   already exists (`effectiveBalance`), the typed one arrives through
+   `UpdateBalanceSheet`, and nothing compares them - there is no notion of
+   *expected*, *discrepancy* or *reconcile* anywhere in the balance paths. So
+   the app's one point of truth-decay is the thing it never audits. The
+   valuable half is trending the difference, which is the insight
+   bank-connecting apps are bought for, derived from a figure already typed by
+   hand. Likely backfillable from append-only snapshots plus `clearedAt`.
+2. **Verification produces a history nothing reads.** Occurrence rows hold the
+   per-period actual against a `templateId`, and `activity` is append-only
+   with `beforeJson` and `afterJson`, so every revision of an amount is
+   already recorded with who and when. Nothing reads any of it. The valuable
+   part is not proposing estimates but flagging an item that has risen several
+   cycles running, which is how a rate increase gets noticed at all.
+3. **The budget is a plan with no actuals.** Cheaper than it looks:
+   `Template.budgetLineId` and its relation already exist in the schema and
+   are read and written by nothing, so the per-line link was designed in and
+   never wired. Blocked on one question - whether variable spending is
+   itemised anywhere or only budgeted - which may sink it, and costs a
+   conversation to find out rather than a milestone.
+4. **The three projections never meet.** The ledger, the mortgage and
+   retirement all project independently, and the Savings screen already runs a
+   mortgage what-if through `payoffDelta` with a `whatIfCents` figure. Nothing
+   threads **one** hypothesis through all three. This is the one no consumer
+   app does, and the reason this one could is the architecture: facts stored
+   and totals derived means a hypothesis costs no more to evaluate than
+   reality.
+
+Also recorded there: what not to do (no sixth tab, no guessed categories, no
+bank connections, and no piping insights into notifications), and five
+questions for the household that the ideas depend on.
+
+### An orphan found while reading
+
+`lowestWithin` and `lowestOf` in `timeline.ts` are exported and called from
+nowhere. `computeTimeline` computes `lowest` inline, pay periods compute their
+own, and `lowestWithin`'s comment still says it serves "the Pay plan screen" -
+which the biweekly/monthly redesign merged into the Ledger. Orphaned by that
+merge, with a comment pointing somewhere that no longer exists. Left alone
+rather than deleted unasked; noted in `docs/IDEAS.md`.
+
 ## The activity log said "D" for both people (2026-11-16, reported from production)
 
 Every row of the log opened with a coloured circle holding one letter, and in
@@ -2609,6 +2660,26 @@ From HANDOFF section 14. Each default is built and editable in the app where it 
     (`lib/people.ts`, 2026-11-15) and the activity log shows the whole first name in a chip
     (2026-11-16, the last place still reading the column). Nothing to decide unless the
     household wants the stored letter corrected for its own sake.
+
+Questions 15 to 19 come from `docs/IDEAS.md` (2026-11-16). Nothing depends on them yet,
+because none of those ideas has been started - but 17 is the one that decides whether idea 3
+is possible at all, so it is the cheapest to ask.
+
+15. **A balance that disagrees with the app.** When the typed balance differs from what the
+    app expected, should it mention it, require an acknowledgement, or refuse the save?
+    *Recommended:* mention only. Refusing to record a real balance because the app disagrees
+    with it inverts which of the two is authoritative.
+16. **A bill that keeps rising.** How many cycles running make it worth flagging?
+    *Recommended:* three, as a starting guess with no evidence behind it.
+17. **Is variable spending itemised anywhere, or only budgeted?** Groceries are not a
+    recurring item in the ledger. If variable spending exists only as a budget figure, then
+    plan-versus-actual can only ever work for the fixed half, and a Budget screen that
+    compares half its lines may be worse than one that compares none.
+18. **Does every recurring item belong to exactly one budget line?** And if some belong to
+    none, what should the screen say about what is uncounted? Totals that quietly omit things
+    are worse than totals that admit a gap.
+19. **How far should a what-if reach?** Threading a proposed purchase through the retirement
+    projection is honest and possibly not useful. Show it always, on request, or not at all?
 
 ## Blocked / needs the owner
 
