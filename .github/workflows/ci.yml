@@ -2,7 +2,12 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # `dev` is where a change is tried against a throwaway database and a
+    # second container before it reaches the household's own. It runs the
+    # identical checks - a branch that skipped them would prove nothing - and
+    # publishes its own tag. It can never move `latest`: that is gated on the
+    # default branch below, so production only changes when `main` does.
+    branches: [main, dev]
     # Milestone tags publish an image of their own, so they have to run the
     # checks as well: a tagged image nobody tested is worse than no tag.
     tags: ["m*", "v*"]
@@ -179,8 +184,13 @@ jobs:
           # Lower-case on purpose: GHCR rejects a mixed-case path, and the
           # owner is spelled DaxtonD.
           images: ghcr.io/daxtond/headroom
+          # `dev` is named explicitly rather than taken from
+          # `type=ref,event=branch`, which would publish a tag for any branch
+          # anybody happened to push. `latest` stays gated on the default
+          # branch, so a dev build cannot become what production pulls.
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
             type=ref,event=tag
             type=sha,format=long
 
@@ -205,6 +215,13 @@ jobs:
 
       - name: Say what to pull
         run: |
+          # Which tag this run is the one to pull. Saying "latest" on a dev
+          # run would send the household's own container the wrong image.
+          if [ "${{ github.ref }}" = "refs/heads/dev" ]; then
+            pull="ghcr.io/daxtond/headroom:dev"
+          else
+            pull="ghcr.io/daxtond/headroom:latest"
+          fi
           {
             echo "### Published"
             echo '```'
@@ -212,6 +229,6 @@ jobs:
             echo '```'
             echo "In Unraid's Docker Manager, pull:"
             echo '```'
-            echo "ghcr.io/daxtond/headroom:latest"
+            echo "$pull"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"

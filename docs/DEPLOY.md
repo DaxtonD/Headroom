@@ -7,6 +7,7 @@
 ## Contents
 
 - [First run with real data, on Unraid](#first-run-with-real-data-on-unraid)
+- [A second container, for trying things first](#a-second-container-for-trying-things-first)
 - [Development over HTTPS, through Nginx Proxy Manager](#development-over-https-through-nginx-proxy-manager)
 - [The two settings that must agree](#the-two-settings-that-must-agree)
 - [Server-Sent Events through a proxy](#server-sent-events-through-a-proxy)
@@ -196,6 +197,80 @@ node scripts/backup.mjs verify "backups/<the new file>.dump"
 
 The evening's typing now exists in two places. `restore <file> --yes` puts it
 back, and prints what it would overwrite if you leave `--yes` off.
+
+---
+
+## A second container, for trying things first
+
+`main` is what the household runs. `dev` is where a change is tried against a
+database that does not matter, in a container of its own, before it reaches
+them.
+
+CI runs the **identical** checks on both branches - a dev branch that skipped
+them would prove nothing - and publishes a tag of its own:
+
+| Branch | Image tag | What pulls it |
+|---|---|---|
+| `main` | `ghcr.io/daxtond/headroom:latest` | the household's container |
+| `dev` | `ghcr.io/daxtond/headroom:dev` | the test container |
+
+**A dev build can never become what production pulls.** `latest` is gated on
+the default branch in `.github/workflows/ci.yml`, so pushing `dev` publishes
+`dev` and leaves `latest` exactly where it was. Production changes when `main`
+changes, and not before.
+
+### Setting the test container up
+
+It is the first-run recipe above with four things different:
+
+1. **Its own database.** A second Postgres, or just a second database on the
+   same server - `headroom_dev` beside the real one. `DATABASE_URL` points at
+   that and nothing else. The entrypoint runs `prisma migrate deploy` on
+   start, so a brand new empty database gets every migration by itself; there
+   is nothing to run by hand.
+2. **Its own origin.** A second hostname through Nginx Proxy Manager, and
+   `APP_ORIGIN` set to it exactly. See "The two settings that must agree" -
+   the same rule applies and the same quiet login failure is waiting if it
+   does not.
+3. **Its own port**, so both containers can run at once.
+4. **`:dev` as the tag** in Unraid's Docker Manager, not `:latest`.
+
+`SESSION_SECRET` should be a different value, so a session from one is not a
+session on the other. The VAPID keys can be the same pair or a new one - a
+push subscription belongs to an origin, so the two will not collide either
+way. Changing production's pair is still permanent, so do not regenerate it
+while setting this up.
+
+### What to check once it is up
+
+`curl https://<dev origin>/api/health` and compare `buildId` to the commit at
+the head of `dev`. It is the only way to tell a container that pulled from one
+sitting on a stale layer, and it has been needed twice.
+
+### Keeping the two databases apart
+
+The test container's `DATABASE_URL` is the only thing standing between "a safe
+place to try something" and the household's real figures. Worth reading twice
+before starting it, because a dev build pointed at the production database is
+indistinguishable from a production deploy until something is deleted.
+
+`scripts/backup.mjs` is unchanged and still points wherever `DATABASE_URL`
+does, so take a verified dump of production before any of this:
+
+```
+node scripts/backup.mjs dump
+node scripts/backup.mjs verify backups/<the file it just wrote>
+```
+
+`verify` restores into a throwaway database and counts what came back, so "I
+have a dump" and "I can get my data back" are the same claim.
+
+### Promoting it
+
+When `dev` has been lived with and is right, `main` fast-forwards onto it and
+CI publishes `latest` from the same commit that was tested - not a rebuild of
+something similar. Then pull on the household's container as usual, and
+remember that an installed PWA may need a reinstall if the icons changed.
 
 ---
 
