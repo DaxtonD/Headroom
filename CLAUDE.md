@@ -69,7 +69,11 @@ Keep this list current as you build.
 - `python3 seed/check_seed.py [path]`: verify a seed file's expected values. With no path it checks the local real seed and skips cleanly when absent.
 - `python3 seed/make_synthetic_fixture.py`: regenerate the committed synthetic fixture.
 - **Icons are drawn, not generated.** Every file in `apps/web/public/` is authored artwork
-  from the icon package, committed exactly as delivered; the masters are
+  from the icon package, committed as delivered except for one correction on 2026-11-18: the
+  whole set was slid right so the two bars of the H sit in the middle of the canvas. The
+  delivered artwork centred the full outline, arrowhead included, which left the H itself
+  visibly left of centre on a home screen. It was a whole-pixel translation per file, so the
+  drawing is untouched - do not "restore" the originals. The masters are
   `assets/headroom-icon.svg` and `assets/headroom-icon.png`. `scripts/make_icons.py` used to
   derive them from one PNG and was removed on 2026-11-17, because it would have overwritten a
   hand-tuned maskable with a script's crop. To change the logo, replace the set and the
