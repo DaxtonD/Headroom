@@ -32,6 +32,26 @@
   height: 18px;
 }
 
+/*
+ * Paid: the same filled green as verified, carrying a dollar sign.
+ *
+ * Deliberately the same shape and weight as the verified badge rather than a
+ * quieter variant - both are good news, and a household scanning the ledger
+ * should read them at the same speed. The glyph is what separates them, and
+ * the accessible name says which in words.
+ */
+.badge--paid {
+  background: var(--hr-primary);
+  color: var(--hr-on-primary);
+}
+
+.badge__glyph {
+  font-family: var(--hr-font-display);
+  font-weight: 700;
+  font-size: 1.0625rem;
+  line-height: 1;
+}
+
 .badge--estimate {
   /* Dashed, not just a different colour: the shape carries the meaning too. */
   border: 2px dashed var(--hr-estimate-ring);

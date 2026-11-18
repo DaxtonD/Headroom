@@ -85,6 +85,36 @@ export function VerificationBadge({
   );
 }
 
+/**
+ * The money has gone, and who said so.
+ *
+ * A filled green badge like the verified one, because both are good news and
+ * the eye should read them the same way, but carrying a dollar sign rather
+ * than a tick: verified is "we know the amount", paid is "it has left the
+ * account". A row can be paid without ever having been verified, which is why
+ * this replaces that badge rather than sitting beside it.
+ *
+ * No initial when nobody marked it paid. That happens when the balance
+ * checklist settled it instead, and inventing a person for it would be a
+ * worse answer than leaving it off.
+ */
+export function PaidBadge({ paidBy }: { paidBy?: Person | null }): React.JSX.Element {
+  const label = paidBy ? `Paid by ${paidBy.name}` : "Paid";
+
+  return (
+    <span className="badge badge--paid" role="img" aria-label={label}>
+      <span className="badge__glyph" aria-hidden="true">
+        $
+      </span>
+      {paidBy ? (
+        <span className="badge__initial" aria-hidden="true">
+          {initialOf(paidBy)}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export type ChipTone = "neutral" | "flexible" | "oneoff" | "payday" | "warning";
 
 /** The small label on each row: `Auto · Nov 13`, `Flexible`, `Payday`. */

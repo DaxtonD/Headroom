@@ -122,13 +122,15 @@ const TEXT_ON: readonly { readonly text: string; readonly on: readonly string[] 
     text: "--hr-ink",
     on: ["--hr-ground", "--hr-card", "--hr-payday-row", "--hr-green-tint", "--hr-green-tint-soft"],
   },
+  // The strong tint is the paid band on the ledger, where a whole row is
+  // drawn on it: the name, who ticked it, the amount and the running balance.
   {
     text: "--hr-text-secondary",
-    on: ["--hr-ground", "--hr-card", "--hr-payday-row", "--hr-green-tint-soft"],
+    on: ["--hr-ground", "--hr-card", "--hr-payday-row", "--hr-green-tint", "--hr-green-tint-soft"],
   },
   {
     text: "--hr-text-muted",
-    on: ["--hr-ground", "--hr-card", "--hr-payday-row", "--hr-green-tint-soft"],
+    on: ["--hr-ground", "--hr-card", "--hr-payday-row", "--hr-green-tint", "--hr-green-tint-soft"],
   },
   // Amounts, which are the whole point of the screen. The soft tint is the
   // "already in your balance" band, where money in and money out both appear.
@@ -142,7 +144,9 @@ const TEXT_ON: readonly { readonly text: string; readonly on: readonly string[] 
       "--hr-green-tint-soft",
     ],
   },
-  { text: "--hr-negative", on: ["--hr-ground", "--hr-card"] },
+  // A bill is a negative amount, and a paid bill is a negative amount on the
+  // green band.
+  { text: "--hr-negative", on: ["--hr-ground", "--hr-card", "--hr-green-tint"] },
   // Links and the active tab.
   { text: "--hr-primary", on: ["--hr-ground", "--hr-card", "--hr-green-tint-soft"] },
   // The hero, where the balance lives.

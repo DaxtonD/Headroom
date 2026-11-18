@@ -39,6 +39,11 @@ const component = (name: string): string =>
   readFileSync(resolve(import.meta.dirname, "..", "src", "components", `${name}.tsx`), "utf8");
 
 const row = component("OccurrenceRow");
+const badges = component("Badges");
+const css = readFileSync(
+  resolve(import.meta.dirname, "..", "src", "components", "OccurrenceRow.css"),
+  "utf8",
+);
 const sheet = component("UpdateBalanceSheet");
 const queries = readFileSync(
   resolve(import.meta.dirname, "..", "src", "lib", "queries.ts"),
@@ -46,10 +51,36 @@ const queries = readFileSync(
 );
 
 describe("a settled row on the ledger", () => {
-  it("is struck through for being settled, not for being ticked", () => {
-    // `row--paid` carries the line-through and the dimming.
+  it("is banded for being settled, not for being ticked", () => {
+    // `row--paid` carries the green band.
     expect(row).toContain("row.settled ? \"row--paid\"");
     expect(row).not.toMatch(/row\.paid \? "row--paid"/);
+  });
+
+  it("is not struck through or faded", () => {
+    /*
+     * Both were there first and both said "ignore me", which is the opposite
+     * of what the household asked for: they want to see at a glance what is
+     * paid. Struck-through text is also the hardest kind to read, on exactly
+     * the rows somebody scans to answer "did we pay that?".
+     */
+    expect(css).not.toContain("line-through");
+    expect(css).toContain(".row--paid {");
+    expect(css).toContain("background: var(--hr-green-tint)");
+  });
+
+  it("shows who paid it, with a dollar sign rather than an estimate mark", () => {
+    /*
+     * The bug: a paid row kept the dashed "~" estimate badge, because paid
+     * and verified are separate flags and nothing ever verified the amount.
+     * The money has gone, so "still an estimate" is no longer the useful
+     * fact about that row.
+     */
+    expect(row).toContain("<PaidBadge paidBy={row.paidBy} />");
+    expect(badges).toContain("export function PaidBadge");
+    expect(badges).toMatch(/badge--paid/);
+    // The initial comes from the name, never from the stored column.
+    expect(badges).toMatch(/initialOf\(paidBy\)/);
   });
 
   it("gets its Paid chip from the same flag", () => {

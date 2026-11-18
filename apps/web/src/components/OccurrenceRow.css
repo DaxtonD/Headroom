@@ -244,23 +244,32 @@
 /*
  * A row that has been ticked as dealt with.
  *
- * Dimmed and struck rather than removed: it still counts towards the running
- * balance, and a ledger whose lines disappear is the complaint this answers.
- * The chip beside the name carries the word, so the styling is not the only
- * thing saying it.
+ * Tinted, not faded. This was a line through the name and the whole row at
+ * 72% opacity, which said "ignore me" - the opposite of what the household
+ * wanted, which is to see at a glance what is paid and what is not. Struck-
+ * through text is also the hardest kind to read, and these are the rows
+ * somebody scans to answer "did we pay that?".
+ *
+ * So the row is now the loudest thing on the ledger rather than the quietest:
+ * a green band, a dollar badge with the initial of whoever ticked it, and the
+ * Paid chip beside the name. Three signals, none of them colour alone.
+ *
+ * Declared after `.row--expanded`, which tints with the soft green, so a paid
+ * row keeps its own colour when it is opened. Every text colour on the ledger
+ * clears 4.5:1 against this tint in all five themes - `theme-contrast.test.ts`
+ * holds that, and slate's muted text has the least room at 4.52.
  */
-.row--paid .row__name {
-  text-decoration: line-through;
-  text-decoration-thickness: 1px;
+.row--paid {
+  background: var(--hr-green-tint);
 }
 
-.row--paid .row__summary {
-  opacity: 0.72;
-}
-
-.row--paid:hover .row__summary,
-.row--paid.row--expanded .row__summary {
-  opacity: 1;
+/*
+ * The initial sits in a ring the colour of whatever is behind it, so it reads
+ * as punched out of the badge. On a paid row that is the green band, not the
+ * card.
+ */
+.row--paid .badge__initial {
+  border-color: var(--hr-green-tint);
 }
 
 /*

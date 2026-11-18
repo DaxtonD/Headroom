@@ -13,7 +13,7 @@
  */
 import { formatCents, formatDateShort, parseCents } from "@headroom/core";
 import { useId, useState } from "react";
-import { Amount, Chip, VerificationBadge } from "./Badges.js";
+import { Amount, Chip, PaidBadge, VerificationBadge } from "./Badges.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
 import { conflictFrom, type ConflictInfo, type OccurrenceChange, type TimelineRow } from "../lib/queries.js";
 import "./OccurrenceRow.css";
@@ -157,6 +157,15 @@ export function OccurrenceRow({
           <span className="row__payday-mark" role="img" aria-label="Payday">
             <span aria-hidden="true">+</span>
           </span>
+        ) : row.settled ? (
+          /*
+            Paid replaces verified rather than joining it. A row can be paid
+            without anyone having confirmed the amount first, and leaving the
+            estimate badge on a bill that has already left the account was
+            the thing that read as wrong: the money is gone, so "still an
+            estimate" is no longer the useful fact about it.
+          */
+          <PaidBadge paidBy={row.paidBy} />
         ) : (
           <VerificationBadge verified={row.verified} verifiedBy={row.verifiedBy} />
         )}
