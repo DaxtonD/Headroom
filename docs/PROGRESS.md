@@ -2864,6 +2864,37 @@ CLAUDE.md describes an autonomous weekend build. That changed: the owner is avai
 - **Pushing to git requires the owner's explicit OK each time.** Commit freely; never push or tag-push unprompted.
 - Everything else in CLAUDE.md (money rules, integrity rules, conventional commits, milestone order) still stands.
 
+## Decisions made WITH the owner (2026-11-18): a dev branch
+
+The owner asked for a `dev` branch to test the credit-card work against a new
+database and a second container, without touching the version the household
+uses. This is a **deliberate departure from the trunk-based rule in CLAUDE.md**,
+at their request, and it is recorded here rather than quietly done.
+
+- `main` is what production pulls (`:latest`). `dev` publishes `:dev`.
+- CI runs the **identical** checks on both. A dev branch that skipped them
+  would prove nothing.
+- `latest` stays gated on the default branch, which is what guarantees a dev
+  build cannot become the image the household runs.
+- The `:dev` tag is named explicitly, not derived from the branch ref, so an
+  accidental branch does not publish an image.
+- Promotion is a fast-forward of `main` onto `dev`, so the commit published as
+  `latest` is the one that was actually tested - not a rebuild of something
+  similar.
+
+The runbook for the second container is in `docs/DEPLOY.md` under "A second
+container, for trying things first". The warning worth repeating: the test
+container's `DATABASE_URL` is the only thing between a safe place to try
+something and the household's real figures, and a dev build pointed at the
+production database is indistinguishable from a production deploy until
+something is deleted.
+
+Local note: `gh` is **not installed** on this machine, so a CI run cannot be
+checked with it. The repository is public, so
+`https://api.github.com/repos/DaxtonD/Headroom/actions/runs?branch=dev` reads
+the status without authentication. CLAUDE.md's "if `gh` is unavailable, treat
+the repository as public" still holds, and it is.
+
 ## Decisions made without asking
 
 - 2026-11-18: **A card balance is stored as what it OWES, a positive magnitude**, like every
