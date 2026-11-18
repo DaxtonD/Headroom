@@ -10,6 +10,7 @@
 - [Development over HTTPS, through Nginx Proxy Manager](#development-over-https-through-nginx-proxy-manager)
 - [The two settings that must agree](#the-two-settings-that-must-agree)
 - [Server-Sent Events through a proxy](#server-sent-events-through-a-proxy)
+- [A new icon that will not appear](#a-new-icon-that-will-not-appear)
 - [Before trusting it with real money](#before-trusting-it-with-real-money)
 
 ---
@@ -308,6 +309,54 @@ buffering or timing out the stream. The app degrades gracefully: it still
 refetches when the app is reopened, focused or reconnects.
 
 ---
+
+## A new icon that will not appear
+
+Diagnosed 2026-11-18, after a home screen kept showing a logo retired the day
+before.
+
+The app is right about this and says so in its headers. `apps/api/src/routes/
+web.ts` sends `cache-control: no-cache` for `index.html`, `sw.js` and the
+manifest, `max-age=31536000, immutable` for anything Vite has fingerprinted,
+and `max-age=0, must-revalidate` for everything else — which is what the icons
+are, because they keep stable names like `icon-maskable-512.png`.
+
+**Cloudflare overrides that.** It caches by file extension and applies its own
+Browser Cache TTL, four hours by default, to `.png`, `.ico`, `.svg`, `.css`
+and `.js` whatever the origin asked for. The retired icon was served from its
+edge for nearly fourteen hours after the new one was deployed:
+
+```
+$ curl -sD - -o /dev/null https://<origin>/icon-maskable-512.png
+cache-control: max-age=14400      <- Cloudflare's, not ours
+age: 49683                        <- 13.8 hours stale
+content-length: 75466             <- the old file; the new one is 8712
+```
+
+The manifest is unaffected, because `.webmanifest` is not one of the
+extensions Cloudflare caches by default, so it keeps the `no-cache` the app
+sent.
+
+To tell the layers apart, compare the bytes the origin has with the bytes
+being served. A query string is a different cache key, so it reaches past the
+edge:
+
+```
+$ sha256sum apps/web/public/icon-maskable-512.png
+$ curl -s https://<origin>/icon-maskable-512.png | sha256sum
+$ curl -s "https://<origin>/icon-maskable-512.png?v=$RANDOM" | sha256sum
+```
+
+Same hash on all three and the deployment is fine. Different on the middle one
+only, and it is the edge: purge the cache in Cloudflare, or wait out the TTL.
+`buildId` from `/api/health` says separately whether the container itself is
+current.
+
+**Then there is the phone, which is a second cache and the slower one.**
+Android bakes the icon into the WebAPK when the app is installed, and a
+corrected server does not change it. Chrome re-checks the manifest on its own
+schedule, usually within a day or so. Uninstalling and reinstalling the app is
+the only way to see the new icon immediately.
 
 ## Before trusting it with real money
 
