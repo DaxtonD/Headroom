@@ -2570,6 +2570,112 @@ own figures rather than leaving it to be discovered. Left as the owner's decisio
 - The button is on the three hero figures only. The coverage banner and the "lowest it gets" line
   could use the same treatment.
 
+## The balance follows a tick (2026-11-17, reported from use, decided with the owner)
+
+A bill was marked paid and disappeared off the ledger. This supersedes the resolution of bug 16
+above, which made "mark as paid" move nothing at all.
+
+### What actually happened
+
+The activity log settled it in four lines. The tick at 11:27 worked exactly as designed - the row
+stayed, marked. The disappearance came two minutes later from a different gesture: the balance
+update at 11:29, which logged "counted Home Insurance in the new balance".
+
+Nothing was broken. Every paid row arrived **pre-ticked** in the "did any of these come out?"
+checklist, saving cleared whatever was ticked, and a cleared row left the timeline. Each step did
+what it was written to do, and together they turned one Save into "delete this", with nothing on
+that screen saying it would.
+
+The second complaint was the interesting one: **the balance at the top did not go down when the
+bill was marked paid**, and that was a surprise.
+
+### The decision
+
+The owner asked for the balance to follow the tick, and gave the reasoning:
+
+> We pay the bill then update the app saying we did so. We would never mark a bill paid in the app
+> when we haven't actually paid it.
+
+and, on what keeps it honest:
+
+> The app will suggest what the balance should be based on what it knows. But, ultimately, our
+> frequent manual updates is what defines what really exists.
+
+This reverses bug 16's resolution, which was right at the time: making the tick move nothing made
+the double subtraction impossible rather than merely fixed. The double subtraction is now kept out
+by a different guard, described below.
+
+### How it works
+
+The engine already did nine tenths of it. `effectiveBalance` was always "the last typed snapshot
+plus everything settled since it was taken" - it just listened to `clearedAt` alone. It now listens
+to the tick as well, because a tick on the ledger and a tick in the balance checklist assert the
+same fact in two different places.
+
+**`settledMoment` takes the EARLIER of `paidAt` and `clearedAt`**, and only applies it when it is
+strictly after the newest snapshot. That strict `>` is the whole safety argument and needs no logic
+of its own: the instant somebody types what the bank actually says, every earlier tick drops out and
+the typed figure stands alone. No compensating entry, no flag to clear, and undo is free.
+
+Earlier rather than later is load-bearing. Ticked paid at T1, a balance typed at T2, the row cleared
+at T3: earlier says T1, not after the snapshot, so nothing is applied - right, because the bank
+already counted it. Later says T3, which is, and the bill comes out twice. Pinned in
+`integrity.test.ts`.
+
+**Nothing new is persisted.** An earlier sketch had each tick write a derived balance row plus a
+schema column to mark it machine-written. Unnecessary, and it strained the rule against storing
+running totals. The facts were already there; the balance stays derived from both.
+
+### Rows stay, for a fortnight
+
+A settled row is shown and ordered like any other and counted in nothing - not the running balance,
+not a window's totals, not coverage, not the estimates count. It ages out 14 days after the tick.
+
+Measured from the tick rather than from the row's date, because a flexible row has no date of its
+own and would otherwise never age out at all.
+
+Fourteen is short on purpose. The tail only has to answer "is that one paid?" for the cycle you paid
+it in; it does not have to bridge the gap to the next one. The horizon runs four paycheques ahead, so
+next month's instance of a monthly bill has been on screen for weeks before this month's goes. **A
+bill never disappears from the ledger - one month of it does, once its successor is already there.**
+The owner had thought rows were overwritten each cycle; they are separate occurrences, which is what
+makes "always there" true with no reset logic.
+
+### The catch that was easy to miss
+
+The engine decided a cheque had landed by testing `clearedAt` alone. Once a tick settles a row, a
+cheque marked **received** but not yet cleared still looked unarrived, so the schedule projected a
+second copy of the same pay. That overstates the account, which is the one direction that is not
+safe. Tested.
+
+### Five tests changed sides
+
+They asserted the old behaviour: that a tick moves no figure, that a settled row leaves the ledger,
+that the checklist pre-ticks. They now assert the new guarantees. The property they were protecting -
+**the same bill never comes out twice** - is unchanged; only the mechanism delivering it is different.
+
+### A residual worth knowing about
+
+If somebody reads the bank, types a figure that already has a bill out of it, does **not** tick that
+bill in the checklist, and marks it paid later, the app subtracts it again.
+
+The underlying mistake is older than this change and unaffected by it: a bill that came out without
+being named in the checklist is double-counted either way. What the tick does is move where the error
+shows - from the forward figures into the headline. Safe-to-spend is identical before and after the
+tick in that situation, because the same amount is subtracted either way, just in a different place.
+The checklist asks about exactly this at the right moment, and the fix in both cases is the same:
+tick it there, or correct the balance.
+
+### Still to do
+
+- **Nobody has seen any of this rendered.** No browser in this environment. The settled row, the
+  dimmed running balance and the rewritten checklist are verified by tests and by HTTP against a real
+  Postgres, not by eye.
+- The other phone is a version behind and will need the update before any of this is visible there.
+- A `PIN_DATE` run reds `clock.test.ts` and `databaseTimezone.test.ts`, before and after this change
+  alike. They compare the app's clock with the database's, and `PIN_DATE` moves only the app's. Worth
+  skipping them under the pin so the run is clean enough to read.
+
 ## Git history and attribution (2026-11-09)
 
 The owner asked for **no attribution lines in any commit** - no `Co-Authored-By`, no "Generated with
@@ -2757,6 +2863,12 @@ is possible at all, so it is the cheapest to ask.
     ground colours, because those are tied to the five themes and to what the appearance store
     keeps the status bar in step with. *Built:* the app's colours, unchanged. Say the word if
     the status bar and splash should follow the new logo instead.
+21. **Is a fortnight the right tail for a settled row?** A row that has been ticked stays on
+    the ledger for 14 days from the tick and then ages out. *Built:* 14 days, one constant in
+    `timelineService.ts`. The reasoning is that it only has to cover the cycle you paid it in,
+    because the horizon already has next month's instance on screen - but nobody has lived with
+    it yet. Longer makes the top of the current window busier; shorter risks it going while it
+    is still being looked for.
 
 ## Blocked / needs the owner
 
