@@ -179,7 +179,7 @@ export interface GoalsOverview {
     readonly paid: readonly Reimbursement[];
     /** How many paid-back ones exist in total, which may exceed `paid.length`. */
     readonly paidCount: number;
-    readonly boughtCents: Cents;
+    readonly awaitingSubmissionCents: Cents;
     readonly submittedCents: Cents;
     readonly paidCents: Cents;
     readonly outstandingCents: Cents;
@@ -216,7 +216,7 @@ export function useGoalsOverview() {
           paid?: (Omit<Reimbursement, "cents"> & { cents: string })[];
           paidCount?: number;
           items?: (Omit<Reimbursement, "cents"> & { cents: string })[];
-          boughtCents: string;
+          awaitingSubmissionCents: string;
           submittedCents: string;
           paidCents: string;
           outstandingCents: string;
@@ -249,7 +249,7 @@ export function useGoalsOverview() {
           outstanding: outstandingWire.map((item) => ({ ...item, cents: toCents(item.cents) })),
           paid: paidWire.map((item) => ({ ...item, cents: toCents(item.cents) })),
           paidCount: wire.reimbursements.paidCount ?? paidWire.length,
-          boughtCents: toCents(wire.reimbursements.boughtCents),
+          awaitingSubmissionCents: toCents(wire.reimbursements.awaitingSubmissionCents),
           submittedCents: toCents(wire.reimbursements.submittedCents),
           paidCents: toCents(wire.reimbursements.paidCents),
           outstandingCents: toCents(wire.reimbursements.outstandingCents),

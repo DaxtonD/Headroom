@@ -103,12 +103,84 @@ describe("computeReimbursements", () => {
     ]);
 
     expect(summary.items.map((item) => item.status)).toEqual(["bought", "submitted", "paid"]);
-    expect(summary.boughtCents).toBe(5_000n);
+    expect(summary.awaitingSubmissionCents).toBe(5_000n);
     expect(summary.submittedCents).toBe(12_000n);
     expect(summary.paidCents).toBe(8_000n);
     // What the employer still owes the household.
     expect(summary.outstandingCents).toBe(17_000n);
     expect(summary.totalCents).toBe(25_000n);
+  });
+
+  it("walks the household's own worked example", () => {
+    /*
+     * Two purchases at $50, submitted one at a time, then one paid back.
+     * This is the sequence the screen was redesigned around on 2026-11-18,
+     * and the figures it has to produce at each step.
+     *
+     * The screen shows "Submitted X of Y" where Y is what is still out, and
+     * warns while `awaitingSubmissionCents` is above zero - so the gap
+     * between the two is the only thing on that panel with anything left to
+     * do about it.
+     */
+    const both = [
+      { purchase: "Lumber", cents: 5_000n },
+      { purchase: "Tools", cents: 5_000n },
+    ];
+
+    const bought = computeReimbursements(both);
+    expect(bought.awaitingSubmissionCents).toBe(10_000n);
+    expect(bought.submittedCents).toBe(0n);
+    expect(bought.outstandingCents).toBe(10_000n);
+
+    const half = computeReimbursements([
+      both[0] as (typeof both)[number],
+      { ...(both[1] as (typeof both)[number]), submittedAt: "2026-11-18T10:00:00-06:00" },
+    ]);
+    // "Submitted $50.00 of $100.00", and $50.00 still to submit.
+    expect(half.submittedCents).toBe(5_000n);
+    expect(half.outstandingCents).toBe(10_000n);
+    expect(half.awaitingSubmissionCents).toBe(5_000n);
+
+    const submitted = both.map((item) => ({
+      ...item,
+      submittedAt: "2026-11-18T10:00:00-06:00",
+    }));
+    const all = computeReimbursements(submitted);
+    // "Submitted $100.00 of $100.00", and no warning.
+    expect(all.submittedCents).toBe(10_000n);
+    expect(all.outstandingCents).toBe(10_000n);
+    expect(all.awaitingSubmissionCents).toBe(0n);
+
+    const paid = computeReimbursements([
+      submitted[0] as (typeof submitted)[number],
+      { ...(submitted[1] as (typeof submitted)[number]), paidAt: "2026-11-19T10:00:00-06:00" },
+    ]);
+    // One has come back, so it leaves the live figures entirely and the
+    // history carries it instead: "Submitted $50.00 of $50.00".
+    expect(paid.submittedCents).toBe(5_000n);
+    expect(paid.outstandingCents).toBe(5_000n);
+    expect(paid.awaitingSubmissionCents).toBe(0n);
+    expect(paid.paidCents).toBe(5_000n);
+  });
+
+  it("never lets the two live figures disagree with the gap", () => {
+    // The screen prints one as a fraction of the other and warns on the
+    // difference, so this is the invariant underneath all three numbers.
+    const summary = computeReimbursements([
+      { purchase: "A", cents: 1_234n },
+      { purchase: "B", cents: 9_900n, submittedAt: "2026-11-01T10:00:00-06:00" },
+      {
+        purchase: "C",
+        cents: 4_000n,
+        submittedAt: "2026-10-01T10:00:00-06:00",
+        paidAt: "2026-10-15T10:00:00-06:00",
+      },
+    ]);
+
+    expect(summary.awaitingSubmissionCents + summary.submittedCents).toBe(
+      summary.outstandingCents,
+    );
+    expect(summary.outstandingCents + summary.paidCents).toBe(summary.totalCents);
   });
 
   it("is zero across the board when there is nothing to claim", () => {

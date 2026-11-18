@@ -419,32 +419,57 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
                   overview.data.reimbursements.paid.length ? (
                     <li className="savings__empty">
                       Showing the {overview.data.reimbursements.paid.length} most recent of{" "}
-                      {overview.data.reimbursements.paidCount}. The totals below count them all.
+                      {overview.data.reimbursements.paidCount}. The total below counts them all.
                     </li>
                   ) : null}
+                  {/*
+                    The lifetime total, here rather than beside the live
+                    figures: it counts things that are finished, and it is
+                    worth knowing how much has come back over time.
+                  */}
+                  <li className="savings__expense savings__paid-total">
+                    <span className="savings__expense-name">Paid back in total</span>
+                    <Amount cents={overview.data.reimbursements.paidCents} />
+                  </li>
                 </ul>
               ) : null}
             </>
           ) : null}
 
-          <dl className="savings__totals">
-            <div>
-              <dt>Bought</dt>
-              <dd className="hr-amount">
-                {formatCents(overview.data.reimbursements.boughtCents)}
-              </dd>
-            </div>
-            <div>
-              <dt>Submitted</dt>
-              <dd className="hr-amount">
-                {formatCents(overview.data.reimbursements.submittedCents)}
-              </dd>
-            </div>
-            <div>
-              <dt>Paid back</dt>
-              <dd className="hr-amount">{formatCents(overview.data.reimbursements.paidCents)}</dd>
-            </div>
-          </dl>
+          {/*
+            One line instead of three totals.
+
+            It used to print Bought, Submitted and Paid back side by side,
+            each counting only the expenses sitting at exactly that step. So
+            "Bought $0.00" appeared beside two purchases that had plainly been
+            bought - true in the sense meant, and read as a bug every time.
+
+            The useful fact was never any single one of them: it is the gap.
+            Anything bought and not submitted is the only part of this with
+            something left for the household to do, so that is what the line
+            says, and the warning below appears only when there is a gap to
+            close. The paid-back total moved into the history, where the
+            things it counts are.
+          */}
+          <p className="savings__progress">
+            Submitted{" "}
+            <span className="hr-amount">
+              {formatCents(overview.data.reimbursements.submittedCents)}
+            </span>{" "}
+            of{" "}
+            <span className="hr-amount">
+              {formatCents(overview.data.reimbursements.outstandingCents)}
+            </span>
+          </p>
+
+          {overview.data.reimbursements.awaitingSubmissionCents > 0n ? (
+            <p className="savings__warning" role="status">
+              Still to submit{" "}
+              <span className="hr-amount">
+                {formatCents(overview.data.reimbursements.awaitingSubmissionCents)}
+              </span>
+            </p>
+          ) : null}
 
           <div className="savings__actions">
             <button
@@ -787,7 +812,16 @@ function MortgageSection({
   );
 }
 
-/** Bought → Submitted → Paid back, with the current step marked. */
+/**
+ * What has happened to this expense so far: Bought, then Submitted, then
+ * Paid back.
+ *
+ * Only the steps actually reached are drawn. All three used to show at once,
+ * with the ones still to come greyed out, which made every row look the same
+ * at a glance and put the word "Paid back" on an expense nobody had been
+ * paid back for - readable as a label rather than as a prediction. What is
+ * next is already on the button underneath.
+ */
 function StatusTrail({ status }: { status: Reimbursement["status"] }): React.JSX.Element {
   const steps = [
     { key: "bought", label: "Bought" },
@@ -795,15 +829,12 @@ function StatusTrail({ status }: { status: Reimbursement["status"] }): React.JSX
     { key: "paid", label: "Paid back" },
   ] as const;
 
-  const reachedIndex = steps.findIndex((step) => step.key === status);
+  const reached = steps.slice(0, steps.findIndex((step) => step.key === status) + 1);
 
   return (
     <span className="savings__trail">
-      {steps.map((step, index) => (
-        <span
-          key={step.key}
-          className={`savings__step ${index <= reachedIndex ? "savings__step--done" : ""}`}
-        >
+      {reached.map((step) => (
+        <span key={step.key} className="savings__step">
           {step.label}
         </span>
       ))}

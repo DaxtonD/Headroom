@@ -234,7 +234,7 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
         outstanding: outstandingItems,
         paid: shownPaid,
         paidCount: paidItems.length,
-        boughtCents: summary.boughtCents,
+        awaitingSubmissionCents: summary.awaitingSubmissionCents,
         submittedCents: summary.submittedCents,
         paidCents: summary.paidCents,
         outstandingCents: summary.outstandingCents,

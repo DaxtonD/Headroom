@@ -176,16 +176,18 @@
   font-size: 0.6875rem;
 }
 
+/*
+ * A step that has actually happened.
+ *
+ * There is only one state now. The trail used to draw all three steps always
+ * and grey out the ones still to come, so this had a muted variant too - and
+ * a row showed "Paid back" whether or not anybody had been. Now a chip is
+ * only drawn once its step is done, which means the chip itself is the
+ * signal and its colour is not carrying the meaning alone.
+ */
 .savings__step {
   padding: 1px 8px;
   border-radius: var(--hr-radius-pill);
-  background: var(--hr-neutral-bg);
-  color: var(--hr-text-muted);
-  font-weight: 600;
-}
-
-/* Steps reached so far. Not colour alone: reached steps are also bolder. */
-.savings__step--done {
   background: var(--hr-green-tint);
   color: var(--hr-positive);
   font-weight: 700;
@@ -213,23 +215,47 @@
   cursor: not-allowed;
 }
 
-.savings__totals {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--hr-space-5);
+/*
+ * How far along the work expenses are, in one line.
+ *
+ * This replaced a row of three totals - Bought, Submitted, Paid back - each
+ * counting only what sat at exactly that step, which is how "Bought $0.00"
+ * came to be printed beside two purchases that had obviously been bought.
+ */
+.savings__progress {
   margin: var(--hr-space-4) 0 0;
   padding-top: var(--hr-space-3);
   border-top: 1px solid var(--hr-row-divider);
+  color: var(--hr-text-secondary);
+  font-size: 0.875rem;
 }
 
-.savings__totals dt {
-  font-size: 0.75rem;
-  color: var(--hr-text-muted);
-}
-
-.savings__totals dd {
-  margin: 0;
+.savings__progress .hr-amount {
+  color: var(--hr-ink);
   font-weight: 600;
+}
+
+/*
+ * Shown only when something is bought and not submitted, because that is the
+ * only part of this with anything left to do. No warning is the normal state.
+ */
+.savings__warning {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-2);
+  margin: var(--hr-space-2) 0 0;
+  padding: var(--hr-space-2) var(--hr-space-3);
+  border-radius: var(--hr-radius-input);
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+/* The lifetime total, closing the paid-back list. */
+.savings__paid-total {
+  border-top: 1px solid var(--hr-row-divider);
+  font-weight: 700;
 }
 
 /* ---- Banked hours ---- */

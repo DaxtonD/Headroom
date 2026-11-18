@@ -87,8 +87,20 @@ export interface ReimbursementsSummary {
   readonly items: readonly ReimbursementResult[];
   /** Everything not yet paid back: the money still owed to the household. */
   readonly outstandingCents: Cents;
-  readonly boughtCents: Cents;
+  /**
+   * Bought and not submitted yet - the only part of this with something left
+   * for the household to do, which is why the screen warns about it.
+   *
+   * Called `boughtCents` until 2026-11-18. The figure never changed, but the
+   * name read as "everything bought" and the screen printed it under the word
+   * "Bought", where $0.00 looked like a plain error next to two purchases
+   * that had obviously been bought. Renamed rather than redefined so that
+   * anything still expecting the old meaning fails to compile.
+   */
+  readonly awaitingSubmissionCents: Cents;
+  /** Submitted and waiting on the employer. */
   readonly submittedCents: Cents;
+  /** Already back. History, and the only total that looks backwards. */
   readonly paidCents: Cents;
   readonly totalCents: Cents;
 }
@@ -106,17 +118,17 @@ export function computeReimbursements(
   const totalFor = (status: ReimbursementStatus): Cents =>
     sumCents(results.filter((item) => item.status === status).map((item) => item.cents));
 
-  const boughtCents = totalFor("bought");
+  const awaitingSubmissionCents = totalFor("bought");
   const submittedCents = totalFor("submitted");
   const paidCents = totalFor("paid");
 
   return {
     items: results,
-    boughtCents,
+    awaitingSubmissionCents,
     submittedCents,
     paidCents,
-    outstandingCents: boughtCents + submittedCents,
-    totalCents: boughtCents + submittedCents + paidCents,
+    outstandingCents: awaitingSubmissionCents + submittedCents,
+    totalCents: awaitingSubmissionCents + submittedCents + paidCents,
   };
 }
 
