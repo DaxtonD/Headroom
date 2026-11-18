@@ -262,3 +262,15 @@
 .row--paid.row--expanded .row__summary {
   opacity: 1;
 }
+
+/*
+ * The running balance beside a settled row.
+ *
+ * It is the same figure as the row above, because a settled row moves
+ * nothing - the balance at the top has already gone past it. Printed rather
+ * than blanked, so the column never looks broken, and dimmed so a repeated
+ * figure does not read as the balance standing still by accident.
+ */
+.row__running--settled {
+  opacity: 0.55;
+}

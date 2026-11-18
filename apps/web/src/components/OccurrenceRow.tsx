@@ -143,7 +143,7 @@ export function OccurrenceRow({
   return (
     <li
       className={`row ${isPaycheque ? "row--payday" : ""} ${expanded ? "row--expanded" : ""} ${
-        row.paid ? "row--paid" : ""
+        row.settled ? "row--paid" : ""
       }`}
     >
       <button
@@ -164,7 +164,14 @@ export function OccurrenceRow({
         <span className="row__main">
           <span className="row__name">{row.name}</span>
           <span className="row__chips">
-            {row.paid ? (
+            {/*
+              Driven by `settled`, not by `paid`. A row taken into a typed
+              balance by the checklist has gone from the account just as
+              surely, and nobody ever marked it paid - without this it would
+              sit on the ledger looking outstanding with the money already
+              spent.
+            */}
+            {row.settled ? (
               <Chip tone="payday">{row.cents > 0n ? "Received" : "Paid"}</Chip>
             ) : null}
             {isPaycheque ? (
@@ -182,10 +189,10 @@ export function OccurrenceRow({
           </span>
           {!isPaycheque ? (
             <span className="row__owner">
-              {row.paid
+              {row.settled
                 ? row.paidBy
                   ? `Marked by ${row.paidBy.name}`
-                  : "Dealt with"
+                  : "Counted in your balance"
                 : row.verified
                   ? row.verifiedBy
                     ? `Verified by ${row.verifiedBy.name}`
@@ -199,7 +206,20 @@ export function OccurrenceRow({
 
         <span className="row__figures">
           <Amount cents={row.cents} className="row__amount" signed />
-          <span className="row__running hr-amount">{formatCents(row.runningCents)}</span>
+          {/*
+            A settled row still prints its running balance, dimmed.
+
+            An earlier attempt at this replaced the figure with the words "in
+            your balance", which left a column of rows with no numbers beside
+            them and read as though something had broken. The balance has
+            simply walked past unchanged, and showing that is more honest than
+            hiding it.
+          */}
+          <span
+            className={`row__running hr-amount ${row.settled ? "row__running--settled" : ""}`}
+          >
+            {formatCents(row.runningCents)}
+          </span>
         </span>
       </button>
 
@@ -219,10 +239,11 @@ export function OccurrenceRow({
             </p>
           ) : null}
 
-          {row.paid ? (
+          {row.settled ? (
             <p className="row__note">
-              Ticked as dealt with. It still counts towards the running balance — the figures
-              change when you type in a balance from the bank, not when you tick this.
+              {row.paid
+                ? "The money has gone, so it has come off the balance at the top and stops counting towards the running balance. Typing in a balance from the bank replaces that estimate with what the bank actually says."
+                : "Counted in the balance you typed in from the bank, so it is not subtracted again."}
             </p>
           ) : null}
 

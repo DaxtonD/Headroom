@@ -32,28 +32,19 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
   const updateBalance = useUpdateBalance();
 
   /*
-   * Anything already ticked as dealt with on the ledger starts ticked here.
+   * Nothing starts ticked, and nothing needs to.
    *
-   * The two gestures answer different questions - "we have paid this" and
-   * "this is inside the figure I just read off the bank" - but when somebody
-   * has said the first, the second is almost always true as well, and making
-   * them say it twice is how a bill ends up counted twice.
+   * This used to arrive with every row already marked paid on the ledger
+   * pre-ticked, reasoning that somebody who has said "we paid this" means
+   * "it is inside the figure I am about to type" as well. The reasoning held;
+   * the consequence did not. Saving cleared whatever was ticked, clearing
+   * took a row off the ledger, and so one Save made a bill the household had
+   * just dealt with vanish - with nothing on this screen saying it would.
    *
-   * Adjusted during render rather than in an effect, so the boxes are never
-   * painted empty and then ticked.
+   * A paid row is now settled already, and the server leaves it out of these
+   * candidates entirely. What is left to ask about is the genuine remainder:
+   * things that came out of the account without anybody ticking them.
    */
-  const [seenCandidates, setSeenCandidates] = useState<string | null>(null);
-  const candidateKey = clearable.data?.candidates.map((candidate) => candidate.id).join("|") ?? null;
-  if (candidateKey !== null && candidateKey !== seenCandidates) {
-    setSeenCandidates(candidateKey);
-    setTicked(
-      new Set(
-        (clearable.data?.candidates ?? [])
-          .filter((candidate) => candidate.paid)
-          .map((candidate) => candidate.id),
-      ),
-    );
-  }
 
   // The amount is the one thing the user came here to type.
   useEffect(() => {
@@ -165,7 +156,7 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
               </legend>
               <p className="sheet__clearable-note">
                 Tick anything the bank has already taken, so it is not counted twice. Anything
-                you marked paid on the ledger is ticked for you.
+                you marked paid is already accounted for and is not listed here.
               </p>
               <ul className="sheet__clearable-list">
                 {clearable.data.candidates.map((candidate) => (

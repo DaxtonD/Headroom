@@ -96,6 +96,7 @@ interface TimelineRowWire {
   readonly verifiedAt: string | null;
   readonly paid: boolean;
   readonly paidBy: PersonWire | null;
+  readonly settled: boolean;
   readonly owner: PersonWire | null;
   readonly requiresCoverage: boolean;
   readonly runningCents: string;
@@ -169,9 +170,23 @@ export interface TimelineRow {
   readonly isOneOff: boolean;
   readonly verified: boolean;
   readonly verifiedBy: PersonWire | null;
-  /** Ticked as dealt with. A marker only: it moves no figure. */
+  /**
+   * Ticked as dealt with, on the ledger. The gesture, and who made it.
+   *
+   * This said "a marker only: it moves no figure" until 2026-11-17, when the
+   * balance started following the tick.
+   */
   readonly paid: boolean;
   readonly paidBy: PersonWire | null;
+  /**
+   * The money has gone and the balance at the top already knows.
+   *
+   * Distinct from `paid`, which is the gesture: a row taken into a typed
+   * balance by the checklist is settled without anybody marking it paid. This
+   * is the one that decides whether the row still counts, so it is the one
+   * the display follows.
+   */
+  readonly settled: boolean;
   readonly owner: PersonWire | null;
   readonly requiresCoverage: boolean;
   readonly runningCents: Cents;
@@ -392,9 +407,13 @@ export interface OccurrenceChange {
   readonly name?: string;
   readonly verified?: boolean;
   /**
-   * "We have dealt with this." A tick: the row stays on the ledger and goes on
-   * being counted, and no figure moves. Whether the money has left is answered
-   * by the balance typed in off the bank.
+   * "We have dealt with this." The row stays on the ledger, marked, and the
+   * balance at the top comes down by its amount - the money has gone, so the
+   * figure should say so before anybody reads the bank again.
+   *
+   * It stops counting towards the running balance at the same time, so the
+   * bill is taken out once and not twice. Typing a balance supersedes the
+   * tick: the newest figure a person read always wins.
    */
   readonly paid?: boolean;
   /**
@@ -528,8 +547,6 @@ export interface ClearableCandidate {
   readonly name: string;
   readonly cents: Cents;
   readonly date: string | null;
-  /** Already ticked as dealt with, so the sheet can tick it for them. */
-  readonly paid: boolean;
 }
 
 /** "Did any of these clear since the last update?" (HANDOFF section 6.1) */
@@ -545,7 +562,6 @@ export function useClearableCandidates(enabled: boolean) {
           name: string;
           cents: string;
           date: string | null;
-          paid: boolean;
         }[];
       }>("/api/balance/clearable");
 
