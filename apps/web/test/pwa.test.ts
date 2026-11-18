@@ -106,6 +106,23 @@ describe("the manifest", () => {
       }
     });
 
+    it("is on the shortcut icons too, which were missed the first time", () => {
+      /*
+       * The long-press shortcuts carry their own icon, and stamping only the
+       * manifest's top-level `icons` left these three pointing at the bare
+       * `icon-192.png` - which was, at that moment, the URL an edge cache was
+       * answering with the retired logo. Every icon URL the manifest emits
+       * has to be stamped, not just the obvious list.
+       */
+      for (const shortcut of manifest.shortcuts ?? []) {
+        for (const icon of shortcut.icons ?? []) {
+          expect(icon.src, `${shortcut.name}'s icon is not stamped`).toContain(
+            `icons/${ICON_STAMP}/`,
+          );
+        }
+      }
+    });
+
     it("is built from the bytes, not from a number somebody maintains", () => {
       // Recomputing it the same way must give the same answer, and the helper
       // and the manifest must agree.
