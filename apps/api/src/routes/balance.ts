@@ -234,19 +234,28 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
 
     const context = await loadTimelineContext(app.db.prisma, user.householdId);
 
-    // Things dated on or before today are the plausible candidates: anything
-    // later has not had a chance to come out yet.
+    /*
+     * Things dated on or before today are the plausible candidates: anything
+     * later has not had a chance to come out yet.
+     *
+     * A settled row is not among them. It has already been applied to the
+     * figure at the top, so there is nothing left for this checklist to do
+     * with it, and offering it again is how the same bill comes out twice.
+     *
+     * This is also what retires the pre-tick. The checklist used to arrive
+     * with every paid row already ticked, on the reasoning that somebody who
+     * has said "we paid this" means "it is inside the figure I just read" as
+     * well - sound, but it meant one Save silently cleared those rows off the
+     * ledger. Now a paid row never reaches the checklist, so there is nothing
+     * to pre-tick and nothing to sweep away. What is left is the genuine
+     * remainder: things that came out without anybody ticking them.
+     */
     const candidates = context.timeline.rows.filter(
-      (row) => row.effectiveDate !== null && row.effectiveDate <= context.today,
+      (row) =>
+        row.effectiveDate !== null &&
+        row.effectiveDate <= context.today &&
+        row.event.settled !== true,
     );
-
-    // Anything already ticked as dealt with is almost certainly inside the
-    // figure about to be read off the bank, so the sheet can tick it for them.
-    const ticked = await app.db.prisma.occurrence.findMany({
-      where: { id: { in: candidates.map((row) => row.event.id) }, paidAt: { not: null } },
-      select: { id: true },
-    });
-    const paid = new Set(ticked.map((row) => row.id));
 
     return reply.send({
       today: context.today,
@@ -256,7 +265,6 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
         name: row.event.name,
         cents: row.event.cents,
         date: row.effectiveDate,
-        paid: paid.has(row.event.id),
       })),
     });
   });

@@ -45,6 +45,47 @@ export function fromPlainDate(value: PlainDate): Date {
  * throughout. The server clock decides what "today" is (section 16.1 rule 10);
  * a client's idea of the date is never trusted.
  */
+/**
+ * How long a settled row stays on the ledger after it was ticked.
+ *
+ * Long enough to answer "is that one paid?" for the cycle you paid it in, and
+ * no longer. It does not need to cover the gap until the next one is due: the
+ * horizon runs four paycheques ahead, so next month's instance of a monthly
+ * bill has been on screen for weeks by the time this month's ages out. A bill
+ * never disappears - only one month of it does, and only once its successor
+ * is already visible.
+ *
+ * Measured from the moment it was settled rather than from its date, for two
+ * reasons: a flexible row has no date of its own and would otherwise never
+ * age out at all, and "a fortnight after you ticked it" is a rule somebody
+ * can hold in their head.
+ */
+const SETTLED_VISIBLE_DAYS = 14;
+
+/**
+ * When the household first said this had left the account, or null if nobody
+ * has said so.
+ *
+ * `paidAt` is a tick on the ledger and `clearedAt` is a tick in the balance
+ * checklist, and both assert the same fact. A row can carry both, so one
+ * value has to win, and it has to be the EARLIER of the two.
+ *
+ * Take a bill ticked paid at 11:27, a balance typed at 11:28, and the row
+ * cleared at 11:30. The 11:28 figure was read off the bank after the money
+ * left, so it already contains the bill. The earlier timestamp says settled
+ * at 11:27, which is not after the snapshot, so it is not applied again -
+ * correct. The later one says 11:30, which is, and the bill would come out of
+ * the account twice.
+ */
+export function settledMoment(row: {
+  readonly paidAt: Date | null;
+  readonly clearedAt: Date | null;
+}): Date | null {
+  const { paidAt, clearedAt } = row;
+  if (paidAt !== null && clearedAt !== null) return paidAt < clearedAt ? paidAt : clearedAt;
+  return paidAt ?? clearedAt;
+}
+
 export function todayInZone(timezone: string, now: Date = new Date()): PlainDate {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -140,23 +181,47 @@ export async function loadTimelineContext(
       })
     : null;
 
-  // Anything cleared AFTER the snapshot has already hit the account, so it is
-  // added to the typed-in figure and leaves the timeline (section 6.1).
-  const clearedSince = snapshot
+  /*
+   * Anything settled AFTER the snapshot has already hit the account, so it is
+   * applied to the typed-in figure (section 6.1).
+   *
+   * This is what makes the balance follow a tick: pay a bill, mark it paid,
+   * and the figure at the top goes down without anybody having to read the
+   * bank again. The household's rule for it is that the app suggests what the
+   * balance should be from what it knows, and the frequent manual updates
+   * define what really exists.
+   *
+   * The strict `>` is the whole safety argument, and it needs no logic of its
+   * own. A tick older than the newest typed figure stops being applied,
+   * because a balance read off the bank after the money left already contains
+   * it. So the moment somebody types what the bank actually says, every
+   * earlier tick drops out and the typed figure stands alone. Ties go to the
+   * snapshot, which is the safe direction.
+   *
+   * SQL gets a superset - a row qualifies if EITHER timestamp is recent
+   * enough - because Prisma cannot express "the earlier of these two columns"
+   * in a where clause. `settledMoment` then decides exactly, in one place.
+   */
+  const settledCandidates = snapshot
     ? await prisma.occurrence.findMany({
         where: {
           householdId,
           deletedAt: null,
-          clearedAt: { gt: snapshot.asOf },
+          OR: [{ paidAt: { gt: snapshot.asOf } }, { clearedAt: { gt: snapshot.asOf } }],
         },
-        select: { cents: true },
+        select: { cents: true, paidAt: true, clearedAt: true },
       })
     : [];
+
+  const settledSince = settledCandidates.filter((occurrence) => {
+    const moment = settledMoment(occurrence);
+    return moment !== null && moment > (snapshot as { asOf: Date }).asOf;
+  });
 
   const snapshotCents = snapshot?.cents ?? 0n;
   const effectiveCents = effectiveBalance(
     snapshotCents,
-    clearedSince.map((occurrence) => occurrence.cents),
+    settledSince.map((occurrence) => occurrence.cents),
   );
 
   /*
@@ -175,7 +240,11 @@ export async function loadTimelineContext(
         householdId,
         deletedAt: null,
         kind: "paycheque",
-        clearedAt: { not: null },
+        // Received or cleared: both say the cheque has landed. Testing only
+        // `clearedAt` here would let a cheque that was marked received, but
+        // not yet taken into a typed balance, be projected a second time -
+        // which overstates the account, the one direction that is not safe.
+        OR: [{ paidAt: { not: null } }, { clearedAt: { not: null } }],
         date: { gte: fromPlainDate(today) },
       },
       select: { date: true },
@@ -191,18 +260,39 @@ export async function loadTimelineContext(
     .filter((schedule) => !livePaydays.has(schedule.id))
     .map((schedule) => schedule.id);
 
+  /*
+   * A settled row stays on the ledger; it just stops counting.
+   *
+   * This used to read `clearedAt: null`, which took a row off the ledger the
+   * moment it was dealt with. That is the disappearing act the household
+   * objected to: a bill ticked paid, then swept away by the next balance
+   * update, with nothing on screen to say it would be.
+   *
+   * Within the horizon, anything not yet dealt with is kept with no lower
+   * bound - a dated item in the past that has not settled is still coming,
+   * because the money has not moved yet.
+   */
+  const settledFloor = new Date(now.getTime() - SETTLED_VISIBLE_DAYS * 24 * 60 * 60 * 1000);
+  const horizonCutoff = fromPlainDate(horizonEnd);
+  // Flexible items have no date; the engine places them by anchor.
+  const withinHorizon = { OR: [{ date: { lte: horizonCutoff } }, { date: null }] };
+
   const rows = await prisma.occurrence.findMany({
     where: {
       householdId,
       deletedAt: null,
-      // Cleared items have left the timeline.
-      clearedAt: null,
       OR: [
-        // Dated items up to the horizon. A dated item in the past that has not
-        // cleared is still coming: the money has not moved yet.
-        { date: { lte: fromPlainDate(horizonEnd) } },
-        // Flexible items have no date; the engine places them by anchor.
-        { date: null },
+        // Still to come, or overdue and nobody has said it is dealt with.
+        { AND: [{ paidAt: null }, { clearedAt: null }, withinHorizon] },
+        // Settled recently enough to still be worth looking at. The SQL is
+        // the same superset as above; a row kept a few days longer because
+        // its later timestamp is recent is cosmetic, not arithmetic.
+        {
+          AND: [
+            { OR: [{ paidAt: { gte: settledFloor } }, { clearedAt: { gte: settledFloor } }] },
+            withinHorizon,
+          ],
+        },
       ],
     },
     select: {
@@ -216,6 +306,8 @@ export async function loadTimelineContext(
       sortIndex: true,
       isOneOff: true,
       verifiedAt: true,
+      paidAt: true,
+      clearedAt: true,
       templateId: true,
       ownerUserId: true,
       version: true,
@@ -245,6 +337,7 @@ export async function loadTimelineContext(
       sortIndex: row.sortIndex,
       isOneOff: row.isOneOff,
       verified: row.verifiedAt !== null,
+      settled: settledMoment(row) !== null,
       ownerId: row.ownerUserId,
       payScheduleId: null,
     }));

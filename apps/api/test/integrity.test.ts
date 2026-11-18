@@ -537,11 +537,24 @@ describe("balance snapshots", () => {
     expect(dashboard.balance.cents).toBe("26000");
     expect(dashboard.balance.snapshotCents).toBe("41000");
 
-    // And it has left the timeline.
+    /*
+     * And it is STILL ON the timeline, settled.
+     *
+     * This read `not.toContain` until a settled row started staying put. The
+     * property being checked is the one that matters either way - the same
+     * bill cannot come out of the account twice - and the row being absent
+     * was only ever one way of achieving it. Now it is present and counted in
+     * nothing, which the balance assertions above already prove: 26000 is the
+     * typed figure less the bill once, not twice.
+     */
     const timeline = await harness.app
       .inject({ method: "GET", url: "/api/timeline", headers: { cookie: alexCookie } })
       .then((response) => response.json());
-    expect(timeline.rows.map((row: { id: string }) => row.id)).not.toContain(bill.id);
+    const row = timeline.rows.find((one: { id: string }) => one.id === bill.id) as
+      | { settled: boolean; runningCents: string }
+      | undefined;
+    expect(row, "a settled row stays on the ledger so it can be checked").toBeDefined();
+    expect(row?.settled).toBe(true);
   });
 });
 

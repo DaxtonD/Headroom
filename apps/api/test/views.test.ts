@@ -652,7 +652,7 @@ describe("editing changes the derived numbers immediately", () => {
     expect(BigInt(after.lowest.cents) <= BigInt(before.lowest.cents)).toBe(true);
   });
 
-  it("takes a bill off the timeline once it is marked paid", async () => {
+  it("keeps a cleared bill on the timeline, counted in nothing", async () => {
     const { ids } = await buildScenario();
 
     const patched = await harness.app.inject({
@@ -667,9 +667,27 @@ describe("editing changes the derived numbers immediately", () => {
       .inject({ method: "GET", url: "/api/timeline", headers: { cookie } })
       .then((response) => response.json());
 
-    expect(timeline.rows.map((row: { id: string }) => row.id)).not.toContain(ids.power.id);
+    /*
+     * The row stays, settled. It used to leave the ledger here, which is the
+     * disappearing act the household objected to; what has to stay true is
+     * that the money comes out exactly once, and the balance below proves it.
+     */
+    const row = timeline.rows.find((one: { id: string }) => one.id === ids.power.id) as
+      | { settled: boolean; runningCents: string }
+      | undefined;
+    expect(row?.settled).toBe(true);
+
     // It cleared after the snapshot, so it now counts against the balance.
     expect(BigInt(timeline.startBalanceCents)).toBe(START_CENTS - 12_345n);
+
+    // And the running balance walks straight past it, rather than taking the
+    // same bill out a second time on its way down the ledger. Compared with
+    // whatever sits above it rather than with a fixed figure, so the test
+    // does not depend on the row happening to be first.
+    const rows = timeline.rows as { id: string; runningCents: string }[];
+    const index = rows.findIndex((one) => one.id === ids.power.id);
+    const above = index > 0 ? BigInt(rows[index - 1]!.runningCents) : BigInt(timeline.startBalanceCents);
+    expect(BigInt(rows[index]!.runningCents)).toBe(above);
   });
 
   it("keeps the end balance the same when a flexible bill is moved", async () => {

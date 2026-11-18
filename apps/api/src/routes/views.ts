@@ -41,12 +41,22 @@ function serialiseTimelineRow(row: TimelineRow, decoration: OccurrenceDecoration
     verifiedBy: decoration?.verifiedBy ?? null,
     verifiedAt: decoration?.verifiedAt?.toISOString() ?? null,
     /*
-     * "We have dealt with this." A tick, which is why it travels as a
-     * decoration rather than as something the engine knows about: it changes
-     * no figure, so the engine has no business seeing it.
+     * "We have dealt with this."
+     *
+     * This used to be a tick that moved nothing, and the comment here said
+     * the engine had no business seeing it. Both stopped being true when the
+     * balance started following a tick: the money has left, so the figure at
+     * the top comes down and the row stops counting forward.
+     *
+     * The two flags still say different things and the UI needs both. `paid`
+     * is the gesture - who ticked it, and whether the button offers "Undo
+     * paid". `settled` is the consequence the engine acted on, and it is also
+     * true for a row taken into a typed balance by the checklist, which
+     * nobody ever marked paid.
      */
     paid: decoration?.paidAt !== null && decoration?.paidAt !== undefined,
     paidBy: decoration?.paidBy ?? null,
+    settled: row.event.settled === true,
     owner: decoration?.owner ?? null,
     requiresCoverage: row.requiresCoverage,
     runningCents: row.runningCents,

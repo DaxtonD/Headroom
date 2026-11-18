@@ -165,6 +165,39 @@ describe("marking a cheque as received", () => {
     expect(endAfter).toBe(endBefore);
   });
 
+  it("does not leave one behind when it is marked received either", async () => {
+    /*
+     * The same guarantee for the other gesture, and the one that was easy to
+     * miss: the engine used to decide a cheque had landed by looking at
+     * `clearedAt` alone.
+     *
+     * Once a tick settles a row, a cheque marked received is in the balance -
+     * but with only `clearedAt` consulted it still looked unarrived, so the
+     * schedule projected a second copy of the same pay. That overstates the
+     * account, which is the one direction that is not safe.
+     */
+    await addPayday();
+    expect((await post("/api/balance", { cents: "50000" })).statusCode).toBe(201);
+
+    const received = (await cheques())[0] as { id: string; version: number };
+    const endBefore = await get("/api/dashboard")
+      .then((response) => response.json())
+      .then((body) => BigInt(body.leftThisCycleCents as string));
+
+    const marked = await patch(`/api/occurrences/${received.id}`, received.version, {
+      paid: true,
+    });
+    expect(marked.statusCode).toBe(200);
+
+    expect((await windows()).flatMap((window) => window.projectedPaycheques)).toEqual([]);
+
+    // Saying the pay has arrived does not create any.
+    const endAfter = await get("/api/dashboard")
+      .then((response) => response.json())
+      .then((body) => BigInt(body.leftThisCycleCents as string));
+    expect(endAfter).toBe(endBefore);
+  });
+
   it("is not how a row is ticked off any more", async () => {
     /*
      * Clearing is now only what the balance-update checklist does. The gesture
@@ -198,17 +231,28 @@ describe("marking a cheque as received", () => {
 
 describe("ticking a row as dealt with", () => {
   /*
-   * What "mark as paid" means now, decided with the household after they
-   * found that it
-   * moved the balance: a tick for the two of them and nothing else.
+   * What "mark as paid" means, revised with the household on 2026-11-17.
    *
-   *   "I actually didn't realize that marking a bill paid actually moved the
-   *    balance until now."
+   * It was a tick that moved nothing, because one flag doing both jobs is
+   * what let a bill be subtracted twice - once inside the figure read off the
+   * bank, once again by the tick. Moving nothing made that impossible rather
+   * than merely fixed, and it was the right call at the time.
    *
-   * Two things follow, and both are tested here. The row stays on the ledger,
-   * because a ledger whose lines disappear is the complaint this answers. And
-   * no figure moves, which makes the double subtraction impossible rather than
-   * merely fixed: the balance changes only when somebody types one in.
+   * The household then asked for the balance to follow the tick, and gave
+   * the reasoning: they pay the bill and then tell the app they have, so
+   * between one typed balance and the next, the honest figure at the top is
+   * the last one less what they know has gone.
+   *
+   * The double subtraction is kept out by a different guard instead. A row
+   * settles ONCE, at the earlier of `paidAt` and `clearedAt`, and only counts
+   * when that moment is strictly after the newest snapshot - so the instant
+   * somebody types what the bank actually says, every earlier tick drops out
+   * and the typed figure stands alone.
+   *
+   * Three things are tested here: the row stays on the ledger, because a
+   * ledger whose lines disappear is the complaint this all started from; the
+   * balance comes down by the bill exactly once; and a typed figure
+   * supersedes a tick rather than stacking with it.
    */
   async function figures(): Promise<{
     balance: string;
@@ -225,7 +269,7 @@ describe("ticking a row as dealt with", () => {
     };
   }
 
-  async function bill(): Promise<{ id: string; version: number }> {
+  async function bill(): Promise<{ id: string; version: number; cents: bigint }> {
     const soon = new Date();
     soon.setUTCHours(0, 0, 0, 0);
     soon.setUTCDate(soon.getUTCDate() + 3);
@@ -243,12 +287,67 @@ describe("ticking a row as dealt with", () => {
     const row = await harness.db.prisma.occurrence.findFirstOrThrow({
       where: { householdId, name: "Power" },
       orderBy: { date: "asc" },
-      select: { id: true, version: true },
+      select: { id: true, version: true, cents: true },
     });
     return row;
   }
 
-  it("moves no figure at all", async () => {
+  it("stays on the ledger for a fortnight, then ages out", async () => {
+    /*
+     * The tail, and why it is this short.
+     *
+     * It only has to answer "is that one paid?" for the cycle you paid it
+     * in. It does not have to bridge the gap to the next one: the horizon
+     * runs four paycheques ahead, so next month's instance of a monthly bill
+     * has been on screen for weeks before this month's goes. A bill never
+     * disappears from the ledger - one month of it does, once its successor
+     * is already there.
+     *
+     * Measured from the tick rather than from the row's date, because a
+     * flexible row has no date of its own and would otherwise never age out.
+     * Back-dated here in the database: the alternative is waiting a
+     * fortnight, and the server clock is what decides.
+     */
+    await addPayday();
+    expect((await post("/api/balance", { cents: "80000" })).statusCode).toBe(201);
+    const target = await bill();
+    await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
+
+    const onLedger = async (): Promise<boolean> =>
+      (await windows()).flatMap((window) => window.rows).some((row) => row.id === target.id);
+
+    expect(await onLedger(), "just ticked, so plainly still there").toBe(true);
+
+    const daysAgo = (days: number): Date => {
+      const when = new Date();
+      when.setUTCDate(when.getUTCDate() - days);
+      return when;
+    };
+
+    await harness.db.prisma.occurrence.update({
+      where: { id: target.id },
+      data: { paidAt: daysAgo(5) },
+    });
+    expect(await onLedger(), "inside the fortnight, still checkable").toBe(true);
+
+    await harness.db.prisma.occurrence.update({
+      where: { id: target.id },
+      data: { paidAt: daysAgo(20) },
+    });
+    expect(await onLedger(), "past the fortnight, quietly gone").toBe(false);
+  });
+
+  it("takes the bill off the balance at the top", async () => {
+    /*
+     * This asserted the opposite until 2026-11-17: a tick moved no figure,
+     * and the bank balance was the only thing that could.
+     *
+     * The household asked for the other behaviour and the reasoning is
+     * theirs: they pay a bill and then tell the app they have, so between
+     * typing one balance and typing the next, the honest figure is the last
+     * one less what they know has gone. The app suggests; the typed figure
+     * still decides, and the test below pins that.
+     */
     await addPayday();
     expect((await post("/api/balance", { cents: "80000" })).statusCode).toBe(201);
     const target = await bill();
@@ -258,8 +357,11 @@ describe("ticking a row as dealt with", () => {
     expect(ticked.statusCode).toBe(200);
     expect(ticked.json().occurrence.paid).toBe(true);
 
-    // The whole point. The bank balance is what moves money, not a tick.
-    expect(await figures()).toEqual(before);
+    const after = await figures();
+    const moved = BigInt(before.balance as string) - BigInt(after.balance as string);
+    expect(moved, "the balance comes down by the bill, exactly once").toBe(
+      -BigInt(target.cents),
+    );
   });
 
   it("leaves the row on the ledger, marked", async () => {
@@ -338,7 +440,7 @@ describe("ticking a row as dealt with", () => {
     expect(row.paidAt).not.toBeNull();
   });
 
-  it("is ticked for them on the balance checklist", async () => {
+  it("drops off the balance checklist once it is ticked", async () => {
     /*
      * The two gestures answer different questions, but somebody who has said
      * "we paid this" will almost always mean "and it is inside the figure I am
@@ -372,33 +474,91 @@ describe("ticking a row as dealt with", () => {
     expect(added.statusCode).toBe(201);
     const water = added.json().occurrence as { id: string; version: number };
 
+    // Before the tick it is a candidate: dated today, nobody has said what
+    // happened to it.
+    const offered = await get("/api/balance/clearable").then((response) => response.json());
+    expect(offered.candidates.map((one: { id: string }) => one.id)).toContain(water.id);
+
     await patch(`/api/occurrences/${water.id}`, water.version, { paid: true });
 
+    /*
+     * After the tick it is gone from the checklist, and that is the fix.
+     *
+     * It used to arrive PRE-TICKED instead, on the reasoning that somebody
+     * who has said "we paid this" means "it is inside the figure I am about
+     * to type" as well. Sound, and it meant one Save cleared those rows off
+     * the ledger with nothing on screen to say it would - which is how a bill
+     * disappeared in ordinary use on 2026-11-17.
+     *
+     * Now a settled row is already inside the figure at the top, so this list
+     * has nothing left to do with it. What it still asks about is the genuine
+     * remainder: things that came out without anybody ticking them.
+     */
     const after = await get("/api/balance/clearable").then((response) => response.json());
-    const candidate = after.candidates.find(
-      (one: { id: string }) => one.id === water.id,
-    ) as { paid: boolean } | undefined;
-    expect(candidate?.paid).toBe(true);
+    expect(after.candidates.map((one: { id: string }) => one.id)).not.toContain(water.id);
   });
 
-  it("cannot subtract a bill the typed-in balance already covered", async () => {
+  it("cannot subtract a bill the typed-in balance already counted", async () => {
     /*
-     * The bug this design removes. Before, the tick cleared the row, and
-     * clearing subtracted it from the balance - so a bill that had come out
-     * BEFORE the bank was read got taken off twice: once by the bank and once
-     * by the tick. The household was short by the amount of the bill, with
+     * The bug this design has to keep out: the same bill taken off twice,
+     * once by the bank and once by the app, leaving the household short with
      * nothing on screen to say why.
+     *
+     * The guard is that a row settles ONCE, at the earlier of its two
+     * timestamps. Here the checklist clears it as part of the snapshot, so it
+     * carries that snapshot's own `asOf`; ticking it paid afterwards writes a
+     * later `paidAt`, but the earlier one still decides, and the comparison
+     * against the snapshot is a strict `>`. So the tick changes nothing.
+     *
+     * Taking the LATER timestamp instead would subtract the bill a second
+     * time here, which is why `settledMoment` exists at all.
      */
     await addPayday();
     const target = await bill();
 
-    // The figure read off the bank, which already accounts for the bill.
-    expect((await post("/api/balance", { cents: "61400" })).statusCode).toBe(201);
-    const before = await figures();
+    // The figure read off the bank, with the bill named as already out.
+    const typed = await post("/api/balance", {
+      cents: "61400",
+      clearedOccurrenceIds: [target.id],
+    });
+    expect(typed.statusCode).toBe(201);
 
-    await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
+    const before = await figures();
+    expect(before.balance).toBe("61400");
+
+    const current = await harness.db.prisma.occurrence.findFirstOrThrow({
+      where: { id: target.id },
+      select: { version: true },
+    });
+    await patch(`/api/occurrences/${target.id}`, current.version, { paid: true });
 
     expect((await figures()).balance).toBe(before.balance);
+  });
+
+  it("lets the typed figure supersede a tick rather than stacking with it", async () => {
+    /*
+     * The other half, and the household's own rule for the whole feature:
+     * the app suggests what the balance should be from what it knows, and
+     * the frequent manual updates define what really exists.
+     *
+     * Tick a bill and the figure at the top comes down. Then read the bank -
+     * which already has the bill out of it, and two card purchases besides -
+     * and type that. The tick is now older than the snapshot, so it stops
+     * being applied and the typed figure stands alone. Nothing has to be
+     * reversed and no flag is cleared; the strict `>` does all of it.
+     */
+    await addPayday();
+    const target = await bill();
+
+    expect((await post("/api/balance", { cents: "80000" })).statusCode).toBe(201);
+    await patch(`/api/occurrences/${target.id}`, target.version, { paid: true });
+
+    // Suggested: 80000 less the bill. Reality: lower still, by whatever was
+    // spent on the cards in between.
+    expect((await figures()).balance).toBe("65300");
+
+    expect((await post("/api/balance", { cents: "59300" })).statusCode).toBe(201);
+    expect((await figures()).balance).toBe("59300");
   });
 });
 
