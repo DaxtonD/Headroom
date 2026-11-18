@@ -269,6 +269,15 @@ describe("ticking a row as dealt with", () => {
     };
   }
 
+  /** The row as the ledger shows it, or undefined if it is not there. */
+  async function onLedger(
+    id: string,
+  ): Promise<{ settled: boolean; paid: boolean } | undefined> {
+    return (await windows())
+      .flatMap((window) => window.rows)
+      .find((row) => row.id === id) as { settled: boolean; paid: boolean } | undefined;
+  }
+
   async function bill(): Promise<{ id: string; version: number; cents: bigint }> {
     const soon = new Date();
     soon.setUTCHours(0, 0, 0, 0);
@@ -496,6 +505,69 @@ describe("ticking a row as dealt with", () => {
      */
     const after = await get("/api/balance/clearable").then((response) => response.json());
     expect(after.candidates.map((one: { id: string }) => one.id)).not.toContain(water.id);
+  });
+
+  it("walks through the household's own scenario, start to finish", async () => {
+    /*
+     * The acceptance test, in the order the household described it.
+     *
+     *   check the bank, type the balance in
+     *   verify the bill when it arrives
+     *   both of us spend something on the cards - the app cannot see this
+     *   pay the bill, then tell the app we did
+     *   the figure at the top comes down on its own
+     *   check the bank, see it is lower still, type that in
+     *
+     * The row has to be visible and marked at every step after the tick.
+     * That is the complaint this started from: a bill that disappears is one
+     * nobody can check.
+     */
+    await addPayday();
+    const target = await bill();
+    const amount = -target.cents;
+
+    // 1. The bank is read and typed in.
+    expect((await post("/api/balance", { cents: "80000" })).statusCode).toBe(201);
+    expect((await figures()).balance).toBe("80000");
+
+    // 2. The bill arrives and the real amount is confirmed.
+    const verified = await patch(`/api/occurrences/${target.id}`, target.version, {
+      verified: true,
+    });
+    expect(verified.statusCode).toBe(200);
+
+    // Still counted forward: nobody has said the money has gone.
+    const beforeTick = await onLedger(target.id);
+    expect(beforeTick?.settled).toBe(false);
+
+    // 3. Two card purchases happen. The app is told nothing and shows nothing.
+    expect((await figures()).balance).toBe("80000");
+
+    // 4. The bill is paid, and the app is told.
+    const current = await harness.db.prisma.occurrence.findUniqueOrThrow({
+      where: { id: target.id },
+      select: { version: true },
+    });
+    await patch(`/api/occurrences/${target.id}`, current.version, { paid: true });
+
+    // 5. The figure at the top comes down by itself, and the row stays put.
+    expect(BigInt((await figures()).balance as string)).toBe(80_000n - amount);
+
+    const afterTick = await onLedger(target.id);
+    expect(afterTick, "the bill must still be on the ledger").toBeDefined();
+    expect(afterTick?.settled).toBe(true);
+    expect(afterTick?.paid).toBe(true);
+
+    // 6. The bank is read again - lower still, by the card spending - and
+    //    typed in. The tick is now older than the snapshot, so it stops being
+    //    applied and the typed figure stands alone.
+    expect((await post("/api/balance", { cents: "59300" })).statusCode).toBe(201);
+    expect((await figures()).balance).toBe("59300");
+
+    // And the bill is STILL there, still marked, still counted in nothing.
+    const atEnd = await onLedger(target.id);
+    expect(atEnd?.settled).toBe(true);
+    expect(atEnd?.paid).toBe(true);
   });
 
   it("cannot subtract a bill the typed-in balance already counted", async () => {

@@ -556,6 +556,66 @@ describe("balance snapshots", () => {
     expect(row, "a settled row stays on the ledger so it can be checked").toBeDefined();
     expect(row?.settled).toBe(true);
   });
+
+  it("settles a row once, at the earlier of its two timestamps", async () => {
+    /*
+     * The hazard in letting a tick move the balance, pinned.
+     *
+     * A row can carry both timestamps: `paidAt` from the ledger, `clearedAt`
+     * from the balance checklist. Both assert the same fact - this has left
+     * the account - so exactly one of them may be applied, and it has to be
+     * the EARLIER one.
+     *
+     * The ordering here is the dangerous one. The bill is ticked paid, THEN
+     * a balance is read off the bank and typed in - a figure that already has
+     * the bill out of it - and the row is cleared afterwards.
+     *
+     *   paid    at T1
+     *   balance at T2, later than T1
+     *   cleared at T3, later than T2
+     *
+     * Earliest says settled at T1, which is not after the snapshot, so
+     * nothing is applied and the typed figure stands: correct, because the
+     * bank already counted it. Taking the later timestamp would say T3, which
+     * IS after the snapshot, and the same bill would come out of the account
+     * twice - leaving the household short with nothing on screen to say why.
+     */
+    const bill = await makeBill(-15_000n);
+
+    const ticked = await patch(alexCookie, bill.id, { paid: true }, { baseVersion: 1 });
+    expect(ticked.statusCode).toBe(200);
+
+    const paidRow = await harness.db.prisma.occurrence.findUniqueOrThrow({
+      where: { id: bill.id },
+      select: { paidAt: true, version: true },
+    });
+
+    // The bank is read a second after the tick, and already has the bill out.
+    await harness.db.prisma.balanceSnapshot.create({
+      data: {
+        accountId,
+        cents: 26_000n,
+        asOf: new Date((paidRow.paidAt as Date).getTime() + 1000),
+        enteredById: alexId,
+      },
+    });
+
+    // Then the checklist clears it, later still.
+    const cleared = await patch(
+      alexCookie,
+      bill.id,
+      { cleared: true },
+      { baseVersion: paidRow.version },
+    );
+    expect(cleared.statusCode).toBe(200);
+
+    const dashboard = await harness.app
+      .inject({ method: "GET", url: "/api/dashboard", headers: { cookie: alexCookie } })
+      .then((response) => response.json());
+
+    // The typed figure, untouched. Not 26000 less the bill again.
+    expect(dashboard.balance.cents).toBe("26000");
+  });
 });
 
 /* -------------------------------------------------------------------------- */
