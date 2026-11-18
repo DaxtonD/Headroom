@@ -1,7 +1,44 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, type Plugin } from "vite";
 import { VitePWA } from "vite-plugin-pwa";
-import { manifest } from "./manifest.config.js";
+import { ICON_FILES, iconUrl, manifest } from "./manifest.config.js";
+
+/**
+ * Write each manifest icon a second time, at the URL carrying its content
+ * stamp.
+ *
+ * `manifest.config.ts` explains why the URL has to change when the artwork
+ * does. This is the half that puts a file there. The originals stay in
+ * `public/` untouched, because `index.html` links some of them and because
+ * authored artwork living anywhere but `public/` would be a surprise.
+ *
+ * Emitted during `generateBundle` so Rollup writes them before
+ * `vite-plugin-pwa` builds its precache list in `closeBundle` - the other way
+ * round and the manifest would name icons the service worker then tried to
+ * precache and could not find.
+ *
+ * Build only. The dev server never serves a manifest, because `devOptions` is
+ * off, so nothing asks for these paths there.
+ */
+function stampedIcons(): Plugin {
+  const publicDir = resolve(import.meta.dirname, "public");
+
+  return {
+    name: "headroom:stamped-icons",
+    apply: "build",
+    generateBundle() {
+      for (const file of ICON_FILES) {
+        this.emitFile({
+          type: "asset",
+          fileName: iconUrl(file),
+          source: readFileSync(resolve(publicDir, file)),
+        });
+      }
+    },
+  };
+}
 
 /**
  * The app is installable, and offline it is a read-only cache.
@@ -17,6 +54,7 @@ import { manifest } from "./manifest.config.js";
 export default defineConfig({
   plugins: [
     react(),
+    stampedIcons(),
     VitePWA({
       /*
        * `prompt`, not `autoUpdate`.

@@ -16,7 +16,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { manifest } from "../manifest.config.js";
+import { ICON_FILES, ICON_STAMP, iconUrl, manifest } from "../manifest.config.js";
 
 const WEB = resolve(import.meta.dirname, "..");
 const PUBLIC = resolve(WEB, "public");
@@ -40,6 +40,14 @@ function pngSize(file: string): { width: number; height: number } {
 
 const icons = manifest.icons ?? [];
 
+/**
+ * The artwork behind a manifest entry.
+ *
+ * The manifest names a stamped URL and the build writes the copy there; the
+ * drawing itself lives unstamped in `public/`, so the basename is the file.
+ */
+const artworkFor = (src: string): string => resolve(PUBLIC, src.split("/").at(-1) as string);
+
 describe("the manifest", () => {
   it("says enough for a phone to install it", () => {
     expect(manifest.name).toBe("Headroom");
@@ -58,12 +66,53 @@ describe("the manifest", () => {
   });
 
   it.each(icons.map((icon) => [icon.src, icon] as const))("ships %s", (_src, icon) => {
-    const file = resolve(PUBLIC, icon.src);
+    const file = artworkFor(icon.src);
     expect(existsSync(file), `${icon.src} is in the manifest but not in public/`).toBe(true);
 
     const [declared] = icon.sizes.split(" ");
     const [width, height] = (declared as string).split("x").map(Number);
     expect(pngSize(file)).toEqual({ width, height });
+  });
+
+  describe("the icon stamp", () => {
+    /*
+     * Why the URL carries a hash at all: the icons keep stable names, so for
+     * the app's whole life new artwork arrived at a URL caches already had an
+     * answer for. A retired mark sat on a home screen for a day because
+     * Cloudflare was serving its own four-hour copy, and that hostname's
+     * cache settings are not ours to change. A derived stamp means new
+     * artwork lands at a path nothing has ever cached.
+     */
+    it("is in the URL of every icon the manifest names", () => {
+      for (const icon of icons) {
+        expect(icon.src, `${icon.src} is not stamped`).toContain(`icons/${ICON_STAMP}/`);
+      }
+      // Short enough to read in a URL, long enough not to collide.
+      expect(ICON_STAMP).toMatch(/^[0-9a-f]{8}$/);
+    });
+
+    it("covers every icon, so changing any one of them changes the URL", () => {
+      /*
+       * The property that makes this work without anyone remembering to do
+       * anything. If an icon were left out of the hash, replacing just that
+       * one would reuse a URL and the stale copy would win again.
+       */
+      const names = icons.map((icon) => icon.src.split("/").at(-1));
+      for (const file of ICON_FILES) {
+        expect(names, `${file} is hashed but not in the manifest`).toContain(file);
+      }
+      for (const name of names) {
+        expect(ICON_FILES, `${name} is in the manifest but not hashed`).toContain(name);
+      }
+    });
+
+    it("is built from the bytes, not from a number somebody maintains", () => {
+      // Recomputing it the same way must give the same answer, and the helper
+      // and the manifest must agree.
+      expect(iconUrl("icon-512.png")).toBe(`icons/${ICON_STAMP}/icon-512.png`);
+      const stamped = icons.filter((icon) => icon.src.startsWith(`icons/${ICON_STAMP}/`));
+      expect(stamped).toHaveLength(icons.length);
+    });
   });
 
   it("includes one Android can crop to its own shape", () => {
@@ -82,7 +131,7 @@ describe("the manifest", () => {
      * 80% still leaves detail; the small ones exist so a launcher does not
      * have to downscale that one.
      */
-    const widest = Math.max(...maskable.map((icon) => pngSize(resolve(PUBLIC, icon.src)).width));
+    const widest = Math.max(...maskable.map((icon) => pngSize(artworkFor(icon.src)).width));
     expect(widest).toBeGreaterThanOrEqual(512);
   });
 

@@ -6,7 +6,50 @@
  * wrong - an icon that 404s or is not the size it claims means Chrome quietly
  * declines to offer the install, and nothing anywhere says why.
  */
+import { createHash } from "node:crypto";
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import type { ManifestOptions } from "vite-plugin-pwa";
+
+const PUBLIC_DIR = resolve(import.meta.dirname, "public");
+
+/** The icons the manifest names, in the order it names them. */
+export const ICON_FILES = [
+  "icon-192.png",
+  "icon-384.png",
+  "icon-512.png",
+  "icon-maskable-192.png",
+  "icon-maskable-512.png",
+] as const;
+
+/**
+ * A short hash of the icons' own bytes, which goes in their URL.
+ *
+ * The icons keep stable names, so for their whole life a new logo arrived at
+ * a URL that caches already had an answer for. On 2026-11-18 a retired mark
+ * was still on a home screen the day after it was replaced: the container was
+ * serving the right bytes and Cloudflare's edge was serving the old ones,
+ * because it caches by file extension and applies its own four-hour TTL
+ * whatever `cache-control` the app sends. That hostname is a CNAME and its
+ * cache settings are not ours to change.
+ *
+ * So the URL changes instead. New artwork hashes differently, lands at a path
+ * nothing has ever cached, and no intermediary anywhere can serve the old one
+ * - because nothing asks for it again. The stamp is derived rather than typed,
+ * so changing the logo cannot leave it stale: there is no step to forget.
+ *
+ * The manifest itself is served `no-cache` and `.webmanifest` is not an
+ * extension Cloudflare caches, so a phone reads the new URLs promptly.
+ */
+export const ICON_STAMP = createHash("sha256")
+  .update(Buffer.concat(ICON_FILES.map((file) => readFileSync(resolve(PUBLIC_DIR, file)))))
+  .digest("hex")
+  .slice(0, 8);
+
+/** Where a stamped icon is served from. `vite.config.ts` writes them there. */
+export function iconUrl(file: string): string {
+  return `icons/${ICON_STAMP}/${file}`;
+}
 
 export const manifest: Partial<ManifestOptions> = {
   id: "/",
@@ -32,9 +75,9 @@ export const manifest: Partial<ManifestOptions> = {
    * plain icon is expected draws something noticeably small.
    */
   icons: [
-    { src: "icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
-    { src: "icon-384.png", sizes: "384x384", type: "image/png", purpose: "any" },
-    { src: "icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
+    { src: iconUrl("icon-192.png"), sizes: "192x192", type: "image/png", purpose: "any" },
+    { src: iconUrl("icon-384.png"), sizes: "384x384", type: "image/png", purpose: "any" },
+    { src: iconUrl("icon-512.png"), sizes: "512x512", type: "image/png", purpose: "any" },
     /*
      * Android crops these to whatever shape its launcher uses, so the mark
      * sits inside the safe zone on a solid background - a maskable icon with
@@ -43,13 +86,13 @@ export const manifest: Partial<ManifestOptions> = {
      * density instead of downscaling the big one.
      */
     {
-      src: "icon-maskable-192.png",
+      src: iconUrl("icon-maskable-192.png"),
       sizes: "192x192",
       type: "image/png",
       purpose: "maskable",
     },
     {
-      src: "icon-maskable-512.png",
+      src: iconUrl("icon-maskable-512.png"),
       sizes: "512x512",
       type: "image/png",
       purpose: "maskable",
