@@ -136,3 +136,23 @@
   color: var(--hr-text-secondary);
   font-size: 0.875rem;
 }
+
+/* ---- What Headroom expected ----
+ *
+ * A mention, never an obstruction. The figure read off the bank or the
+ * statement is the fact; the expectation is the derivation, and refusing to
+ * record the fact because the derivation disagrees would invert which of the
+ * two is authoritative.
+ *
+ * So it sits in the quiet pair rather than the alert one. The loud colours in
+ * this app mean "something needs doing", and this needs nothing doing.
+ */
+.sheet__gap {
+  margin-top: var(--hr-space-3);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-input);
+  background: var(--hr-green-tint-soft);
+  color: var(--hr-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}

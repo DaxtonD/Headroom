@@ -438,6 +438,31 @@ describe("the balance checklist", () => {
     expect(forVisa.accountName).toBe("Visa");
   });
 
+  it("says what ticking each one would do to that account's balance", async () => {
+    const visa = await addCard("Visa");
+    await setBalance("240000");
+    await setBalance("84200", visa);
+
+    await addCharge("Wireless", "9500", 0, visa);
+    await addPayment("Visa payment", "40000", 0, chequingId, visa);
+
+    const forVisa = await get(`/api/balance/clearable?accountId=${visa}`).then((r) => r.json());
+    const byName = new Map(
+      forVisa.candidates.map((row: { name: string; cents: string; deltaCents: string }) => [
+        row.name,
+        row,
+      ]),
+    );
+
+    /*
+     * The amount and the effect are not the same number, and the payment is
+     * where that bites. It is stored as money leaving chequing, so its amount
+     * is negative - and on the card it REDUCES what is owed.
+     */
+    expect(byName.get("Wireless")).toMatchObject({ cents: "-9500", deltaCents: "-9500" });
+    expect(byName.get("Visa payment")).toMatchObject({ cents: "-40000", deltaCents: "40000" });
+  });
+
   it("refuses to tick a chequing bill off against a card statement", async () => {
     const visa = await addCard("Visa");
     await setBalance("240000");

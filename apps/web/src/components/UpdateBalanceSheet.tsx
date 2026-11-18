@@ -55,6 +55,58 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
    * things that came out of the account without anybody ticking them.
    */
 
+  /*
+   * The difference between what was typed and what Headroom expected.
+   *
+   * Mentioned, never enforced. Refusing to record a real balance because the
+   * app disagrees with it would invert which of the two is authoritative: the
+   * figure read off the bank or the statement is the fact, and the expectation
+   * is the derivation. So this says what it noticed and gets out of the way.
+   *
+   * It is most useful on a card. The household enters the subscriptions but
+   * not every coffee, so the typed figure will usually exceed the expected one
+   * and the gap is unmodelled card spending with a number on it. Nothing is
+   * stored: it is two figures the client already holds, compared on screen.
+   */
+  const expectedCents = clearable.data?.currentCents ?? null;
+
+  /**
+   * The expectation, and how far the typed figure is from it.
+   *
+   * Both out of one computation, so the sentence on screen cannot name one
+   * figure and measure against another.
+   */
+  const gap = ((): { readonly expected: bigint; readonly difference: bigint } | null => {
+    if (expectedCents === null || amountText.trim() === "") return null;
+
+    let typed: bigint;
+    try {
+      typed = parseCents(amountText);
+    } catch {
+      // Mid-typing. There is nothing to say yet, and saying it would flicker.
+      return null;
+    }
+
+    /*
+     * What is ticked below is about to be applied to the expectation too, so
+     * comparing against the bare expectation would report a difference the
+     * save is already explaining.
+     *
+     * Summed as deltas, in the engine's own signed terms, and converted back
+     * once. The face values would not do: a payment toward a card is money
+     * leaving chequing, so its amount is negative while its effect on the
+     * card is to reduce what is owed.
+     */
+    const ticking = (clearable.data?.candidates ?? [])
+      .filter((candidate) => ticked.has(candidate.id))
+      .reduce((total, candidate) => total + candidate.deltaCents, 0n);
+
+    const signedExpected = (isCard ? -expectedCents : expectedCents) + ticking;
+    const expected = isCard ? -signedExpected : signedExpected;
+
+    return { expected, difference: typed - expected };
+  })();
+
   // The amount is the one thing the user came here to type.
   useEffect(() => {
     inputRef.current?.focus();
@@ -234,6 +286,27 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
                 ))}
               </ul>
             </fieldset>
+          ) : null}
+
+          {gap !== null && gap.difference !== 0n ? (
+            <p className="sheet__gap" role="status">
+              {/*
+                Stated as a difference in a direction, not as a signed number.
+                A minus beside a debt is ambiguous about which way it leans,
+                and "more than" needs no working out.
+              */}
+              Headroom expected <span className="hr-amount">{formatCents(gap.expected)}</span>,
+              which is{" "}
+              {formatCents(gap.difference > 0n ? gap.difference : -gap.difference)}{" "}
+              {gap.difference > 0n ? "less" : "more"} than this.{" "}
+              {isCard
+                ? gap.difference > 0n
+                  ? "A charge nobody entered?"
+                  : "Something entered twice, or already paid?"
+                : gap.difference > 0n
+                  ? "A deposit nobody entered?"
+                  : "Something came out that is not on the ledger?"}
+            </p>
           ) : null}
 
           {clearable.data ? (

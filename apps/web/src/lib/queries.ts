@@ -639,6 +639,14 @@ export interface ClearableCandidate {
   readonly id: string;
   readonly name: string;
   readonly cents: Cents;
+  /**
+   * What ticking this would do to the balance of the account being updated.
+   *
+   * A payment toward a card is money leaving chequing, so its amount is
+   * negative, and on the card it reduces what is owed. Only the delta gets
+   * that right; the amount with a sign rule bolted on does not.
+   */
+  readonly deltaCents: Cents;
   readonly date: string | null;
 }
 
@@ -667,6 +675,7 @@ export function useClearableCandidates(enabled: boolean, accountId?: string) {
           id: string;
           name: string;
           cents: string;
+          deltaCents: string;
           date: string | null;
         }[];
       }>(accountId ? `/api/balance/clearable?accountId=${accountId}` : "/api/balance/clearable");
@@ -677,6 +686,7 @@ export function useClearableCandidates(enabled: boolean, accountId?: string) {
         candidates: wire.candidates.map((candidate) => ({
           ...candidate,
           cents: toCents(candidate.cents),
+          deltaCents: toCents(candidate.deltaCents),
         })),
       };
     },

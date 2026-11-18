@@ -180,6 +180,43 @@ describe("typing a balance", () => {
     expect(sheet).toMatch(/setTicked\(new Set\(\)\)/);
   });
 
+  it("says so when the figure typed is not the one Headroom expected", () => {
+    /*
+     * Mentioned, never enforced. The figure read off the bank or the statement
+     * is the fact and the expectation is the derivation; refusing to record
+     * the fact because the derivation disagrees would invert which of the two
+     * is authoritative.
+     *
+     * On a card this gap is the useful number in its own right: the household
+     * enters the subscriptions but not every coffee, so what is typed will
+     * usually exceed what was expected, and the difference is unmodelled card
+     * spending with a figure on it.
+     */
+    expect(sheet).toMatch(/Headroom expected <span className="hr-amount">\{formatCents\(gap\.expected\)/);
+    expect(sheet).toMatch(/A charge nobody entered\?/);
+
+    // A mention, in the quiet pair: the loud colours mean "something needs
+    // doing", and this needs nothing doing.
+    const css = readFileSync(
+      resolve(import.meta.dirname, "..", "src", "components", "UpdateBalanceSheet.css"),
+      "utf8",
+    );
+    expect(css).toMatch(/\.sheet__gap \{[^}]*--hr-green-tint-soft/s);
+    expect(css).not.toMatch(/\.sheet__gap \{[^}]*--hr-warning/s);
+  });
+
+  it("measures the gap from the per-account delta, not the face value", () => {
+    /*
+     * The trap. A payment toward a card is stored as money leaving chequing,
+     * so its amount is negative - and on the card it REDUCES what is owed.
+     * Reasoning from the amount plus a sign rule for cards reports the debt
+     * moving the wrong way.
+     */
+    expect(sheet).toMatch(/total \+ candidate\.deltaCents/);
+    expect(sheet).not.toMatch(/total \+ candidate\.cents/);
+    expect(queries).toMatch(/readonly deltaCents: Cents;/);
+  });
+
   it("asks the checklist per account", () => {
     // A charge on a card has no business on the chequing checklist: ticking
     // it there would retire it against a figure that never contained it.

@@ -46,6 +46,14 @@ pnpm workspaces: `apps/web` (React 19, TypeScript, Vite, vite-plugin-pwa, React 
 - Money is integer cents (`bigint`). No floats anywhere. Display `en-CA` CAD with U+2212 minus.
 - Timezone `America/Regina` (no DST). Server clock is authoritative.
 - Store facts; derive every total with `packages/core`. Never persist running balances, safe-to-spend, left-over or coverage.
+- **Money between accounts**: `accountDelta` in `packages/core/src/timeline.ts` is the only place
+  that decides a sign. A row's source is `paidFromAccountId` (null means chequing) and its
+  destination `transferToAccountId`; a card's typed balance is what it OWES, a positive
+  magnitude, and the engine projects that as a negative balance so one engine runs every
+  account. Do not add a second sign rule anywhere, and do not give the engine a default source -
+  it refuses a row without one for a reason (see `docs/PROGRESS.md`). A charge on a card keeps
+  its budget section; a template that **pays** a card must not have one, or the same money is
+  budgeted twice.
 - Every mutation: field-level PATCH + `If-Match` version + `Idempotency-Key`. Same-field conflict returns 409; different fields auto-merge. Balance snapshots and activity are append-only. Writes are online-only; offline is a read-only cache; no Background Sync. (HANDOFF section 16.)
 - `packages/core` must reproduce every expected value in the seed (golden tests). The section 16 integrity tests must run against a real Postgres (docker service, local install, or the `embedded-postgres` package), not mocks.
 - Config only via environment variables validated at startup. Every new variable goes into `.env.example` with a comment in the same commit.

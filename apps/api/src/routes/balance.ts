@@ -330,6 +330,16 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
         id: row.event.id,
         name: row.event.name,
         cents: row.event.cents,
+        /*
+         * What ticking this would do to THIS account's balance.
+         *
+         * Not the same as the amount, and the difference matters. A payment
+         * toward a card is stored as money leaving chequing, so its amount is
+         * negative - but on the card it REDUCES what is owed. Anything
+         * reasoning from the face value plus a sign rule for cards gets that
+         * one backwards and reports a debt going the wrong way.
+         */
+        deltaCents: row.deltaCents,
         date: row.effectiveDate,
       })),
     });

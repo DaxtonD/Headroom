@@ -26,6 +26,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | M5 PWA + desktop polish | **done** | m5 | Installed and in daily use. Three shortcuts, the app badge, a Content-Security-Policy that hashes the page it protects, and the accessibility pass. Cached Home dropped and the desktop layouts deferred, both on request - see "Scope settled" |
 | M6 Ops | **empty** | | All three items retired or taken over by the owner on 2026-11-14 (see "Scope settled"). Backups are their Duplicati job; `docs/DEPLOY.md` is written; compose is not how this is deployed. GHCR publishes on every green build |
 | Production seeded from the workbooks | done | | Net worth, retirement and the mortgage, at the owner's request on 2026-11-15. Backed up and rehearsed on a restored copy first |
+| The balance follows a tick | done | | Bug 16 revisited 2026-11-17, the owner's own design. Marking a bill paid lowers the balance shown and the row stays on the ledger, marked |
+| Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 
 ## Last session
 
@@ -89,6 +91,143 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## Credit cards, and which account each row leaves (2026-11-18, decided with the owner)
+
+Reported by the owner: one bill is charged automatically to a Visa, along with half a dozen
+monthly and annual subscriptions. Only the one bill was in Headroom, modelled as a chequing
+withdrawal - so marking it paid took the money out of chequing, where it had never been, and
+there was then no way to record the real payment toward the card when it did leave chequing
+days later.
+
+### Three things were wrong with that row, and only one of them was new
+
+Its **date** was the day the card was charged rather than the day chequing moved. Its
+**account** was chequing rather than the card. And the real chequing outflow is the whole
+statement rather than that one bill - everything on the card, including things Headroom will
+never see.
+
+None of it showed while "paid" was a tick that moved no figure (bug 16). All of it showed the
+moment the balance started following a tick, two days ago. **That change did not create this;
+it exposed a modelling error that had been there from the start**, which is the good outcome.
+
+### What the owner decided
+
+Asked whether the card balance mattered or only the chequing effect, they asked for both to be
+predicted. That turned it from "credit card support" into something simpler to describe: **every
+row on the ledger knows which account its money leaves, and every account gets a projection.**
+They also asked for savings to be a source, since an expense or a card payment can come straight
+out of it - and that is what forces the general version rather than a special case for cards.
+
+**The one real decision was what this does to safe to spend.** Charges correctly stop draining
+the chequing forecast, so a card balance can now grow while safe to spend looks healthy. Two
+options were put to them:
+
+- **(a)** safe to spend stays what it is - the low point of chequing, explainable in a sentence -
+  with a warning about unpaid card debt beside it;
+- **(b)** safe to spend itself subtracts card debt nothing is scheduled to pay, so the number
+  cannot flatter, at the cost of an explain panel nobody can follow.
+
+They chose **(a), and asked for the warning to be impossible to miss**. So the warning is
+load-bearing: it is the only thing standing between a growing debt and a home screen that looks
+fine. It is an alert, inside the hero, above the scroll, and it says both why safe to spend does
+not know and what to do about it. There is a web test asserting it renders before the pay-period
+list, because a warning that quietly stops being drawn fails silently.
+
+### The model
+
+Two columns, both nullable, both meaning what every row has always meant when absent:
+
+- `paidFromAccountId` - which account the money leaves. Null is chequing.
+- `transferToAccountId` - which account it arrives in, for a payment toward a card or money into
+  savings. On `Template` this column **already existed** and was read by nothing; it was
+  anticipated when the schema was designed and never wired up. `Occurrence` needed its own,
+  because a one-off payment has no template to inherit from.
+
+`AccountKind` gained `credit_card`. A card is an ordinary `Account` row with ordinary
+append-only `BalanceSnapshot`s, so it inherits the name, the version, the soft delete and the
+one endpoint for typing a balance.
+
+**`accountDelta` in the engine is now the only place in Headroom that decides the sign of
+anything between accounts.** Ordinary double entry: the amount leaves the source and arrives in
+the destination. Each timeline row carries the delta it had on the account being projected,
+computed once, so the running balance, the window totals, the coverage check and the explain
+panels all read the same decision instead of re-deriving it - which is how two of them disagreed
+before.
+
+There is deliberately **no default source** in the engine. "Absent means whichever account is
+being projected" reads every chequing bill as money leaving whichever card is in hand, and is
+wrong by the entire chequing ledger, so naming an account to project makes a row without a
+source an error rather than a guess. The API resolves null to the real chequing id before the
+engine sees it.
+
+### Why this is the savings pattern, not a new one
+
+`savings.ts` already says it: the balance is a fact typed off the bank, money moving there is an
+ordinary chequing occurrence, an earmark is a label that moves nothing, and the typed figure and
+the derived one are allowed to disagree because **the disagreement is the useful number**. A
+card is the same four things with the sign inverted. Nothing here is a second engine: the same
+events are run once per account, and a card is an account whose balance happens to be negative,
+so its deepest debt is `lowest` and what it owes at the horizon is `leftThisCycleCents`, both
+for free.
+
+### What else had to follow
+
+- **The budget counts the charges; the ledger counts the payment.** A charge keeps its section -
+  it is a real monthly cost - and a template that pays a **credit card** is excluded from the
+  budget, or the same money is budgeted twice. Deliberately narrow: a transfer into savings is
+  still a budget line, because the household treats what it sets aside as a real commitment and
+  that is their call rather than a consequence of this.
+- **The balance checklist is per account**, and refuses a chequing bill ticked off against a card
+  statement - that would retire the bill on the strength of a figure that never contained it.
+  Savings has no such list at all.
+- **Clearing candidates carry a per-account delta**, not just their amount. The two are not the
+  same number and the payment is where that bites: it is stored as money leaving chequing, so
+  its amount is negative, while its effect on the card is to reduce what is owed.
+- **Routing is validated.** An account from another household is refused (the columns are plain
+  foreign keys and the database would have accepted one), as is money moving from an account
+  into itself, which nets to zero on every figure - a payment that silently does nothing.
+- **Generation carries a template's card onto the rows it makes**, and moving a bill onto a card
+  moves its untouched future rows with it. A row somebody has made their own stays where they
+  put it, so `paidFromAccountId` and `transferToAccountId` joined `OWN_DETAIL_FIELDS`.
+- **A window reports what went on the cards** (`elsewhereCents`), counted in none of its other
+  figures. A fortnight whose outgoings are mostly on a card would otherwise report nothing going
+  out with charges on screen, which reads as broken rather than as accurate.
+- **With no snapshot at all, an account's settled rows count from when it was created.** Without
+  that, ticking a charge on a freshly added card took it out of the projection without ever
+  putting it into the balance, and the debt went *down* as charges landed.
+
+### The gap between the statement and the expectation
+
+Typing a balance now says when the figure differs from what Headroom expected, and names the
+likely reason. **Mentioned, never enforced**, which is the recommendation already written in
+`docs/IDEAS.md` idea 1: the figure read off the bank or the statement is the fact and the
+expectation is the derivation, so refusing to record the fact would invert which of the two is
+authoritative. It sits in the quiet colour pair, not the alert one.
+
+This is the most valuable thing here and it was the owner's own observation. They will enter the
+subscriptions but not every coffee, so the typed figure will usually exceed the expected one, and
+the difference is unmodelled card spending with a number on it. **The trend half of idea 1 - keeping
+that difference and charting it - is still not built**, and still needs the questions in IDEAS
+answered first.
+
+### What was deliberately left alone
+
+**Net worth.** Card balances are not folded in as liabilities, even though `Asset` already holds
+liabilities and it would be a few lines. Any liability the household has already typed there by
+hand for a card would then be counted twice, and quietly changing a net-worth total under them is
+not a decision to make on their behalf. It is question 23 below.
+
+### Verified
+
+367 engine, 295 web and 450 API tests, 1112 in all. 24 of the API tests are new and run against
+real Postgres, including the household's own scenario end to end: a charge marked paid raises what
+the card owes and leaves chequing exactly where it was; a payment takes it out of chequing and off
+the card from the one tick; and the same thing paid out of savings leaves chequing alone. The new
+file also passes under `PIN_DATE`, so none of it is shaped around today's date.
+
+The 342 engine tests that existed before the refactor pass untouched, which is the claim that no
+single-account figure moved.
 
 ## The expense model (added before M5, at the owner's request)
 
@@ -2727,6 +2866,19 @@ CLAUDE.md describes an autonomous weekend build. That changed: the owner is avai
 
 ## Decisions made without asking
 
+- 2026-11-18: **A card balance is stored as what it OWES, a positive magnitude**, like every
+  other amount in this database - the kind says whether a figure is owned or owed, which is the
+  rule `Asset` already uses for a liability. The engine projects it as a negative balance,
+  because that is what lets one engine run every account with no special case for cards inside
+  it, and the flip happens at one edge in `timelineService.ts` for display.
+- 2026-11-18: **An unverified charge counts toward its own card's estimate count, not
+  chequing's.** Each account answers for its own, so nothing goes uncounted by every account.
+  A card's count includes the payment toward it, whose amount is equally unconfirmed; no screen
+  shows a per-card count yet, so this is only visible through the API.
+- 2026-11-18: **The difference between a typed balance and the expected one is mentioned and
+  never enforced**, which is what `docs/IDEAS.md` idea 1 recommends. Refusing to record a real
+  balance because the app disagrees would invert which of the two is authoritative. Nothing is
+  stored: it is two figures the client already holds, compared on screen.
 - 2026-11-07 (planning): Name is Headroom. Stack per HANDOFF section 10. Defaults for open questions per HANDOFF section 14.
 - 2026-11-08: **Ledger and year view are two separate screens**, not one long scroll. Asked twice
   and not answered, so taken as the default per CLAUDE.md. A 14-month ledger would be mostly
@@ -2821,7 +2973,7 @@ From HANDOFF section 14. Each default is built and editable in the app where it 
 3. **Retirement growth** is a flat percentage applied once to the total, not compounded yearly. *Built:* the household's formula exactly; growth percent and method are editable settings, with a "compound yearly" option available and off.
 4. **Who receives each bill?** *Built:* no owner assigned. Each bill shows "Set who gets this bill" and either user can set it. Mockup owner placeholders deliberately not used as data.
 5. **Cushion** to leave after an automatic withdrawal for it to count as covered. *Built:* zero, editable in settings.
-6. **Visa-paid items** (a TV and internet bill, and subscriptions). *Built:* v1 tracks chequing only; both templates stay inactive and the Visa balance is not modelled.
+6. ~~**Visa-paid items** (a TV and internet bill, and subscriptions). *Built:* v1 tracks chequing only; both templates stay inactive and the Visa balance is not modelled.~~ **Answered 2026-11-18, and built.** Cards are accounts, charges are assigned to them, and a payment toward one moves both balances. The owner will enter the subscriptions themselves. See "Credit cards, and which account each row leaves".
 7. **Horizon** for "left this cycle". *Built:* through the day before the 4th upcoming paycheque, editable.
 8. **Automatic withdrawals that land on a weekend.** *Built:* as scheduled, matching the sheet. Household setting "Weekend withdrawals: as scheduled / Friday before / next business day" with an engine test for each option.
 9. **Savings transfer**: a per-pay-period amount in the template versus a single larger transfer in November. *Built:* recurring flexible transfer at the template amount per pay period; the November occurrence keeps its own amount.
@@ -2870,6 +3022,23 @@ is possible at all, so it is the cheapest to ask.
     it yet. Longer makes the top of the current window busier; shorter risks it going while it
     is still being looked for.
 
+22. **Is the tail on the card warning right?** It fires when a card owes anything, now or by
+    the horizon, with no payment scheduled inside the horizon. *Built:* exactly that, derived in
+    `timelineService.ts`. It is deliberately a low bar, because the alternative - a threshold -
+    is a number nobody has a feel for yet. If it turns out to shout during the normal week
+    between a statement arriving and the payment being entered, the fix is to let a scheduled
+    payment of any size silence it, or to give it a grace period.
+23. **Should card balances appear on Net worth?** *Built:* no. They are not folded in as
+    liabilities, because any card liability already typed there by hand would then be counted
+    twice, and changing a net-worth total without asking is not a decision to make on the
+    household's behalf. Say the word and the hand-typed rows can be replaced by the real
+    balances, which would then follow every charge and payment on their own.
+24. **Should a transfer into savings credit the savings forecast?** *Built:* yes, as a
+    consequence of projecting every account - savings now has an expected figure it never had
+    before, beside the typed one. This is a change to a screen that already worked, so it is
+    worth a look: the two are allowed to disagree, and the disagreement is reported rather than
+    hidden, exactly as the earmarks already are.
+
 ## Blocked / needs the owner
 
 Rewritten 2026-11-15. Every item this section used to hold had been overtaken by events: it
@@ -2880,8 +3049,10 @@ the opposite of what it is for, so what is actually outstanding:
 
 - **Every `git push` and tag push** still waits on the owner's explicit OK, by standing
   instruction. Commits and tags are made locally as work finishes; pushing is a separate word.
-- **`m5` is not tagged.** M5 is complete and its work is pushed; `m0`-`m4` exist locally and on
-  the remote. Creating and pushing `m5` needs the usual OK.
+- ~~**`m5` is not tagged.**~~ **Wrong, and corrected on 2026-11-18.** `git ls-remote --tags
+  origin` shows `m0` through `m5` all on the remote, `m5` at 4f007a7. The same stale claim was
+  in `CLAUDE.md` and was read there as meaning the M5 *work* had never been pushed, which
+  caused real confusion. Check the remote before believing a line like this one.
 - **The twelve questions below are still unanswered.** Each has a defensible default built and
   editable in the app, so none of them blocks anything - but any one of them could be quietly
   wrong in the budget actually in use, which is a different kind of risk from a broken build.
@@ -2907,7 +3078,7 @@ pnpm -F @headroom/api db:generate
 pnpm -F @headroom/core build
 
 node scripts/testdb.mjs up      # throwaway Postgres for tests
-pnpm test                       # 858 tests
+pnpm test                       # 1112 tests: 367 engine, 295 web, 450 API
 pnpm lint && pnpm typecheck
 pnpm build
 node scripts/testdb.mjs down
