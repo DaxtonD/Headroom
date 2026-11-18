@@ -42,7 +42,11 @@ function isAutoWithdrawal(event: TimelineInput): boolean {
   // Coverage is about money leaving on a date the bank has already chosen.
   // Paycheques and automatic deposits are dated too, but they bring money in,
   // so there is nothing to cover.
-  return event.placement === "auto" && event.cents < 0n;
+  //
+  // A settled withdrawal has already gone. Asking whether the account can
+  // cover it is asking about the past, and answering "no" would raise a
+  // shortfall over money that left days ago without incident.
+  return event.placement === "auto" && event.cents < 0n && event.settled !== true;
 }
 
 /**
@@ -176,7 +180,13 @@ export function computeTimeline(options: TimelineOptions): TimelineResult {
   let running = options.startBalanceCents;
 
   for (const event of ordered) {
-    running += event.cents;
+    // A settled row is history: the balance this timeline opens with has
+    // already been past it. Adding it again would take the same bill out
+    // twice. The row is still pushed, so it is still shown and still ordered,
+    // and `runningCents` carries the balance through unchanged - which is
+    // what makes a column of settled rows read as "nothing moved here"
+    // rather than as a gap.
+    if (event.settled !== true) running += event.cents;
     rows.push({
       event,
       runningCents: running,
@@ -225,8 +235,10 @@ export function computeTimeline(options: TimelineOptions): TimelineResult {
   };
 
   // An amount nobody has confirmed yet is still a guess, and the UI says so.
+  // A settled bill is not a guess about the future whatever its amount says:
+  // the money is gone and the figure at the top already reflects it.
   const estimatesCount = ordered.filter(
-    (event) => event.kind === "bill" && event.verified !== true,
+    (event) => event.kind === "bill" && event.verified !== true && event.settled !== true,
   ).length;
 
   const lastRow = rows.at(-1);

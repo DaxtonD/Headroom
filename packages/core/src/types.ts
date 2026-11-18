@@ -46,6 +46,21 @@ export interface TimelineInput {
   readonly ownerId?: string | null | undefined;
   /** Which pay schedule produced this cheque, for pay-period projection. */
   readonly payScheduleId?: string | null | undefined;
+  /**
+   * The money has already moved, and the balance this timeline starts from
+   * already accounts for it.
+   *
+   * A settled row is still ordered and still shown - that is the whole point,
+   * because a bill that vanishes the moment it is dealt with is a bill nobody
+   * can check. It simply counts in nothing: not the running balance, not a
+   * window's totals, not coverage and not the estimates count. The running
+   * balance carries straight past it.
+   *
+   * Set from the earliest of `paidAt` and `clearedAt`. Both say the same
+   * thing - this has left the account - one from the ledger and one from the
+   * balance checklist.
+   */
+  readonly settled?: boolean | undefined;
 }
 
 /** One ordered row of the timeline, with the balance after it. */

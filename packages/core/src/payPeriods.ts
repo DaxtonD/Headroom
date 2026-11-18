@@ -221,6 +221,11 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
     }
 
     for (const row of rows) {
+      // A settled row is already inside the opening balance, which for the
+      // current window is `startBalanceCents` above. Counting it again would
+      // show a window taking out money that left before the window began.
+      if (row.event.settled === true) continue;
+
       const cents = row.event.cents;
       if (cents > 0n) {
         inCents += cents;
@@ -338,6 +343,19 @@ function lowestInWindow(rows: readonly TimelineRow[]): PayPeriodLowest | null {
   let lowest: PayPeriodLowest | null = null;
 
   for (const row of rows) {
+    /*
+     * A settled row cannot be the low point, because it moves nothing: its
+     * running balance is whatever the row before it left. Without this the
+     * first row of a window would take the attribution simply for being
+     * first, and the screen would name a bill that was paid days ago as the
+     * reason the balance is where it is.
+     *
+     * The figure is unaffected either way - a settled row only ever ties the
+     * balance before it, never undercuts it. A window of nothing but settled
+     * rows has no low point of its own, which is the honest answer.
+     */
+    if (row.event.settled === true) continue;
+
     if (lowest === null || row.runningCents < lowest.cents) {
       lowest = { cents: row.runningCents, date: row.effectiveDate, afterEventId: row.event.id };
     }

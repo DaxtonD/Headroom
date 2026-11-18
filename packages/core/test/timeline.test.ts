@@ -399,6 +399,129 @@ describe("pay period windows", () => {
   });
 });
 
+describe("a settled row", () => {
+  /*
+   * Settled means the money has already moved and the opening balance knows
+   * it. The row is kept on the ledger anyway, because a bill that vanishes
+   * the moment it is dealt with is a bill nobody can check - which is the
+   * complaint this exists to answer.
+   *
+   * Every assertion below is some form of "shown, but counted in nothing".
+   */
+  function settledBill(id: string, date: string, cents: bigint): TimelineInput {
+    return { ...autoBill(id, date, cents), settled: true };
+  }
+
+  it("is shown, and the balance carries straight past it", () => {
+    const result = computeTimeline({
+      events: [
+        settledBill("power", "2026-11-14", -10_000n),
+        autoBill("water", "2026-11-20", -4_000n),
+      ],
+      startBalanceCents: 40_000n,
+    });
+
+    // Still there. This is the whole point.
+    expect(result.rows.map((row) => row.event.id)).toEqual(["power", "water"]);
+
+    // The settled one leaves the balance where it found it...
+    expect(result.rows[0]?.runningCents).toBe(40_000n);
+    // ...and the next row carries on from there, taken out once only.
+    expect(result.rows[1]?.runningCents).toBe(36_000n);
+    expect(result.leftThisCycleCents).toBe(36_000n);
+  });
+
+  it("does not drag the lowest point down a second time", () => {
+    const settled = computeTimeline({
+      events: [settledBill("power", "2026-11-14", -10_000n)],
+      startBalanceCents: 40_000n,
+    });
+
+    expect(settled.lowest.cents).toBe(40_000n);
+    // Nothing moved, so nothing is to blame for the low point.
+    expect(settled.lowest.afterEventId).toBeNull();
+    expect(settled.safeToSpendNowCents).toBe(40_000n);
+
+    // The same row unsettled is still coming, and still lowers everything.
+    const unsettled = computeTimeline({
+      events: [autoBill("power", "2026-11-14", -10_000n)],
+      startBalanceCents: 40_000n,
+    });
+
+    expect(unsettled.lowest.cents).toBe(30_000n);
+    expect(unsettled.lowest.afterEventId).toBe("power");
+  });
+
+  it("is not an estimate, whatever its amount says", () => {
+    // Unverified: the figure was never confirmed against a real bill. But the
+    // money has gone, so there is nothing left to find out.
+    const result = computeTimeline({
+      events: [settledBill("power", "2026-11-14", -10_000n)],
+      startBalanceCents: 40_000n,
+    });
+
+    expect(result.estimatesCount).toBe(0);
+  });
+
+  it("needs no coverage, so it cannot raise a shortfall", () => {
+    const result = computeTimeline({
+      events: [settledBill("power", "2026-11-14", -90_000n)],
+      startBalanceCents: 1_000n,
+      cushionCents: 5_000n,
+    });
+
+    // An auto withdrawal far larger than the account holds - but it left days
+    // ago without incident. Asking whether it is covered asks about the past.
+    expect(result.rows[0]?.requiresCoverage).toBe(false);
+    expect(result.coverage.autoWithdrawalCount).toBe(0);
+    expect(result.coverage.allCovered).toBe(true);
+    expect(result.coverage.firstShortfall).toBeNull();
+  });
+
+  it("adds nothing to a window's totals", () => {
+    const timeline = computeTimeline({
+      events: [
+        settledBill("power", "2026-11-20", -10_000n),
+        autoBill("water", "2026-11-21", -4_000n),
+      ],
+      startBalanceCents: 40_000n,
+    });
+
+    const periods = computePayPeriods({
+      timeline,
+      paySchedules: [JORDAN, ALEX],
+      today: "2026-11-19",
+      periodCount: 1,
+      anchorScheduleId: "jordan",
+    });
+
+    // Only the water bill is still going out of this window.
+    expect(periods[0]?.autoCents).toBe(4_000n);
+  });
+
+  it("is never named as the low point of a window", () => {
+    const timeline = computeTimeline({
+      events: [settledBill("power", "2026-11-20", -10_000n)],
+      startBalanceCents: 40_000n,
+    });
+
+    const periods = computePayPeriods({
+      timeline,
+      paySchedules: [JORDAN, ALEX],
+      today: "2026-11-19",
+      periodCount: 1,
+      anchorScheduleId: "jordan",
+    });
+
+    /*
+     * Without the guard the only row in the window takes the attribution by
+     * being first, and the screen says the balance is where it is because of
+     * a bill that was paid before the window opened.
+     */
+    expect(periods[0]?.lowest).toBeNull();
+  });
+});
+
 describe("pay periods", () => {
   it("projects a cheque that is due in the window but not placed yet", () => {
     const timeline = computeTimeline({
