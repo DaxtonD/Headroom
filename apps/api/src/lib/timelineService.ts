@@ -8,10 +8,12 @@
  * and still treat the server's answer as authoritative.
  */
 import {
+  accountDelta,
   computeHorizonEnd,
   computePayPeriods,
   computeTimeline,
   effectiveBalance,
+  type AccountMove,
   type PayPeriod,
   type PaySchedule,
   type PlainDate,
@@ -86,6 +88,51 @@ export function settledMoment(row: {
   return paidAt ?? clearedAt;
 }
 
+type AccountKind = "chequing" | "savings" | "credit_card";
+
+/**
+ * A typed-in figure, as the engine projects it.
+ *
+ * Every amount in this database is a positive magnitude and its meaning comes
+ * from what holds it - the same rule `Asset` uses for a liability. So a card
+ * balance is stored as the debt: "$842.00 owed" is 84_200, not -84_200.
+ *
+ * The engine has no notion of a liability. It projects a balance, and owing
+ * money is a negative one, which is what lets one engine run every account
+ * with no special case for cards anywhere inside it. The flip happens here,
+ * at the edge, and nowhere else.
+ */
+function toSignedBalance(kind: AccountKind, typedCents: bigint): bigint {
+  return kind === "credit_card" ? -typedCents : typedCents;
+}
+
+/** And back again, for a person to read. */
+function toTypedFigure(kind: AccountKind, signedCents: bigint): bigint {
+  return kind === "credit_card" ? -signedCents : signedCents;
+}
+
+/**
+ * A stored occurrence as a move between accounts.
+ *
+ * A null source is chequing, which is what every row meant before there was a
+ * second account for money to leave. Resolving it to the real account id here
+ * means the engine never has to guess, and refuses a row that failed to say.
+ */
+export function accountMoveOf(
+  row: {
+    readonly cents: bigint;
+    readonly paidFromAccountId: string | null;
+    readonly transferToAccountId: string | null;
+  },
+  chequingAccountId: string | null,
+): AccountMove {
+  return {
+    cents: row.cents,
+    fromAccountId: row.paidFromAccountId ?? chequingAccountId,
+    toAccountId: row.transferToAccountId,
+  };
+}
+
 export function todayInZone(timezone: string, now: Date = new Date()): PlainDate {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: timezone,
@@ -93,6 +140,44 @@ export function todayInZone(timezone: string, now: Date = new Date()): PlainDate
     month: "2-digit",
     day: "2-digit",
   }).format(now);
+}
+
+/**
+ * One account's position: what it holds now, and where it is heading.
+ *
+ * Every figure is in the terms a person reads - a card's are what it OWES -
+ * and every one of them is derived on this request from the same events the
+ * ledger is built from. None of it is stored (section 16.1 rule 5).
+ */
+export interface AccountOutlook {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: AccountKind;
+  /** The last figure somebody typed in, exactly as they typed it. */
+  readonly snapshotCents: bigint;
+  readonly asOf: Date | null;
+  readonly enteredBy: { readonly id: string; readonly name: string; readonly initial: string } | null;
+  /** That figure plus everything settled after it: what it is at now. */
+  readonly effectiveCents: bigint;
+  /** Where it lands at the end of the horizon. */
+  readonly horizonCents: bigint;
+  /**
+   * The furthest it gets in the wrong direction anywhere in the horizon: the
+   * lowest a chequing or savings balance drops, the most a card ever owes.
+   */
+  readonly extremeCents: bigint;
+  /** Transfers into this account that are scheduled and have not happened. */
+  readonly scheduledInCents: bigint;
+  /**
+   * A card that owes money with nothing scheduled to pay it.
+   *
+   * This is the one thing that got riskier when charges correctly stopped
+   * draining the chequing forecast: the debt can now grow while safe-to-spend
+   * looks healthy. The household chose to keep safe-to-spend a pure chequing
+   * figure - it is the one number whose working can be shown in a sentence -
+   * and to make this impossible to miss instead. So it has to be right.
+   */
+  readonly needsPayment: boolean;
 }
 
 export interface TimelineContext {
@@ -111,6 +196,17 @@ export interface TimelineContext {
     readonly effectiveCents: bigint;
   };
   readonly accountId: string | null;
+  /** Every account the household has, chequing included, in creation order. */
+  readonly accounts: readonly AccountOutlook[];
+  /**
+   * Each account's own projection of the same events, by account id.
+   *
+   * Published because "which rows moved this account" is a question two
+   * screens ask - the balance checklist and the card strip - and deriving it
+   * twice is how two answers start disagreeing. A row's `deltaCents` here is
+   * already the whole test: nothing else needs to know the sign rules.
+   */
+  readonly projections: ReadonlyMap<string, TimelineResult>;
 }
 
 /**
@@ -136,21 +232,24 @@ export async function loadTimelineContext(
 
   const today = todayInZone(household.timezone, now);
 
-  const [schedules, account] = await Promise.all([
+  const [schedules, accountRows] = await Promise.all([
     prisma.paySchedule.findMany({
       where: { deletedAt: null, user: { householdId, deletedAt: null } },
       select: { id: true, userId: true, anchorDate: true, defaultCents: true },
       orderBy: { anchorDate: "asc" },
     }),
-    // Chequing by KIND, not by creation order. The savings account is an
-    // Account row too, and "whichever row came first" would have let a savings
-    // balance be read as the money available to spend.
-    prisma.account.findFirst({
-      where: { householdId, deletedAt: null, kind: "chequing" },
-      select: { id: true },
+    prisma.account.findMany({
+      where: { householdId, deletedAt: null },
+      select: { id: true, name: true, kind: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     }),
   ]);
+
+  // Chequing by KIND, not by creation order. Savings and the cards are Account
+  // rows too, and "whichever row came first" would have let one of their
+  // balances be read as the money available to spend.
+  const account = accountRows.find((row) => row.kind === "chequing") ?? null;
+  const chequingAccountId = account?.id ?? null;
 
   const paySchedules: PaySchedule[] = schedules.map((schedule) => ({
     id: schedule.id,
@@ -169,17 +268,44 @@ export async function loadTimelineContext(
         })
       : addDaysToPlainDate(today, 14);
 
-  const snapshot = account
-    ? await prisma.balanceSnapshot.findFirst({
-        where: { accountId: account.id },
-        orderBy: [{ asOf: "desc" }, { createdAt: "desc" }],
-        select: {
-          cents: true,
-          asOf: true,
-          enteredBy: { select: { id: true, name: true, initial: true } },
-        },
-      })
-    : null;
+  /*
+   * The latest typed figure for each account, in parallel.
+   *
+   * One query per account rather than one clever one: "the newest row per
+   * group" is awkward in Prisma, the count is the number of accounts a
+   * household has, and the index on (accountId, asOf) makes each one a seek.
+   */
+  const snapshotEntries = await Promise.all(
+    accountRows.map(
+      async (row) =>
+        [
+          row.id,
+          await prisma.balanceSnapshot.findFirst({
+            where: { accountId: row.id },
+            orderBy: [{ asOf: "desc" }, { createdAt: "desc" }],
+            select: {
+              cents: true,
+              asOf: true,
+              enteredBy: { select: { id: true, name: true, initial: true } },
+            },
+          }),
+        ] as const,
+    ),
+  );
+  const snapshots = new Map(snapshotEntries);
+  const snapshot = account ? (snapshots.get(account.id) ?? null) : null;
+
+  /**
+   * The moment after which a settled row still counts toward an account.
+   *
+   * The account's own snapshot, because a figure read off the bank after the
+   * money left already contains it. With no snapshot at all, the account's
+   * creation: otherwise ticking a charge on a freshly added card would take it
+   * out of the projection without ever having put it into the balance, and the
+   * debt would go DOWN as charges landed.
+   */
+  const settledCutoffFor = (row: { readonly id: string; readonly createdAt: Date }): Date =>
+    snapshots.get(row.id)?.asOf ?? row.createdAt;
 
   /*
    * Anything settled AFTER the snapshot has already hit the account, so it is
@@ -202,27 +328,64 @@ export async function loadTimelineContext(
    * enough - because Prisma cannot express "the earlier of these two columns"
    * in a where clause. `settledMoment` then decides exactly, in one place.
    */
-  const settledCandidates = snapshot
+  const earliestCutoff = accountRows.reduce<Date | null>((earliest, row) => {
+    const cutoff = settledCutoffFor(row);
+    return earliest === null || cutoff < earliest ? cutoff : earliest;
+  }, null);
+
+  const settledCandidates = earliestCutoff
     ? await prisma.occurrence.findMany({
         where: {
           householdId,
           deletedAt: null,
-          OR: [{ paidAt: { gt: snapshot.asOf } }, { clearedAt: { gt: snapshot.asOf } }],
+          OR: [{ paidAt: { gt: earliestCutoff } }, { clearedAt: { gt: earliestCutoff } }],
         },
-        select: { cents: true, paidAt: true, clearedAt: true },
+        select: {
+          cents: true,
+          paidAt: true,
+          clearedAt: true,
+          paidFromAccountId: true,
+          transferToAccountId: true,
+        },
       })
     : [];
 
-  const settledSince = settledCandidates.filter((occurrence) => {
-    const moment = settledMoment(occurrence);
-    return moment !== null && moment > (snapshot as { asOf: Date }).asOf;
-  });
+  /**
+   * What one account is at right now: the figure typed in, plus everything
+   * that has settled since, in that account's own terms.
+   *
+   * This is what makes a balance follow a tick. Pay a bill, mark it paid, and
+   * the figure at the top goes down without anybody reading the bank again -
+   * and marking a charge paid raises what the card owes, while chequing does
+   * not move, because none of its money did.
+   *
+   * The strict `>` is the whole safety argument and needs no logic of its own.
+   * A tick older than the newest typed figure stops being applied, because a
+   * balance read off the bank after the money left already contains it. So the
+   * moment somebody types what the bank says, every earlier tick drops out and
+   * the typed figure stands alone. Ties go to the snapshot, the safe direction.
+   */
+  const effectiveSignedFor = (row: {
+    readonly id: string;
+    readonly kind: AccountKind;
+    readonly createdAt: Date;
+  }): bigint => {
+    const cutoff = settledCutoffFor(row);
+    const deltas = settledCandidates
+      .filter((occurrence) => {
+        const moment = settledMoment(occurrence);
+        return moment !== null && moment > cutoff;
+      })
+      .map((occurrence) => accountDelta(accountMoveOf(occurrence, chequingAccountId), row.id));
+
+    return effectiveBalance(
+      toSignedBalance(row.kind, snapshots.get(row.id)?.cents ?? 0n),
+      deltas,
+    );
+  };
 
   const snapshotCents = snapshot?.cents ?? 0n;
-  const effectiveCents = effectiveBalance(
-    snapshotCents,
-    settledSince.map((occurrence) => occurrence.cents),
-  );
+  const effectiveCents = account ? effectiveSignedFor(account) : snapshotCents;
 
   /*
    * Cheques that have arrived, and paydays whose pay has been turned off.
@@ -310,6 +473,8 @@ export async function loadTimelineContext(
       clearedAt: true,
       templateId: true,
       ownerUserId: true,
+      paidFromAccountId: true,
+      transferToAccountId: true,
       version: true,
     },
     orderBy: [{ date: "asc" }, { sortIndex: "asc" }],
@@ -340,12 +505,73 @@ export async function loadTimelineContext(
       settled: settledMoment(row) !== null,
       ownerId: row.ownerUserId,
       payScheduleId: null,
+      // Resolved here, so the engine is never asked to guess which account a
+      // row left. A null source has always meant chequing.
+      fromAccountId: row.paidFromAccountId ?? chequingAccountId,
+      toAccountId: row.transferToAccountId,
     }));
 
   const timeline = computeTimeline({
     events,
     startBalanceCents: effectiveCents,
     cushionCents: household.cushionCents,
+    accountId: chequingAccountId,
+  });
+
+  /*
+   * The same events, once per account.
+   *
+   * Not a second engine and not a simpler one: a card is an account whose
+   * balance happens to be negative, so `lowest` is the most it ever owes and
+   * `leftThisCycleCents` is what it owes at the horizon, both for free. The
+   * cushion and the coverage check are chequing's business and are left out.
+   *
+   * Projecting another account needs every row to name its source, which is
+   * only true once there is a chequing account to resolve a null one to.
+   */
+  const projections = new Map<string, TimelineResult>();
+
+  const accounts: AccountOutlook[] = accountRows.map((row) => {
+    const kind = row.kind as AccountKind;
+    const effectiveSigned = effectiveSignedFor({ ...row, kind });
+    const own =
+      chequingAccountId === null
+        ? null
+        : computeTimeline({ events, startBalanceCents: effectiveSigned, accountId: row.id });
+    if (own) projections.set(row.id, own);
+
+    const scheduledInCents = (own?.rows ?? [])
+      .filter((entry) => entry.event.toAccountId === row.id && entry.deltaCents > 0n)
+      .reduce((total, entry) => total + entry.deltaCents, 0n);
+
+    const effectiveTyped = toTypedFigure(kind, effectiveSigned);
+    const horizonTyped = toTypedFigure(
+      kind,
+      own ? own.leftThisCycleCents : effectiveSigned,
+    );
+
+    return {
+      id: row.id,
+      name: row.name,
+      kind,
+      snapshotCents: snapshots.get(row.id)?.cents ?? 0n,
+      asOf: snapshots.get(row.id)?.asOf ?? null,
+      enteredBy: snapshots.get(row.id)?.enteredBy ?? null,
+      effectiveCents: effectiveTyped,
+      horizonCents: horizonTyped,
+      extremeCents: toTypedFigure(kind, own ? own.lowest.cents : effectiveSigned),
+      scheduledInCents,
+      /*
+       * A card that owes money now, or will by the horizon, and has nothing
+       * coming to pay it. Both halves matter: a card whose balance nobody has
+       * typed yet still has charges heading for it, and a card with a balance
+       * and no charges still has to be paid.
+       */
+      needsPayment:
+        kind === "credit_card" &&
+        scheduledInCents === 0n &&
+        (effectiveTyped > 0n || horizonTyped > 0n),
+    } satisfies AccountOutlook;
   });
 
   const payPeriods =
@@ -376,7 +602,9 @@ export async function loadTimelineContext(
     timeline,
     payPeriods,
     paySchedules,
-    accountId: account?.id ?? null,
+    accountId: chequingAccountId,
+    accounts,
+    projections,
     balance: {
       cents: snapshotCents,
       asOf: snapshot?.asOf ?? null,
@@ -396,6 +624,9 @@ function addDaysToPlainDate(value: PlainDate, days: number): PlainDate {
 export interface OccurrenceDecoration {
   readonly version: number;
   readonly templateId: string | null;
+  /** Null means chequing, which is what the UI shows when nothing is set. */
+  readonly paidFromAccountId: string | null;
+  readonly transferToAccountId: string | null;
   readonly owner: { readonly id: string; readonly name: string; readonly initial: string } | null;
   readonly verifiedBy: { readonly id: string; readonly name: string; readonly initial: string } | null;
   readonly verifiedAt: Date | null;
@@ -423,6 +654,8 @@ export async function loadOccurrenceDecorations(
       templateId: true,
       verifiedAt: true,
       paidAt: true,
+      paidFromAccountId: true,
+      transferToAccountId: true,
       owner: { select: { id: true, name: true, initial: true } },
       verifiedBy: { select: { id: true, name: true, initial: true } },
       paidBy: { select: { id: true, name: true, initial: true } },
@@ -435,6 +668,8 @@ export async function loadOccurrenceDecorations(
       {
         version: row.version,
         templateId: row.templateId,
+        paidFromAccountId: row.paidFromAccountId,
+        transferToAccountId: row.transferToAccountId,
         owner: row.owner,
         verifiedBy: row.verifiedBy,
         verifiedAt: row.verifiedAt,

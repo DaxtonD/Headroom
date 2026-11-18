@@ -122,10 +122,26 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
           scheduleJson: true,
           monthlyBudgetOverrideCents: true,
           version: true,
+          // Only to find out whether this is a payment toward a card.
+          transferToAccount: { select: { kind: true } },
         },
         orderBy: { name: "asc" },
       }),
     ]);
+
+    /*
+     * Paying a credit card is not a cost. The costs are the charges, which
+     * carry their own sections and are already counted below; the payment is
+     * the household settling them. Count both and every card expense appears
+     * in the budget twice.
+     *
+     * Deliberately narrow: a transfer into SAVINGS stays a budget line,
+     * because the household treats what it puts aside each month as a real
+     * commitment, and that is their call rather than a consequence of this.
+     */
+    const budgetable = templates.filter(
+      (template) => template.transferToAccount?.kind !== "credit_card",
+    );
 
     /**
      * What each recurring bill costs per month, derived from how often it
@@ -134,7 +150,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
      * Biweekly is 26 times a year, so 26/12 of the amount, which is more than
      * twice it. A stated override wins where the sheet says otherwise.
      */
-    const fromBills = templates.flatMap((template) => {
+    const fromBills = budgetable.flatMap((template) => {
       const parsedSchedule = scheduleSchema.safeParse(template.scheduleJson);
       // A bill with an unreadable schedule is left out rather than guessed at.
       if (!parsedSchedule.success) return [];

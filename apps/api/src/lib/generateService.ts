@@ -130,6 +130,8 @@ interface ExistingOccurrence {
   readonly anchorOccurrenceId: string | null;
   readonly sortIndex: number;
   readonly ownerUserId: string | null;
+  readonly paidFromAccountId: string | null;
+  readonly transferToAccountId: string | null;
   readonly version: number;
   readonly customisedAt: Date | null;
   readonly verifiedAt: Date | null;
@@ -516,10 +518,30 @@ export async function generateForHousehold(
       scheduleType: true,
       scheduleJson: true,
       ownerUserId: true,
+      paidFromAccountId: true,
+      transferToAccountId: true,
       active: true,
     },
     orderBy: { name: "asc" },
   });
+
+  /*
+   * Where each template's money moves, by template id.
+   *
+   * Kept out of the engine on purpose. Generation works out WHEN a recurring
+   * thing falls and for how much, which is arithmetic over dates; which
+   * account it comes out of is a routing fact the row carries, and threading
+   * it through the pure recurrence code would buy nothing.
+   */
+  const routingByTemplate = new Map(
+    templateRows.map((row) => [
+      row.id,
+      {
+        paidFromAccountId: row.paidFromAccountId,
+        transferToAccountId: row.transferToAccountId,
+      },
+    ]),
+  );
 
   const templates: TemplateSpec[] = [];
   const skipped: { templateId: string; reason: string }[] = [];
@@ -596,6 +618,8 @@ export async function generateForHousehold(
       anchorOccurrenceId: true,
       sortIndex: true,
       ownerUserId: true,
+      paidFromAccountId: true,
+      transferToAccountId: true,
       version: true,
       customisedAt: true,
       verifiedAt: true,
@@ -643,8 +667,13 @@ export async function generateForHousehold(
   ): Promise<void> => {
     const row = byKey.get(occurrenceKey(occurrence.templateId, occurrence.periodKey));
 
+    const routing = routingByTemplate.get(occurrence.templateId) ?? {
+      paidFromAccountId: null,
+      transferToAccountId: null,
+    };
+
     if (!row) {
-      const result = await create(tx, householdId, occurrence, anchorOccurrenceId);
+      const result = await create(tx, householdId, occurrence, anchorOccurrenceId, routing);
       if (result === "created") created += 1;
       else existing += 1;
       return;
@@ -667,7 +696,11 @@ export async function generateForHousehold(
       samePlainDate(row.date, occurrence.date) &&
       row.anchorOccurrenceId === anchorOccurrenceId &&
       row.sortIndex === occurrence.sortIndex &&
-      row.ownerUserId === ownerUserId;
+      row.ownerUserId === ownerUserId &&
+      // Move a bill onto a card and its untouched future rows follow. A row
+      // somebody has made their own is exempt, like every other detail.
+      row.paidFromAccountId === routing.paidFromAccountId &&
+      row.transferToAccountId === routing.transferToAccountId;
 
     if (same) {
       existing += 1;
@@ -684,6 +717,8 @@ export async function generateForHousehold(
         anchorOccurrenceId,
         sortIndex: occurrence.sortIndex,
         ownerUserId,
+        paidFromAccountId: routing.paidFromAccountId,
+        transferToAccountId: routing.transferToAccountId,
         version: row.version + 1,
         updatedAt: new Date(),
       },
@@ -873,6 +908,7 @@ async function create(
   householdId: string,
   occurrence: GeneratedOccurrence,
   anchorOccurrenceId: string | null,
+  routing: { paidFromAccountId: string | null; transferToAccountId: string | null },
 ): Promise<"created" | "existing"> {
   try {
     await tx.occurrence.create({
@@ -888,6 +924,8 @@ async function create(
         anchorOccurrenceId,
         sortIndex: occurrence.sortIndex,
         ownerUserId: occurrence.ownerId ?? null,
+        paidFromAccountId: routing.paidFromAccountId,
+        transferToAccountId: routing.transferToAccountId,
       },
     });
     return "created";

@@ -64,8 +64,14 @@ const householdPatch = z
 const accountCreate = z
   .object({
     name: z.string().trim().min(1).max(60),
-    /** Defaults to chequing, which is what a household's first account is. */
-    kind: z.enum(["chequing", "savings"]).optional(),
+    /**
+     * Defaults to chequing, which is what a household's first account is.
+     *
+     * A credit card is an account like any other here. What makes it one is
+     * that its balance is money owed rather than held, which the kind says
+     * and nothing else in this row needs to know.
+     */
+    kind: z.enum(["chequing", "savings", "credit_card"]).optional(),
   })
   .strict();
 
@@ -458,7 +464,7 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     return reply.status(result.statusCode).send(result.body);
   });
 
-  /* ---- The chequing account ---- */
+  /* ---- Accounts: chequing, savings, and the cards ---- */
 
   app.post("/accounts", async (request, reply) => {
     const user = request.user;

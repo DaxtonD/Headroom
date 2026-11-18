@@ -19,6 +19,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
+import { requireValidRouting, routingAfter } from "../lib/accounts.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { wireCents } from "../lib/wire.js";
 import { labelKindFor } from "../lib/activityLabels.js";
@@ -71,6 +72,20 @@ const patchBody = z
      * back on a payday. An automatic withdrawal always has one.
      */
     date: plainDateSchema.nullable().optional(),
+    /**
+     * Which account this comes out of. Null means chequing.
+     *
+     * Editable on the row and not only on the template, because a one-off
+     * payment toward a card has no template to inherit it from - and that
+     * payment is the whole reason any of this exists.
+     */
+    paidFromAccountId: z.string().uuid().nullable().optional(),
+    /**
+     * Where it arrives, when this row is a transfer rather than a cost: a
+     * payment toward a card, or money into savings. One tick then moves two
+     * balances, chequing down and the card's debt down by the same amount.
+     */
+    transferToAccountId: z.string().uuid().nullable().optional(),
     // Accepted and ignored here; it is read from the body by requireBaseVersion.
     baseVersion: z.number().int().min(1).optional(),
   })
@@ -86,6 +101,8 @@ const createBody = z
     anchorOccurrenceId: z.string().uuid().nullable().optional(),
     ownerUserId: z.string().uuid().nullable().optional(),
     sortIndex: z.number().int().min(0).max(100_000).optional(),
+    paidFromAccountId: z.string().uuid().nullable().optional(),
+    transferToAccountId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -111,6 +128,8 @@ function serialiseOccurrence(row: Occurrence) {
     clearedById: row.clearedById,
     clearedAt: row.clearedAt?.toISOString() ?? null,
     ownerUserId: row.ownerUserId,
+    paidFromAccountId: row.paidFromAccountId,
+    transferToAccountId: row.transferToAccountId,
     version: row.version,
   };
 }
@@ -135,6 +154,8 @@ function snapshotOccurrence(row: Occurrence): Record<string, unknown> {
     paid: row.paidAt !== null,
     cleared: row.clearedAt !== null,
     ownerUserId: row.ownerUserId,
+    paidFromAccountId: row.paidFromAccountId,
+    transferToAccountId: row.transferToAccountId,
   };
 }
 
@@ -211,6 +232,8 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
           where: { id: request.params.id, householdId: user.householdId, deletedAt: null },
         });
         if (!existing) throw new HttpError(404, "not_found", "That item no longer exists.");
+
+        await requireValidRouting(tx, user.householdId, routingAfter(existing, changes));
 
         // The bank has already chosen the date of an automatic withdrawal, so
         // it cannot be taken away or replaced with a payday to hang off.
@@ -329,6 +352,11 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
       requestHash: hashRequest("POST", "/api/occurrences", request.body),
       ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
       work: async (tx) => {
+        await requireValidRouting(tx, user.householdId, {
+          paidFromAccountId: input.paidFromAccountId ?? null,
+          transferToAccountId: input.transferToAccountId ?? null,
+        });
+
         if (input.anchorOccurrenceId) {
           const anchor = await tx.occurrence.findFirst({
             where: {
@@ -362,6 +390,8 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
             sortIndex: input.sortIndex ?? 0,
             isOneOff: true,
             ownerUserId: input.ownerUserId ?? null,
+            paidFromAccountId: input.paidFromAccountId ?? null,
+            transferToAccountId: input.transferToAccountId ?? null,
             createdById: user.id,
             updatedById: user.id,
           },
@@ -553,6 +583,12 @@ function dropNoOps(
       case "ownerUserId":
         if ((value ?? null) !== current.ownerUserId) result[field] = value;
         break;
+      case "paidFromAccountId":
+        if ((value ?? null) !== current.paidFromAccountId) result[field] = value;
+        break;
+      case "transferToAccountId":
+        if ((value ?? null) !== current.transferToAccountId) result[field] = value;
+        break;
       case "date": {
         const next = value === null ? null : (value as string);
         const now = current.date ? toPlainDate(current.date) : null;
@@ -576,7 +612,18 @@ function dropNoOps(
  * clearing is not in the list because each already records its own timestamp,
  * and generation reads all three.
  */
-const OWN_DETAIL_FIELDS = ["cents", "name", "date", "anchorOccurrenceId", "sortIndex", "ownerUserId"];
+const OWN_DETAIL_FIELDS = [
+  "cents",
+  "name",
+  "date",
+  "anchorOccurrenceId",
+  "sortIndex",
+  "ownerUserId",
+  // Moving one month's bill onto a card, or off one, is a decision about that
+  // month. Generation must not quietly put it back where the template says.
+  "paidFromAccountId",
+  "transferToAccountId",
+];
 
 /**
  * Translate the API's field names into database columns.

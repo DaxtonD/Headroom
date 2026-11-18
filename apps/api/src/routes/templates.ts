@@ -15,6 +15,7 @@ import {
   scheduleSchema,
 } from "../lib/generateService.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
+import { requireValidRouting, routingAfter } from "../lib/accounts.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { labelKindFor } from "../lib/activityLabels.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
@@ -43,6 +44,24 @@ const createBody = z
     /** Overrides the monthly figure Headroom would derive from the cadence. */
     monthlyBudgetOverrideCents: centsSchema.nullable().optional(),
     active: z.boolean().optional(),
+    /**
+     * Which account this comes out of. Null or absent means chequing.
+     *
+     * Set it to a credit card and this stops being a chequing withdrawal: it
+     * is a charge, with its own date and its own amount, that moves no
+     * chequing money because none moves. It keeps its budget section, because
+     * it is still a real monthly cost.
+     */
+    paidFromAccountId: z.string().uuid().nullable().optional(),
+    /**
+     * Set as well, and this is a transfer rather than a cost: a payment
+     * toward a card, or money into savings. One tick then moves two
+     * balances.
+     *
+     * A card payment must NOT also carry a `section`, or the same money is
+     * budgeted twice - once as the charges and once as the payment.
+     */
+    transferToAccountId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -56,6 +75,8 @@ const patchBody = z
     /** False archives it: generation stops, history stays. */
     active: z.boolean().optional(),
     schedule: scheduleSchema.optional(),
+    paidFromAccountId: z.string().uuid().nullable().optional(),
+    transferToAccountId: z.string().uuid().nullable().optional(),
     baseVersion: z.number().int().min(1).optional(),
   })
   .strict();
@@ -73,6 +94,8 @@ function serialiseTemplate(row: Template) {
     section: row.section,
     monthlyBudgetOverrideCents: row.monthlyBudgetOverrideCents?.toString() ?? null,
     active: row.active,
+    paidFromAccountId: row.paidFromAccountId,
+    transferToAccountId: row.transferToAccountId,
     version: row.version,
   };
 }
@@ -86,6 +109,8 @@ function snapshotTemplate(row: Template): Record<string, unknown> {
     section: row.section,
     monthlyBudgetOverrideCents: row.monthlyBudgetOverrideCents?.toString() ?? null,
     active: row.active,
+    paidFromAccountId: row.paidFromAccountId,
+    transferToAccountId: row.transferToAccountId,
     schedule: JSON.stringify(row.scheduleJson),
   };
 }
@@ -166,6 +191,11 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
       requestHash: hashRequest("POST", "/api/templates", request.body),
       ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
       work: async (tx) => {
+        await requireValidRouting(tx, user.householdId, {
+          paidFromAccountId: input.paidFromAccountId ?? null,
+          transferToAccountId: input.transferToAccountId ?? null,
+        });
+
         const created = await tx.template.create({
           data: {
             householdId: user.householdId,
@@ -179,6 +209,8 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
             section: input.section ?? null,
             monthlyBudgetOverrideCents: input.monthlyBudgetOverrideCents ?? null,
             active: input.active ?? true,
+            paidFromAccountId: input.paidFromAccountId ?? null,
+            transferToAccountId: input.transferToAccountId ?? null,
             updatedById: user.id,
           },
         });
@@ -251,6 +283,8 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
           where: { id: request.params.id, householdId: user.householdId, deletedAt: null },
         });
         if (!existing) throw new HttpError(404, "not_found", "That template no longer exists.");
+
+        await requireValidRouting(tx, user.householdId, routingAfter(existing, changes));
 
         const applied = await applyVersionedChange<Template>({
           tx: tx as unknown as PrismaLike,

@@ -13,6 +13,7 @@ import { HttpError } from "../lib/http.js";
 import {
   loadOccurrenceDecorations,
   loadTimelineContext,
+  type AccountOutlook,
   type OccurrenceDecoration,
 } from "../lib/timelineService.js";
 import { summariseTimeline, type TimelineRow } from "@headroom/core";
@@ -60,8 +61,46 @@ function serialiseTimelineRow(row: TimelineRow, decoration: OccurrenceDecoration
     owner: decoration?.owner ?? null,
     requiresCoverage: row.requiresCoverage,
     runningCents: row.runningCents,
+    /*
+     * What this row did to the account the ledger is about, which for two
+     * kinds of row is nothing: one already settled, one belonging to another
+     * account - a charge on a credit card above all.
+     *
+     * Sent rather than inferred from the amount, because the amount is the
+     * wrong thing to infer it from: a $95 charge on a card is a real $95 and
+     * moved no chequing money at all. The UI shows a running balance only
+     * where the balance actually ran.
+     */
+    deltaCents: row.deltaCents,
+    /** Null means chequing. The UI names the account when it is not. */
+    paidFromAccountId: decoration?.paidFromAccountId ?? null,
+    /** Set when this row is a payment toward another account. */
+    transferToAccountId: decoration?.transferToAccountId ?? null,
     version: decoration?.version ?? 1,
     fromTemplate: decoration?.templateId !== null,
+  };
+}
+
+/**
+ * One account's position.
+ *
+ * Every figure is already in the terms a person reads it in - a card's are
+ * what it owes - because the sign flip belongs at one edge, and that edge is
+ * in the service rather than spread across the screens.
+ */
+function serialiseAccount(account: AccountOutlook) {
+  return {
+    id: account.id,
+    name: account.name,
+    kind: account.kind,
+    cents: account.effectiveCents,
+    snapshotCents: account.snapshotCents,
+    asOf: account.asOf?.toISOString() ?? null,
+    enteredBy: account.enteredBy,
+    horizonCents: account.horizonCents,
+    extremeCents: account.extremeCents,
+    scheduledInCents: account.scheduledInCents,
+    needsPayment: account.needsPayment,
   };
 }
 
@@ -107,6 +146,17 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
       },
 
       estimatesCount: timeline.estimatesCount,
+
+      /*
+       * Every account, chequing included.
+       *
+       * The home screen leads with chequing and safe-to-spend, which is what
+       * it is for. The cards come after them, with the warning that a card
+       * owing money with nothing scheduled to pay it is the one thing that
+       * got easier to miss once charges correctly stopped draining the
+       * chequing forecast.
+       */
+      accounts: context.accounts.map(serialiseAccount),
 
       /*
        * The working behind the three headline figures, for the info button.
@@ -167,6 +217,7 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
       safeToSpendNowCents: context.timeline.safeToSpendNowCents,
       coverage: context.timeline.coverage,
       estimatesCount: context.timeline.estimatesCount,
+      accounts: context.accounts.map(serialiseAccount),
 
       rows: rows.map((row) => serialiseTimelineRow(row, decorations.get(row.event.id))),
     });

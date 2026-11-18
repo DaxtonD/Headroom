@@ -1,5 +1,5 @@
 /**
- * Updating the chequing balance (HANDOFF section 6.1 and 9).
+ * Updating an account balance (HANDOFF section 6.1 and 9).
  *
  * Two taps on Home: type the amount, save. Optionally tick off anything that
  * cleared since the last update, which is the checklist the brief asks for.
@@ -19,7 +19,8 @@ import { publishChange } from "../lib/changeStream.js";
 import { HttpError, hashRequest, requireIdempotencyKey } from "../lib/http.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { logCreation, type PrismaLike } from "../lib/versioning.js";
-import { loadTimelineContext } from "../lib/timelineService.js";
+import { accountMoveOf, loadTimelineContext } from "../lib/timelineService.js";
+import { accountDelta } from "@headroom/core";
 import { wireCentsNonNegative } from "../lib/wire.js";
 
 const body = z
@@ -29,10 +30,15 @@ const body = z
     /**
      * Which account this balance is for. Absent means chequing.
      *
-     * Savings goes through this same endpoint on purpose: typing in a balance
-     * read off the bank is one act with one set of rules - append-only, server
-     * clock, latest `asOf` wins - and a second endpoint would be that logic
-     * written twice, with one copy eventually drifting.
+     * Savings and the credit cards go through this same endpoint on purpose:
+     * typing in a figure read off a bank or a statement is one act with one
+     * set of rules - append-only, server clock, latest `asOf` wins - and a
+     * second endpoint would be that logic written twice, with one copy
+     * eventually drifting.
+     *
+     * A card's figure is what it OWES, entered without a minus sign, the same
+     * convention a liability already uses. `wireCentsNonNegative` therefore
+     * holds for every kind of account.
      */
     accountId: z.string().uuid().optional(),
     /** Anything the user ticked as having cleared since the last update. */
@@ -89,16 +95,26 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
           );
         }
 
-        // Clearing a bill means it left the chequing account. Accepting the
-        // list against savings would mark bills as paid on the strength of a
-        // savings balance, so it is refused rather than quietly ignored.
-        if (account.kind !== "chequing" && (input.clearedOccurrenceIds ?? []).length > 0) {
+        /*
+         * Savings holds money; it does not have a statement of things that
+         * came out of it on their own. Clearing is for an account whose
+         * balance is read off a list of movements - chequing, or a card.
+         */
+        if (account.kind === "savings" && (input.clearedOccurrenceIds ?? []).length > 0) {
           throw new HttpError(
             400,
             "invalid_request",
-            "Bills clear out of chequing, so they cannot be ticked off against another account.",
+            "A savings balance has no list of things that cleared out of it.",
           );
         }
+
+        // Nulls on a row mean chequing, so resolving one needs to know which
+        // account that is.
+        const chequing = await tx.account.findFirst({
+          where: { householdId: user.householdId, deletedAt: null, kind: "chequing" },
+          orderBy: { createdAt: "asc" },
+          select: { id: true },
+        });
 
         /*
          * The server clock decides when this balance was true - but a newer
@@ -140,12 +156,42 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
             // `name` and `kind` are here only for the log: an activity row
             // records what the thing was called at the time rather than
             // reading it back off a row that may since have changed or gone.
-            select: { id: true, version: true, name: true, kind: true },
+            select: {
+              id: true,
+              version: true,
+              name: true,
+              kind: true,
+              cents: true,
+              paidFromAccountId: true,
+              transferToAccountId: true,
+            },
           });
+
+          /*
+           * Only rows that actually move THIS account.
+           *
+           * Ticking a chequing bill off against a card statement would mark
+           * it as gone on the strength of a figure that never contained it,
+           * and the money would leave the forecast without ever leaving the
+           * bank. The engine already knows which rows move which account, and
+           * this is the same rule, asked of one row at a time.
+           */
+          const movesThisAccount = claimable.filter(
+            (occurrence) =>
+              accountDelta(accountMoveOf(occurrence, chequing?.id ?? null), account.id) !== 0n,
+          );
+
+          if (movesThisAccount.length !== claimable.length) {
+            throw new HttpError(
+              400,
+              "invalid_request",
+              `Some of those do not come out of ${account.name}, so they cannot be ticked off against its balance.`,
+            );
+          }
 
           // Anything already cleared is left alone rather than cleared twice
           // (section 16.1 rule 6).
-          for (const occurrence of claimable) {
+          for (const occurrence of movesThisAccount) {
             await tx.occurrence.update({
               where: { id: occurrence.id },
               data: {
@@ -228,11 +274,17 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
    * The checklist shown when updating the balance: "Did any of these clear
    * since the last update?" (section 6.1).
    */
-  app.get("/balance/clearable", async (request, reply) => {
+  app.get<{ Querystring: { accountId?: string } }>("/balance/clearable", async (request, reply) => {
     const user = request.user;
     if (!user) throw new HttpError(401, "not_signed_in", "Sign in to continue.");
 
     const context = await loadTimelineContext(app.db.prisma, user.householdId);
+
+    const wanted = request.query.accountId ?? context.accountId;
+    const account = context.accounts.find((entry) => entry.id === wanted) ?? null;
+    if (wanted !== null && account === null) {
+      throw new HttpError(404, "no_account", "That account does not exist.");
+    }
 
     /*
      * Things dated on or before today are the plausible candidates: anything
@@ -250,16 +302,30 @@ export async function registerBalanceRoutes(app: FastifyInstance): Promise<void>
      * to pre-tick and nothing to sweep away. What is left is the genuine
      * remainder: things that came out without anybody ticking them.
      */
-    const candidates = context.timeline.rows.filter(
+    /*
+     * And only things that come out of the account being updated.
+     *
+     * `deltaCents` is the whole test: it is zero for a row that has settled
+     * and zero for a row belonging to another account, which are exactly the
+     * two kinds this checklist must not offer. A charge on a card has no
+     * business on the chequing checklist and never did - it is on the card's.
+     */
+    const rows = (account ? context.projections.get(account.id)?.rows : context.timeline.rows) ?? [];
+
+    const candidates = rows.filter(
       (row) =>
         row.effectiveDate !== null &&
         row.effectiveDate <= context.today &&
-        row.event.settled !== true,
+        row.event.settled !== true &&
+        row.deltaCents !== 0n,
     );
 
     return reply.send({
       today: context.today,
-      currentCents: context.balance.effectiveCents,
+      accountId: account?.id ?? null,
+      accountName: account?.name ?? null,
+      accountKind: account?.kind ?? null,
+      currentCents: account?.effectiveCents ?? context.balance.effectiveCents,
       candidates: candidates.map((row) => ({
         id: row.event.id,
         name: row.event.name,
