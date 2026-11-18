@@ -1,17 +1,21 @@
 # Ideas, not yet decided
 
 Written 2026-11-16, after the owner asked what would make this app genuinely
-better rather than merely finished.
+better rather than merely finished. Section 0 was added on 2026-11-17 and came
+from somewhere else: a bill disappearing off the ledger in ordinary use, and
+the design the owner proposed in response.
 
 **Nothing in this file is agreed, scheduled or started.** It is a record of
-four gaps found by reading the code, kept so the thinking is not lost and so a
-later session does not have to re-derive it. Each one says what is missing,
-what already exists to build it on, and what the household would have to
-decide first. The owner decides whether any of it happens.
+four gaps found by reading the code, plus one design worked out with the owner,
+kept so the thinking is not lost and so a later session does not have to
+re-derive it. Each one says what is missing, what already exists to build it
+on, and what the household would have to decide first. The owner decides
+whether any of it happens.
 
 No figures and no names, per the standing rule. Every claim below was checked
-against the code on 2026-11-16; where something is an assumption rather than a
-verified fact, it says so.
+against the code - the four numbered ideas on 2026-11-16, section 0 on
+2026-11-17; where something is an assumption rather than a verified fact, it
+says so.
 
 ## The one thing worth knowing first
 
@@ -33,6 +37,196 @@ The reason all four are cheap is the same reason the app is correct: facts are
 stored and every total is derived, so the model can be re-run against a
 hypothesis as easily as against reality. An app that stored running balances
 could not do any of this without a migration.
+
+Section 0 comes first and is a different kind of thing: not a gap found by
+reading, but a change the owner asked for after using the app. The same
+derived-from-facts design is what makes it cheap as well.
+
+---
+
+## 0. The balance should follow what has already been ticked
+
+**Status: the owner's own design, proposed 2026-11-17 after a real incident,
+and refined in discussion the same day.** Not started. Written down so it can
+be read whole before anything is changed.
+
+Unlike the four that follow, this did not come from reading the code hunting
+for gaps. It came from a bill disappearing off the ledger in ordinary use.
+
+### What happened
+
+Someone marked a bill paid. The row stayed, correctly marked - that part works.
+Two minutes later they opened the balance update, typed the figure from the
+bank and saved, and the bill vanished.
+
+Nothing was broken. Anything marked paid arrives pre-ticked in the "did any of
+these come out since you last updated?" checklist
+([`UpdateBalanceSheet.tsx:45-56`](../apps/web/src/components/UpdateBalanceSheet.tsx#L45-L56)),
+saving clears what is ticked, and a cleared row leaves the timeline
+([`timelineService.ts:195-235`](../apps/api/src/lib/timelineService.ts#L195-L235)).
+Every step did what it was written to do. But one Save turned "we paid this"
+into "take this off the ledger", and nothing on that screen said it would.
+
+The pre-ticking is deliberate and the reasoning behind it is sound: making
+someone say "paid" and then separately say "cleared" is how a bill ends up
+subtracted from a bank figure that already excludes it. The defect is that the
+consequence is invisible, not that the inference is wrong.
+
+Two things came out of the incident. The second is the interesting one.
+
+1. Everything should stay on the ledger, so you can see what is paid and what
+   is not.
+2. **The balance at the top should have gone down when the bill was marked
+   paid.** It did not, and that was the surprise.
+
+### The second one is right, and the engine almost does it already
+
+`effectiveBalance` is the last typed snapshot plus everything cleared since it
+was taken ([`timeline.ts:299`](../packages/core/src/timeline.ts#L299)), fed by
+a query for `clearedAt > snapshot.asOf`
+([`timelineService.ts:144-153`](../apps/api/src/lib/timelineService.ts#L144-L153)).
+
+So the displayed balance is already "the last figure a person read off the
+bank, adjusted by what the app knows has happened since". That is exactly the
+proposal. The only difference is which column it listens to.
+
+**The change is to settle on `paidAt` as well as `clearedAt`.** A tick on the
+ledger and a tick in the balance checklist are the same assertion - this has
+left the account - made in two different places.
+
+### Why it is safe: the typed figure always wins
+
+The hazard in any running tally is double-counting: the balance was typed
+*after* the money left, so the figure already excludes the bill, and deducting
+it again puts the account too low.
+
+The existing `> snapshot.asOf` comparison handles that without any new logic.
+Whichever is newer wins, and the newest thing is almost always the figure
+somebody has just read off the bank.
+
+A worked example, with two unrecorded card purchases in the middle of it -
+which is the realistic case, and the one the household raised:
+
+| Time  | Event                        | Fact stored      | App shows            |
+|-------|------------------------------|------------------|----------------------|
+| 09:00 | Bank says 500, typed in      | snapshot @ 09:00 | 500; bill -100 to 400 |
+| --    | 35 and 25 spent on the cards | nothing          | still 500            |
+| --    | Bill actually paid           | nothing yet      | still 500            |
+| 11:27 | Marked paid                  | `paidAt` 11:27   | **400**, row PAID    |
+| 11:35 | Bank says 340, typed in      | snapshot @ 11:35 | **340**, row PAID    |
+
+At 11:35 the paid tick is older than the snapshot, so it stops being added and
+the typed figure stands alone. No compensating entry, no reset, no flag. The
+household's own summary of the rule: the app suggests what the balance should
+be from what it knows, and the frequent manual updates define what really
+exists.
+
+At 11:27 the app said 400 against a real 340. Today it would have said 500.
+Being closer, more of the time, between updates is the entire benefit - and the
+app is opened several times a day, so "between updates" is most of its life.
+
+### Nothing new is persisted
+
+An earlier sketch of this had each tick write a derived balance row, with a
+column marking it machine-written rather than typed. That is unnecessary, and
+it strains the non-negotiable against persisting running totals.
+
+It is not needed. The facts are already stored - snapshots, and the moment a
+tick happened - and the balance stays derived from both. No schema change, no
+migration, no new table. Undo is free: clearing `paidAt` drops it out of the
+sum and the row counts forward again, with nothing to reverse.
+
+### Income is symmetric and already wired
+
+A paycheque uses the same field. The button reads "Mark as received"
+([`OccurrenceRow.tsx:341-352`](../apps/web/src/components/OccurrenceRow.tsx#L341-L352))
+and the activity log says `marked X received` for an incoming row and
+`marked X paid` otherwise
+([`activity.ts:188`](../packages/core/src/activity.ts#L188)). `clearedSince`
+already sums signed amounts, so positive rows need no special case.
+
+An earlier draft of this design suggested leaving income out, on the grounds
+that you know when you paid a bill but not when money landed. **The household
+corrected that:** both pays are estimates until the stub arrives, at which
+point the actual amount is verified in the app and the row is marked received.
+The amount is correct before the tick, exactly as it is for a bill. Income is
+in.
+
+That discipline - verify the real figure, then tick - is what makes the whole
+design work, because the adjustment is only ever as good as the amount on the
+row.
+
+### Paid rows must stay visible, and that is no longer optional
+
+If a tick both moves the balance and hides the row, the bill is gone with
+nothing to look at and no way to undo it by eye. So this brings the reverted
+work back with it:
+
+- `98d3405 feat: a paid row stays on the ledger to the end` (2026-11-11) added
+  `TimelineInput.settled`: shown and ordered like any other row, counted in
+  nothing, dropping off after 31 days, with undo.
+- `be4bd84` reverted it the next day at the owner's request, recording that the
+  question behind it was still open and undecided.
+
+It survives on the local branch `settled-rows-on-ledger`, well behind `main`,
+so it is a re-implementation rather than a merge. One thing to change when it
+comes back: a settled row printed the words "in your balance" where its running
+balance goes, which left a column of rows with no figures beside them. Printing
+the running balance carrying through unchanged would read better.
+
+The two changes discussed separately are therefore one change.
+
+### What `cleared` is still for
+
+A narrow but real job. If a bill comes out and nobody ticks it, the next typed
+balance already excludes it while the ledger still counts it forward - that is
+the double-subtraction the checklist exists to prevent. So `clearedAt` stays,
+the checklist stays, and it gets much shorter: already-settled rows need not
+appear in it at all, which also retires the pre-tick that caused the incident.
+
+### One implementation hazard
+
+A row can carry both `paidAt` and `clearedAt`. Summing two separate queries
+would count it twice. The settled moment has to be a single value per row - the
+**earliest** of the two non-null timestamps, not the latest.
+
+Earliest is the correct choice, not merely the tidier one. Take a bill marked
+paid at 11:27, a balance typed at 11:28, and the row cleared at 11:30. The
+11:28 figure was read off the bank after the money left, so it already contains
+the bill. Earliest gives 11:27, which is not after 11:28, so it is not added -
+correct. Latest gives 11:30, which is, so the bill would come out twice.
+
+Ties go to the snapshot, since the comparison is a strict `>`. That is the safe
+direction: the typed figure is authoritative.
+
+### What it needs decided
+
+- **Does a paid tick adjust the balance immediately, or only once its date has
+  arrived?** A bill scheduled for Friday and ticked on Wednesday has not left
+  yet. Immediate is simpler and errs low, which is the safe direction, but it
+  means the headline can disagree with the bank for a day or two - the exact
+  complaint this is meant to fix.
+- **How long a settled row stays on the ledger.** The reverted work used 31
+  days. A pay period is the other natural answer, and matches how the household
+  already works.
+- **Whether the difference at the next update is surfaced.** In the worked
+  example the app expects 400 and the bank says 340; that 60 is card spending
+  nobody recorded. It is idea 1 below, and this change makes it considerably
+  more valuable, because the expected figure becomes a real prediction rather
+  than a restatement of the last typed number. Suggest shipping this first and
+  the difference second, so the wording can be judged against real gaps.
+
+### Size and risk
+
+Medium, and smaller than it sounds. One query condition, one engine input, the
+settled-row work restored, and the checklist's candidate list narrowed. No
+schema change.
+
+The risk is not arithmetic - at the moment of a tick the forward low point, and
+therefore safe-to-spend, is identical either way. The risk is that the headline
+stops being a figure somebody saw and becomes one the app believes, which is a
+real change in what the number means. Frequent updates keep it honest, and
+idea 1 is what would prove they are happening.
 
 ---
 
@@ -81,6 +275,10 @@ expected figure at each past snapshot is therefore reconstructible from rows
 already in production, so the drift history exists on the day the feature
 ships rather than starting from empty. That is worth confirming against the
 real data before promising it.
+
+If section 0 ships first, backfill has to read the same settled moment it
+does - the earliest of `paidAt` and `clearedAt` - or the reconstructed
+history will disagree with the live figure.
 
 ### What it needs decided
 
@@ -318,17 +516,28 @@ Recorded so a later session does not propose them as novelties.
 
 ## Collected questions for the household
 
-Pulled out of the four sections above, so they can be answered in one sitting.
+Pulled out of the sections above, so they can be answered in one sitting.
 These are additions to the list in PROGRESS, not replacements.
 
-1. On a balance difference: mention it, require an acknowledgement, or refuse
+From section 0:
+
+1. Should a paid tick move the balance straight away, or wait until the row's
+   date has arrived?
+2. How long should a settled row stay on the ledger - 31 days, or a pay
+   period?
+3. Should the balance update say when the bank disagrees with what the app
+   expected, or stay silent at first?
+
+From the numbered ideas:
+
+4. On a balance difference: mention it, require an acknowledgement, or refuse
    the save?
-2. How many cycles running make a rising bill worth flagging?
-3. **Is variable spending itemised anywhere, or only budgeted?** This decides
+5. How many cycles running make a rising bill worth flagging?
+6. **Is variable spending itemised anywhere, or only budgeted?** This decides
    whether idea 3 is possible at all.
-4. Does every recurring item belong to exactly one budget line, and what
+7. Does every recurring item belong to exactly one budget line, and what
    should the screen say about anything belonging to none?
-5. For a what-if, should the retirement effect be shown at all, or only on
+8. For a what-if, should the retirement effect be shown at all, or only on
    request?
 
 ---
