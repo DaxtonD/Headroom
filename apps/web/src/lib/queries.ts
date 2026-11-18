@@ -47,6 +47,20 @@ interface BreakdownWire {
   readonly lowestAfterName: string | null;
 }
 
+interface AccountWire {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: "chequing" | "savings" | "credit_card";
+  readonly cents: string;
+  readonly snapshotCents: string;
+  readonly asOf: string | null;
+  readonly enteredBy: PersonWire | null;
+  readonly horizonCents: string;
+  readonly extremeCents: string;
+  readonly scheduledInCents: string;
+  readonly needsPayment: boolean;
+}
+
 interface DashboardWire {
   readonly today: string;
   readonly horizonEnd: string;
@@ -66,6 +80,7 @@ interface DashboardWire {
     readonly firstShortfall: ShortfallWire | null;
   };
   readonly estimatesCount: number;
+  readonly accounts: readonly AccountWire[];
   readonly breakdown: BreakdownWire;
   readonly nextAutoWithdrawals: readonly {
     readonly id: string;
@@ -100,6 +115,9 @@ interface TimelineRowWire {
   readonly owner: PersonWire | null;
   readonly requiresCoverage: boolean;
   readonly runningCents: string;
+  readonly deltaCents: string;
+  readonly paidFromAccountId: string | null;
+  readonly transferToAccountId: string | null;
   readonly version: number;
   readonly fromTemplate: boolean;
 }
@@ -128,6 +146,38 @@ export interface Coverage {
   readonly firstShortfall: Shortfall | null;
 }
 
+/**
+ * One account's position, in the terms a person reads it in.
+ *
+ * A card's figures are what it OWES: the server flips the sign once, at its
+ * own edge, so no screen has to know that the engine projects a debt as a
+ * negative balance.
+ */
+export interface Account {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: AccountWire["kind"];
+  /** What it is at now: the typed figure plus everything settled since. */
+  readonly cents: Cents;
+  readonly snapshotCents: Cents;
+  readonly asOf: Date | null;
+  readonly enteredBy: PersonWire | null;
+  /** Where it lands at the end of the horizon. */
+  readonly horizonCents: Cents;
+  /** The lowest a balance drops, or the most a card ever owes. */
+  readonly extremeCents: Cents;
+  /** Payments toward it that are scheduled and have not happened yet. */
+  readonly scheduledInCents: Cents;
+  /**
+   * A card that owes money with nothing scheduled to pay it.
+   *
+   * The household kept safe-to-spend a pure chequing figure, so this is the
+   * only thing standing between a growing card balance and a home screen that
+   * looks healthy. It is shown inside the hero, not below it.
+   */
+  readonly needsPayment: boolean;
+}
+
 export interface Dashboard {
   readonly today: string;
   readonly horizonEnd: string;
@@ -143,6 +193,7 @@ export interface Dashboard {
   readonly lowest: Lowest;
   readonly coverage: Coverage;
   readonly estimatesCount: number;
+  readonly accounts: readonly Account[];
   readonly breakdown: Breakdown;
   readonly nextAutoWithdrawals: readonly {
     readonly id: string;
@@ -190,6 +241,21 @@ export interface TimelineRow {
   readonly owner: PersonWire | null;
   readonly requiresCoverage: boolean;
   readonly runningCents: Cents;
+  /**
+   * What this row did to the account the ledger is about. Zero for a row that
+   * has settled, and zero for a charge on a credit card, which moves the card
+   * and not chequing.
+   *
+   * The display follows this rather than the amount: a running balance is
+   * shown only where the balance actually ran. Reading it off `cents` would
+   * put a figure beside a row that moved nothing, which is how a ledger stops
+   * adding up by hand.
+   */
+  readonly deltaCents: Cents;
+  /** Null means chequing. Set, and the row names the account on screen. */
+  readonly paidFromAccountId: string | null;
+  /** Set when this row is a payment toward another account. */
+  readonly transferToAccountId: string | null;
   readonly version: number;
 }
 
@@ -226,6 +292,11 @@ export interface PayPeriod {
   readonly autoCents: Cents;
   readonly flexibleCents: Cents;
   readonly leftCents: Cents;
+  /**
+   * Money going out of this window that did not come out of chequing:
+   * charges on a credit card. Counted in none of the figures above.
+   */
+  readonly elsewhereCents: Cents;
   /**
    * What could go into savings out of this window.
    *
@@ -272,6 +343,19 @@ function parseTimelineRow(row: TimelineRowWire): TimelineRow {
     ...row,
     cents: toCents(row.cents),
     runningCents: toCents(row.runningCents),
+    deltaCents: toCents(row.deltaCents),
+  };
+}
+
+function parseAccount(wire: AccountWire): Account {
+  return {
+    ...wire,
+    cents: toCents(wire.cents),
+    snapshotCents: toCents(wire.snapshotCents),
+    asOf: wire.asOf ? new Date(wire.asOf) : null,
+    horizonCents: toCents(wire.horizonCents),
+    extremeCents: toCents(wire.extremeCents),
+    scheduledInCents: toCents(wire.scheduledInCents),
   };
 }
 
@@ -296,6 +380,7 @@ export function useDashboard() {
         leftThisCycleCents: toCents(wire.leftThisCycleCents),
         lowest: parseLowest(wire.lowest),
         coverage: parseCoverage(wire.coverage),
+        accounts: wire.accounts.map(parseAccount),
         breakdown: {
           ...wire.breakdown,
           startBalanceCents: toCents(wire.breakdown.startBalanceCents),
@@ -335,6 +420,7 @@ interface PayPeriodWire {
   readonly autoCents: string;
   readonly flexibleCents: string;
   readonly leftCents: string;
+  readonly elsewhereCents: string;
   readonly roomToSaveCents: string;
   readonly lowest: { readonly cents: string; readonly date: string | null } | null;
   readonly allAutoCovered: boolean;
@@ -373,6 +459,7 @@ export function usePayPeriods() {
           autoCents: toCents(period.autoCents),
           flexibleCents: toCents(period.flexibleCents),
           leftCents: toCents(period.leftCents),
+          elsewhereCents: toCents(period.elsewhereCents),
           roomToSaveCents: toCents(period.roomToSaveCents),
           lowest: period.lowest
             ? { cents: toCents(period.lowest.cents), date: period.lowest.date }
@@ -493,6 +580,10 @@ export function useCreateOneOff() {
       kind?: "bill" | "deposit" | "transfer";
       date?: string;
       anchorOccurrenceId?: string | null;
+      /** Absent means chequing. */
+      paidFromAccountId?: string | null;
+      /** Set, and this is a payment toward that account rather than a cost. */
+      transferToAccountId?: string | null;
       idempotencyKey?: string;
     }) => {
       const { idempotencyKey, ...body } = input;
@@ -530,6 +621,8 @@ export function useUpdateBalance() {
   return useMutation({
     mutationFn: async (input: {
       cents: string;
+      /** Absent means chequing, which is what the home screen is about. */
+      accountId?: string;
       clearedOccurrenceIds?: readonly string[];
       idempotencyKey?: string;
     }) => {
@@ -549,24 +642,38 @@ export interface ClearableCandidate {
   readonly date: string | null;
 }
 
-/** "Did any of these clear since the last update?" (HANDOFF section 6.1) */
-export function useClearableCandidates(enabled: boolean) {
+/**
+ * "Did any of these clear since the last update?" (HANDOFF section 6.1)
+ *
+ * Per account, because the question is per account. A charge on a card has no
+ * business on the chequing checklist: it never came out of chequing, and
+ * ticking it there would retire it on the strength of a figure that never
+ * contained it. The server decides membership, from the same deltas the
+ * ledger is drawn from.
+ */
+export function useClearableCandidates(enabled: boolean, accountId?: string) {
   return useQuery({
-    queryKey: ["balance", "clearable"],
+    queryKey: ["balance", "clearable", accountId ?? "chequing"],
     enabled,
-    queryFn: async (): Promise<{ currentCents: Cents; candidates: readonly ClearableCandidate[] }> => {
+    queryFn: async (): Promise<{
+      currentCents: Cents;
+      accountName: string | null;
+      candidates: readonly ClearableCandidate[];
+    }> => {
       const wire = await api.get<{
         currentCents: string;
+        accountName: string | null;
         candidates: readonly {
           id: string;
           name: string;
           cents: string;
           date: string | null;
         }[];
-      }>("/api/balance/clearable");
+      }>(accountId ? `/api/balance/clearable?accountId=${accountId}` : "/api/balance/clearable");
 
       return {
         currentCents: toCents(wire.currentCents),
+        accountName: wire.accountName,
         candidates: wire.candidates.map((candidate) => ({
           ...candidate,
           cents: toCents(candidate.cents),

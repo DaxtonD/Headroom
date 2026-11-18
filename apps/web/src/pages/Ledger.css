@@ -334,3 +334,78 @@
     padding: var(--hr-space-5);
   }
 }
+
+/* ---- The cards ----
+ *
+ * A strip, not a sixth tab. Five tabs is why the home screen opens instantly,
+ * and a card balance is something to glance at rather than a screen to visit.
+ *
+ * It sits directly under the hero because of what changed underneath it: a
+ * charge on a card correctly stops draining the chequing forecast, so the debt
+ * can grow while safe-to-spend looks healthy. The household chose to keep
+ * safe-to-spend a pure chequing figure and asked for the warning to be
+ * impossible to miss instead - so the warning is up here, above the scroll,
+ * in the alert pair the rest of the app already uses for "look at this".
+ */
+.ledger__cards {
+  padding: var(--hr-space-4) var(--hr-space-5);
+  border-radius: var(--hr-radius-card);
+  background: var(--hr-card);
+  box-shadow: var(--hr-shadow-card);
+}
+
+.ledger__cards-label {
+  color: var(--hr-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.ledger__cards-list {
+  margin-top: var(--hr-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-2);
+}
+
+/*
+ * Name left, amount right, and the forecast under the amount.
+ *
+ * The owed figure aligns with the running-balance column the rest of the
+ * screen is read down, so the two can be scanned together.
+ */
+.ledger__card {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: baseline;
+  column-gap: var(--hr-space-3);
+}
+
+.ledger__card-name {
+  color: var(--hr-ink);
+  font-weight: 600;
+}
+
+.ledger__card-owed {
+  color: var(--hr-ink);
+  font-size: 1.125rem;
+  font-weight: 600;
+  text-align: right;
+}
+
+.ledger__card-ahead {
+  grid-column: 2;
+  color: var(--hr-text-secondary);
+  font-size: 0.8125rem;
+  text-align: right;
+}
+
+.ledger__cards-warning {
+  margin-top: var(--hr-space-3);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-input);
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}

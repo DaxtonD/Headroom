@@ -56,6 +56,7 @@ export function Ledger({
   // paints as soon as the dashboard lands, without waiting for the grouping.
   const dashboard = useDashboard();
   const payPeriods = usePayPeriods();
+
   const patch = usePatchOccurrence();
   const removeOneOff = useRemoveOneOff();
 
@@ -124,6 +125,30 @@ export function Ledger({
    * The anchor is a paycheque, not a window, which is what the API takes - so
    * a window with no cheque placed yet simply has no entry here.
    */
+  /*
+   * The accounts, split the way the hero shows them.
+   *
+   * Chequing leads on its own - it is what the screen is for - and the cards
+   * follow it. Savings has its own screen and is not repeated here.
+   */
+  const cards = data.accounts.filter((account) => account.kind === "credit_card");
+  const unpaidCards = cards.filter((account) => account.needsPayment);
+
+  /**
+   * An account id as a name, or null for chequing.
+   *
+   * Null on purpose: a chip saying "Chequing" on almost every row is noise,
+   * and the absence of one already means chequing. Only the exception is
+   * worth naming.
+   */
+  const accountsById = new Map(data.accounts.map((account) => [account.id, account]));
+  const accountName = (id: string | null): string | null => {
+    if (id === null) return null;
+    const found = accountsById.get(id);
+    if (!found || found.kind === "chequing") return null;
+    return found.name;
+  };
+
   const moveTargets: MoveTarget[] = [
     { id: null, label: "Now" },
     ...periods.flatMap((period) =>
@@ -233,6 +258,52 @@ export function Ledger({
         </p>
       </section>
 
+      {/*
+        ---- The cards ----
+
+        Inside the hero, above coverage, because of what changed underneath
+        it. A charge on a card correctly stops draining the chequing
+        forecast, which means the debt can now grow while safe-to-spend looks
+        healthy. The household chose to keep safe-to-spend a pure chequing
+        figure - it is the one number whose working fits in a sentence - and
+        asked for this to be impossible to miss instead.
+
+        So a card with nothing paying it is an alert, in the hero, above the
+        scroll. Not a line at the bottom nobody reaches.
+      */}
+      {cards.length > 0 ? (
+        <section className="ledger__cards" aria-labelledby="ledger-cards-label">
+          <p className="ledger__cards-label" id="ledger-cards-label">
+            On cards
+          </p>
+          <ul className="ledger__cards-list">
+            {cards.map((card) => (
+              <li className="ledger__card" key={card.id}>
+                <span className="ledger__card-name">{card.name}</span>
+                <span className="ledger__card-owed hr-amount">{formatCents(card.cents)}</span>
+                <span className="ledger__card-ahead">
+                  {card.horizonCents === card.cents
+                    ? "owed"
+                    : `owed, ${formatCents(card.horizonCents)} by ${formatDateShort(data.horizonEnd)}`}
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          {unpaidCards.length > 0 ? (
+            <p className="ledger__cards-warning" role="alert">
+              <strong>
+                {unpaidCards.length === 1
+                  ? `Nothing is scheduled to pay ${unpaidCards[0]?.name ?? "it"}.`
+                  : `Nothing is scheduled to pay ${unpaidCards.length} of these.`}
+              </strong>{" "}
+              Charges do not come out of chequing, so safe to spend does not know about this yet.
+              Add a payment as a one-off and it will.
+            </p>
+          ) : null}
+        </section>
+      ) : null}
+
       {/* ---- Coverage, said once and near the top ---- */}
       {!data.coverage.allCovered && data.coverage.firstShortfall ? (
         <section className="ledger__warning" role="alert">
@@ -299,6 +370,7 @@ export function Ledger({
               <PeriodGroup
                 period={period}
                 moveTargets={moveTargets}
+                accountName={accountName}
                 canEdit={canEdit}
                 expandedId={expandedId}
                 onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
@@ -336,7 +408,11 @@ export function Ledger({
       </section>
 
       {addingOneOff ? (
-        <OneOffForm paydays={moveTargets} onClose={() => setAddingOneOff(false)} />
+        <OneOffForm
+          paydays={moveTargets}
+          accounts={data.accounts}
+          onClose={() => setAddingOneOff(false)}
+        />
       ) : null}
     </div>
   );
@@ -356,9 +432,12 @@ function PeriodGroup({
   onToggle,
   onSave,
   onRemove,
+  accountName,
 }: {
   period: PayPeriod;
   moveTargets: readonly MoveTarget[];
+  /** Resolves an account id to its name, for the chip on a charge. */
+  accountName: (id: string | null) => string | null;
   canEdit: boolean;
   expandedId: string | null;
   onToggle: (id: string) => void;
@@ -443,6 +522,8 @@ function PeriodGroup({
               moveTargets={moveTargets}
               onSave={onSave}
               onRemove={onRemove}
+              chargedTo={accountName(entry.row.paidFromAccountId)}
+              paidToward={accountName(entry.row.transferToAccountId)}
             />
           ) : (
             <li
@@ -475,9 +556,18 @@ function PeriodGroup({
           <span>Room to save</span>
           <span className="hr-amount">{formatCents(period.roomToSaveCents)}</span>
         </div>
+        {period.elsewhereCents > 0n ? (
+          <div className="ledger__subtotal-row">
+            <span>On cards</span>
+            <span className="hr-amount">{formatCents(period.elsewhereCents)}</span>
+          </div>
+        ) : null}
         <p className="ledger__subtotal-note">
           {formatCents(period.inCents)} in, less {formatCents(period.autoCents)} automatic and{" "}
           {formatCents(period.flexibleCents)} flexible.
+          {period.elsewhereCents > 0n
+            ? ` The ${formatCents(period.elsewhereCents)} on cards is not in that: it comes out when you pay the card.`
+            : ""}
           {period.lowest
             ? ` Lowest inside it: ${formatCents(period.lowest.cents)}${
                 period.lowest.date ? ` on ${formatDateShort(period.lowest.date)}` : ""

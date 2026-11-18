@@ -1182,6 +1182,13 @@ describe("money that moves between accounts", () => {
       expect(periods[0]?.leftCents).toBe(240_000n);
     });
 
+    it("still says how much went on the cards, so the window adds up", () => {
+      // A fortnight reporting nothing going out, with two charges on screen,
+      // would read as broken rather than as accurate.
+      expect(periods[0]?.elsewhereCents).toBe(11_500n);
+      expect(periods[1]?.elsewhereCents).toBe(0n);
+    });
+
     it("has no low point of its own when nothing in it moved", () => {
       expect(periods[0]?.lowest).toBeNull();
     });

@@ -51,6 +51,10 @@ export interface Bill {
   readonly section: "income" | "fixed" | "variable" | null;
   readonly monthlyBudgetOverrideCents: Cents | null;
   readonly active: boolean;
+  /** Null means chequing, which is what every bill meant before cards. */
+  readonly paidFromAccountId: string | null;
+  /** Set when this is a payment toward another account rather than a cost. */
+  readonly transferToAccountId: string | null;
   readonly version: number;
 }
 
@@ -86,8 +90,11 @@ export interface HouseholdSettings {
 export interface AccountEntry {
   readonly id: string;
   readonly name: string;
-  /** Chequing is the one the timeline reads; savings is its own screen. */
-  readonly kind: "chequing" | "savings";
+  /**
+   * Chequing is the one the timeline reads, savings is its own screen, and a
+   * credit card is an account whose balance is money owed rather than held.
+   */
+  readonly kind: "chequing" | "savings" | "credit_card";
   readonly version: number;
 }
 
@@ -260,6 +267,8 @@ export interface BillInput {
   readonly section?: "income" | "fixed" | "variable" | null;
   readonly ownerUserId?: string | null;
   readonly monthlyBudgetOverrideCents?: string | null;
+  readonly paidFromAccountId?: string | null;
+  readonly transferToAccountId?: string | null;
 }
 
 export function useCreateBill() {
@@ -557,8 +566,8 @@ export function useCreateAccount() {
 
   return useMutation({
     // `kind` absent means chequing, which is what a household's first account
-    // is. A savings account is the same row with a different kind.
-    mutationFn: (input: { name: string; kind?: "chequing" | "savings" }) =>
+    // is. Savings and a credit card are the same row with a different kind.
+    mutationFn: (input: { name: string; kind?: "chequing" | "savings" | "credit_card" }) =>
       api.post("/api/accounts", input, { idempotencyKey: newIdempotencyKey() }),
     onSuccess: () => invalidateEverything(queryClient),
   });

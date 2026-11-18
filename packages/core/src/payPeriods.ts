@@ -213,6 +213,7 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
     let inCents = 0n;
     let autoCents = 0n;
     let flexibleCents = 0n;
+    let elsewhereCents = 0n;
 
     // The current partial window opens with whatever is in the account, which
     // is what "coming in" means for a window that starts today.
@@ -237,7 +238,19 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
        * same deltas produced.
        */
       const cents = row.deltaCents;
-      if (cents === 0n) continue;
+      if (cents === 0n) {
+        /*
+         * It moved nothing here, but it is still money going somewhere, and a
+         * window that reported nothing going out would be wrong about the
+         * household's month. A settled row is excluded: that money has gone
+         * AND the opening balance already knows, so counting it here would
+         * double what the window appears to have spent.
+         */
+        if (row.event.settled !== true && row.event.cents < 0n) {
+          elsewhereCents -= row.event.cents;
+        }
+        continue;
+      }
 
       if (cents > 0n) {
         inCents += cents;
@@ -271,6 +284,7 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       autoCents,
       flexibleCents,
       leftCents: inCents - autoCents - flexibleCents,
+      elsewhereCents,
       lowest,
       allAutoCovered: autoRows.every((row) => row.runningCents >= cushionCents),
       projectedPaychequeIds,

@@ -84,3 +84,55 @@
   font-size: 0.8125rem;
   color: var(--hr-text-muted);
 }
+
+/* ---- Which account ----
+ *
+ * Shown only when there is more than one, so a household with a single
+ * chequing account still sees the two taps the brief asks for: type, save.
+ *
+ * Each row carries what the account is at now, because the figure being
+ * replaced is the thing worth seeing while typing its replacement - and for a
+ * card it says "owed", since that is what is being entered.
+ */
+.sheet__accounts {
+  margin-top: var(--hr-space-4);
+}
+
+.sheet__accounts-legend {
+  color: var(--hr-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.sheet__accounts-list {
+  margin-top: var(--hr-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-1);
+}
+
+.sheet__account {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--hr-space-3);
+  /* 44px of target, per the accessibility rules. */
+  min-height: 44px;
+  padding: var(--hr-space-2) var(--hr-space-3);
+  border-radius: var(--hr-radius-input);
+  color: var(--hr-ink);
+}
+
+.sheet__account:has(input:checked) {
+  background: var(--hr-green-tint-soft);
+}
+
+.sheet__account input {
+  width: 20px;
+  height: 20px;
+}
+
+.sheet__account-now {
+  color: var(--hr-text-secondary);
+  font-size: 0.875rem;
+}

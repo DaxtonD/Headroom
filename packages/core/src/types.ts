@@ -206,6 +206,17 @@ export interface PayPeriod {
   readonly flexibleCents: Cents;
   /** `in - auto - flexible`. */
   readonly leftCents: Cents;
+  /**
+   * Money going out inside this window that does NOT come out of this
+   * account, as a positive magnitude. Charges on a credit card, in practice.
+   *
+   * Counted in none of the figures above, and reported anyway, because a
+   * fortnight whose outgoings are mostly on a card would otherwise look like
+   * a fortnight with nothing going out. It is also the number that makes the
+   * window add up by hand: the rows on screen and the totals beside them
+   * have to be reconcilable, or the ledger stops being checkable.
+   */
+  readonly elsewhereCents: Cents;
   readonly lowest: PayPeriodLowest | null;
   readonly allAutoCovered: boolean;
   /** Cheques counted here that are projected rather than already placed. */

@@ -271,6 +271,9 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
           autoCents: period.autoCents,
           flexibleCents: period.flexibleCents,
           leftCents: period.leftCents,
+          // Charges on a card inside this window: counted in none of the
+          // figures above, and shown so the window reconciles with its rows.
+          elsewhereCents: period.elsewhereCents,
           // "Safe to spend now" asked at a later point on the timeline: what
           // could be moved into savings out of this window without pushing any
           // later balance below the cushion. This is what turns a third cheque

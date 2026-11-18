@@ -43,6 +43,16 @@ export interface OccurrenceRowProps {
    * off the ledger, which is a different statement from marking it paid.
    */
   readonly onRemove?: (input: { id: string; version: number }) => Promise<unknown>;
+  /**
+   * The account this came out of, when it was not chequing.
+   *
+   * A name rather than an id: the row has no business looking accounts up, and
+   * the screen already holds them. Null means chequing, and nothing is shown -
+   * saying "Chequing" on almost every row would be noise.
+   */
+  readonly chargedTo?: string | null;
+  /** The account this is a payment toward, when it is one. */
+  readonly paidToward?: string | null;
 }
 
 export function OccurrenceRow({
@@ -53,6 +63,8 @@ export function OccurrenceRow({
   moveTargets,
   onSave,
   onRemove,
+  chargedTo = null,
+  paidToward = null,
 }: OccurrenceRowProps): React.JSX.Element {
   const amountId = useId();
   const dateId = useId();
@@ -87,6 +99,16 @@ export function OccurrenceRow({
   }
 
   const isPaycheque = row.kind === "paycheque";
+
+  /*
+   * Did this row move the account the ledger is about?
+   *
+   * Two reasons it might not have: it has settled, so the figure at the top
+   * already went past it, or it belongs to another account - a charge on a
+   * credit card, which the card pays and chequing does not. Either way the
+   * running balance walks through unchanged, and the row says why.
+   */
+  const movedNothing = row.deltaCents === 0n;
 
   const save = async (changes: OccurrenceChange, baseVersion = row.version): Promise<void> => {
     setSaving(true);
@@ -195,6 +217,13 @@ export function OccurrenceRow({
               </Chip>
             )}
             {row.isOneOff ? <Chip tone="oneoff">One-off</Chip> : null}
+            {/*
+              Which card it went on, and which card a payment is for. Without
+              this a charge is a row with an amount and no running balance,
+              and the only honest reading of that is "something is broken".
+            */}
+            {chargedTo ? <Chip tone="neutral">{chargedTo}</Chip> : null}
+            {paidToward ? <Chip tone="flexible">Pays {paidToward}</Chip> : null}
           </span>
           {!isPaycheque ? (
             <span className="row__owner">
@@ -202,7 +231,9 @@ export function OccurrenceRow({
                 ? row.paidBy
                   ? `Marked by ${row.paidBy.name}`
                   : "Counted in your balance"
-                : row.verified
+                : chargedTo
+                  ? `Charged to ${chargedTo}`
+                  : row.verified
                   ? row.verifiedBy
                     ? `Verified by ${row.verifiedBy.name}`
                     : "Verified"
@@ -216,16 +247,20 @@ export function OccurrenceRow({
         <span className="row__figures">
           <Amount cents={row.cents} className="row__amount" signed />
           {/*
-            A settled row still prints its running balance, dimmed.
+            A row that moved nothing still prints its running balance, dimmed.
 
             An earlier attempt at this replaced the figure with the words "in
             your balance", which left a column of rows with no numbers beside
             them and read as though something had broken. The balance has
             simply walked past unchanged, and showing that is more honest than
             hiding it.
+
+            Driven by the delta rather than by `settled`, so a charge on a card
+            reads the same way for the same reason: this account's balance did
+            not move here.
           */}
           <span
-            className={`row__running hr-amount ${row.settled ? "row__running--settled" : ""}`}
+            className={`row__running hr-amount ${movedNothing ? "row__running--settled" : ""}`}
           >
             {formatCents(row.runningCents)}
           </span>
@@ -253,6 +288,20 @@ export function OccurrenceRow({
               {row.paid
                 ? "The money has gone, so it has come off the balance at the top and stops counting towards the running balance. Typing in a balance from the bank replaces that estimate with what the bank actually says."
                 : "Counted in the balance you typed in from the bank, so it is not subtracted again."}
+            </p>
+          ) : null}
+
+          {chargedTo && !row.settled ? (
+            <p className="row__note">
+              Charged to {chargedTo}, so it does not come out of chequing. Marking it paid raises
+              what {chargedTo} owes. The chequing money leaves when you pay {chargedTo} itself.
+            </p>
+          ) : null}
+
+          {paidToward ? (
+            <p className="row__note">
+              A payment toward {paidToward}. Marking it paid takes it out of this account and off
+              what {paidToward} owes, both at once.
             </p>
           ) : null}
 

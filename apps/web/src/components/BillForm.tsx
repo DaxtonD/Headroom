@@ -22,6 +22,7 @@ import { ApiError, OfflineError } from "../lib/api.js";
 import {
   useCreateBill,
   usePatchBill,
+  type AccountEntry,
   type Bill,
   type Member,
   type PayScheduleEntry,
@@ -67,12 +68,20 @@ function recurrenceOf(schedule: ScheduleSpec): RecurrenceKey {
 export function BillForm({
   existing,
   members,
+  accounts,
   paySchedules,
   defaultKind = "bill",
   onClose,
 }: {
   existing: Bill | null;
   members: readonly Member[];
+  /**
+   * The household's accounts, so a bill can say which one it comes out of.
+   *
+   * Only offered when there is more than chequing: the question is noise for a
+   * household with one account, and the answer would always be the same.
+   */
+  accounts: readonly AccountEntry[];
   paySchedules: readonly PayScheduleEntry[];
   /**
    * What is being added. A deposit is money arriving that is not a paycheque —
@@ -94,6 +103,7 @@ export function BillForm({
     payday: useId(),
     offset: useId(),
     section: useId(),
+    payFrom: useId(),
     owner: useId(),
     override: useId(),
   };
@@ -136,6 +146,17 @@ export function BillForm({
     existing?.section === "variable" ? "variable" : "fixed",
   );
   const [ownerUserId, setOwnerUserId] = useState(existing?.ownerUserId ?? "");
+  /** "" means chequing, which is how the API spells a null source. */
+  const [paidFromAccountId, setPaidFromAccountId] = useState(existing?.paidFromAccountId ?? "");
+
+  /*
+   * Chequing is the empty option, so it is not in this list.
+   *
+   * Savings is here as well as the cards: the household asked for it, because
+   * an expense can come straight out of savings, and that leaving the chequing
+   * forecast untouched is the same fact as a card charge doing so.
+   */
+  const payFrom = accounts.filter((account) => account.kind !== "chequing");
   /**
    * Whether a stated monthly figure is in use.
    *
@@ -279,6 +300,7 @@ export function BillForm({
             section: budgetSection,
             ownerUserId: ownerUserId === "" ? null : ownerUserId,
             monthlyBudgetOverrideCents: overrideValue,
+            paidFromAccountId: paidFromAccountId === "" ? null : paidFromAccountId,
           },
         });
       } else {
@@ -291,6 +313,7 @@ export function BillForm({
           section: budgetSection,
           ownerUserId: ownerUserId === "" ? null : ownerUserId,
           monthlyBudgetOverrideCents: overrideValue,
+          paidFromAccountId: paidFromAccountId === "" ? null : paidFromAccountId,
         });
       }
       onClose();
@@ -511,6 +534,38 @@ export function BillForm({
           </select>
         </Field>
       )}
+
+      {/*
+        Which account it leaves.
+        A charge on a card keeps its section above: it is a real monthly cost
+        and belongs in the budget. What changes is that it stops draining the
+        chequing forecast, because none of chequing's money moves until the
+        card itself is paid.
+      */}
+      {!incoming && payFrom.length > 0 ? (
+        <Field label="Which account does it come out of?" htmlFor={ids.payFrom}>
+          <select
+            className="hr-input"
+            id={ids.payFrom}
+            value={paidFromAccountId}
+            onChange={(event) => setPaidFromAccountId(event.target.value)}
+            disabled={saving}
+          >
+            <option value="">Chequing</option>
+            {payFrom.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+          {paidFromAccountId !== "" ? (
+            <p className="sheet__hint">
+              It will show on the ledger without moving the chequing balance. Pay the card with a
+              one-off, and that is what comes out of chequing.
+            </p>
+          ) : null}
+        </Field>
+      ) : null}
 
       <Field label={incoming ? "Whose is it?" : "Who gets this bill?"} htmlFor={ids.owner}>
         <select

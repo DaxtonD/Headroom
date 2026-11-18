@@ -10,7 +10,7 @@ import { formatCents, formatDateShort, parseCents } from "@headroom/core";
 import { useEffect, useId, useRef, useState } from "react";
 import { Amount } from "./Badges.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
-import { useClearableCandidates, useUpdateBalance } from "../lib/queries.js";
+import { useClearableCandidates, useDashboard, useUpdateBalance } from "../lib/queries.js";
 import { useOverlayDismissal } from "../lib/overlayDismissal.js";
 import "./Sheet.css";
 import "./UpdateBalanceSheet.css";
@@ -27,8 +27,17 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
   const [amountText, setAmountText] = useState("");
   const [ticked, setTicked] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
+  /** Which account is being typed. Null until the accounts have landed. */
+  const [accountId, setAccountId] = useState<string | null>(null);
 
-  const clearable = useClearableCandidates(true);
+  const dashboard = useDashboard();
+  const accounts = dashboard.data?.accounts ?? [];
+  const chequing = accounts.find((account) => account.kind === "chequing") ?? null;
+  const selectedId = accountId ?? chequing?.id ?? null;
+  const selected = accounts.find((account) => account.id === selectedId) ?? null;
+  const isCard = selected?.kind === "credit_card";
+
+  const clearable = useClearableCandidates(selectedId !== null, selectedId ?? undefined);
   const updateBalance = useUpdateBalance();
 
   /*
@@ -67,13 +76,18 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
     }
 
     if (cents < 0n) {
-      setError("A chequing balance below zero is unusual. Enter it without a minus if that was a typo.");
+      setError(
+        isCard
+          ? "Enter what the card owes, without a minus sign. The app knows it is a debt."
+          : "A balance below zero is unusual. Enter it without a minus if that was a typo.",
+      );
       return;
     }
 
     try {
       await updateBalance.mutateAsync({
         cents: cents.toString(),
+        ...(selectedId && selectedId !== chequing?.id ? { accountId: selectedId } : {}),
         clearedOccurrenceIds: [...ticked],
         // One key for this whole save, so a double tap cannot record it twice.
         idempotencyKey: newIdempotencyKey(),
@@ -121,8 +135,47 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
             Update balance
           </h2>
           <p className="sheet__intro">
-            Type what the bank says is in chequing right now.
+            {isCard
+              ? `Type what ${selected?.name ?? "the card"} says it owes right now.`
+              : `Type what the bank says is in ${selected?.name ?? "chequing"} right now.`}
           </p>
+
+          {/*
+            Which account, offered only when there is more than one.
+            A household with a single chequing account sees exactly the two
+            taps it always did.
+          */}
+          {accounts.length > 1 ? (
+            <fieldset className="sheet__accounts">
+              <legend className="sheet__accounts-legend">Which account?</legend>
+              <div className="sheet__accounts-list">
+                {accounts.map((account) => (
+                  <label className="sheet__account" key={account.id}>
+                    <input
+                      type="radio"
+                      name="account"
+                      checked={selectedId === account.id}
+                      onChange={() => {
+                        setAccountId(account.id);
+                        // The amount and the ticks belonged to the other
+                        // account. Carrying them over would type one
+                        // account's balance into another's.
+                        setAmountText("");
+                        setTicked(new Set());
+                        setError(null);
+                      }}
+                      disabled={updateBalance.isPending}
+                    />
+                    <span className="sheet__account-name">{account.name}</span>
+                    <span className="sheet__account-now hr-amount">
+                      {formatCents(account.cents)}
+                      {account.kind === "credit_card" ? " owed" : ""}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
+          ) : null}
 
           {error ? (
             <p className="hr-alert sheet__error" role="alert">
@@ -132,7 +185,9 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
 
           <div className="hr-field">
             <label className="hr-label" htmlFor={amountId}>
-              Balance in chequing
+              {isCard
+                ? `Owed on ${selected?.name ?? "the card"}`
+                : `Balance in ${selected?.name ?? "chequing"}`}
             </label>
             <input
               className="hr-input sheet__amount"
@@ -155,8 +210,9 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
                 Did any of these come out since you last updated?
               </legend>
               <p className="sheet__clearable-note">
-                Tick anything the bank has already taken, so it is not counted twice. Anything
-                you marked paid is already accounted for and is not listed here.
+                {isCard
+                  ? `Tick anything already on the ${selected?.name ?? "card"} statement, so it is not counted twice. Anything you marked paid is already accounted for and is not listed here.`
+                  : "Tick anything the bank has already taken, so it is not counted twice. Anything you marked paid is already accounted for and is not listed here."}
               </p>
               <ul className="sheet__clearable-list">
                 {clearable.data.candidates.map((candidate) => (
@@ -182,7 +238,9 @@ export function UpdateBalanceSheet({ onClose }: { onClose: () => void }): React.
 
           {clearable.data ? (
             <p className="sheet__current">
-              Headroom currently thinks you have {formatCents(clearable.data.currentCents)}.
+              {isCard
+                ? `Headroom currently thinks this owes ${formatCents(clearable.data.currentCents)}.`
+                : `Headroom currently thinks you have ${formatCents(clearable.data.currentCents)}.`}
             </p>
           ) : null}
 

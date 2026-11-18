@@ -527,6 +527,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
         <BillForm
           existing={editing.bill}
           members={data.members}
+          accounts={data.accounts}
           paySchedules={data.paySchedules}
           defaultKind={editing.adding}
           onClose={close}
@@ -761,7 +762,7 @@ function AccountsSection({
   const [renaming, setRenaming] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [adding, setAdding] = useState<"chequing" | "savings" | null>(null);
+  const [adding, setAdding] = useState<"chequing" | "savings" | "credit_card" | null>(null);
   const [newName, setNewName] = useState("");
 
   const hasChequing = accounts.some((account) => account.kind === "chequing");
@@ -813,7 +814,9 @@ function AccountsSection({
       </header>
       <p className="manage__note">
         The chequing account is the one the ledger reads: its balance is what is safe to spend.
-        A savings account is separate, and its balance never counts as spendable.
+        A savings account is separate, and its balance never counts as spendable. A credit card
+        holds what it owes, and a bill set to come out of one stops draining chequing - the
+        chequing money leaves when you pay the card.
       </p>
 
       {!hasChequing ? (
@@ -877,8 +880,20 @@ function AccountsSection({
                         difference between them is the whole point: one is
                         spendable and one is not.
                       */}
-                      <Chip tone={account.kind === "chequing" ? "payday" : "neutral"}>
-                        {account.kind === "chequing" ? "Chequing" : "Savings"}
+                      <Chip
+                        tone={
+                          account.kind === "chequing"
+                            ? "payday"
+                            : account.kind === "credit_card"
+                              ? "flexible"
+                              : "neutral"
+                        }
+                      >
+                        {account.kind === "chequing"
+                          ? "Chequing"
+                          : account.kind === "credit_card"
+                            ? "Credit card"
+                            : "Savings"}
                       </Chip>
                     </span>
                   </span>
@@ -912,7 +927,12 @@ function AccountsSection({
       {adding !== null ? (
         <div className="manage__add">
           <label className="hr-label" htmlFor="account-new-name">
-            Name for the {adding === "chequing" ? "chequing" : "savings"} account
+            Name for the{" "}
+            {adding === "chequing"
+              ? "chequing account"
+              : adding === "credit_card"
+                ? "credit card"
+                : "savings account"}
           </label>
           <div className="manage__add-row">
             <input
@@ -921,7 +941,9 @@ function AccountsSection({
               type="text"
               value={newName}
               onChange={(event) => setNewName(event.target.value)}
-              placeholder={adding === "chequing" ? "Chequing" : "Savings"}
+              placeholder={
+                adding === "chequing" ? "Chequing" : adding === "credit_card" ? "Visa" : "Savings"
+              }
               disabled={create.isPending}
               maxLength={60}
             />
@@ -971,6 +993,20 @@ function AccountsSection({
             }}
           >
             Add a savings account
+          </button>
+          <button
+            className="manage__small"
+            type="button"
+            disabled={!canEdit}
+            onClick={() => {
+              setAdding("credit_card");
+              // No default name: there is usually more than one card, and
+              // "Visa" guessed into the box is a name somebody has to notice
+              // is wrong.
+              setNewName("");
+            }}
+          >
+            Add a credit card
           </button>
         </div>
       )}

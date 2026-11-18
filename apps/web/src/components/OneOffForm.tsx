@@ -25,26 +25,54 @@ import { useId, useState } from "react";
 import { Field, Sheet } from "./Sheet.js";
 import type { MoveTarget } from "./OccurrenceRow.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
-import { useCreateOneOff } from "../lib/queries.js";
+import { useCreateOneOff, type Account } from "../lib/queries.js";
 
-type Kind = "bill" | "transfer" | "deposit";
+/*
+ * `card` is this form's own kind, not the API's.
+ *
+ * Paying a card is a transfer as far as the data model is concerned - money
+ * leaves one account and arrives in another - but "transfer" on screen has
+ * always meant putting money into savings, and the two read nothing alike to
+ * the person adding one. So the choice is offered in the words the household
+ * uses and mapped to the API's kind on the way out.
+ *
+ * It is the flow the card warning points at: "nothing is scheduled to pay the
+ * Visa" is only fair if there is somewhere to say that there is.
+ */
+type Kind = "bill" | "transfer" | "deposit" | "card";
 
 const KINDS: readonly { readonly kind: Kind; readonly label: string }[] = [
   { kind: "bill", label: "Money going out" },
+  { kind: "card", label: "Paying a credit card" },
   { kind: "transfer", label: "Into savings" },
   { kind: "deposit", label: "Money coming in" },
 ];
 
 export function OneOffForm({
   paydays,
+  accounts = [],
   onClose,
 }: {
   /** "Now" plus each upcoming payday, as built by the screen showing them. */
   paydays: readonly MoveTarget[];
+  /** The household's accounts. Empty means the old single-account form. */
+  accounts?: readonly Account[];
   onClose: () => void;
 }): React.JSX.Element {
   const create = useCreateOneOff();
-  const ids = { name: useId(), amount: useId(), date: useId(), payday: useId() };
+  const ids = {
+    name: useId(),
+    amount: useId(),
+    date: useId(),
+    payday: useId(),
+    card: useId(),
+    payFrom: useId(),
+  };
+
+  const cards = accounts.filter((account) => account.kind === "credit_card");
+  const payFrom = accounts.filter((account) => account.kind !== "chequing");
+  // No cards, no reason to offer paying one.
+  const kinds = KINDS.filter((option) => option.kind !== "card" || cards.length > 0);
 
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -56,6 +84,10 @@ export function OneOffForm({
   const [payday, setPayday] = useState<string>(
     () => paydays.find((target) => target.id !== null)?.id ?? "",
   );
+  /** Which card is being paid. Pre-picked when there is only one. */
+  const [cardId, setCardId] = useState<string>(() => cards[0]?.id ?? "");
+  /** Where the money comes from. "" is chequing, as the API spells it. */
+  const [paidFromAccountId, setPaidFromAccountId] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   const preview = (() => {
@@ -94,12 +126,20 @@ export function OneOffForm({
       return;
     }
 
+    if (kind === "card" && cardId === "") {
+      setError("Pick which card this pays.");
+      return;
+    }
+
     try {
       await create.mutateAsync({
         name: name.trim(),
         // Always a positive magnitude; the server signs it from the kind.
         cents: (cents < 0n ? -cents : cents).toString(),
-        kind,
+        // This form's `card` is the API's `transfer`, with a destination.
+        kind: kind === "card" ? "transfer" : kind,
+        ...(kind === "card" ? { transferToAccountId: cardId } : {}),
+        ...(paidFromAccountId === "" ? {} : { paidFromAccountId }),
         ...(placement === "date"
           ? { date }
           : // An empty selection is "Now", which the API spells as a null anchor.
@@ -156,7 +196,7 @@ export function OneOffForm({
 
       <fieldset className="sheet__choices">
         <legend className="hr-label">What kind of thing is it?</legend>
-        {KINDS.map((option) => (
+        {kinds.map((option) => (
           <label className="sheet__choice" key={option.kind}>
             <input
               type="radio"
@@ -170,6 +210,50 @@ export function OneOffForm({
           </label>
         ))}
       </fieldset>
+
+      {kind === "card" && cards.length > 1 ? (
+        <Field label="Which card?" htmlFor={ids.card}>
+          <select
+            className="hr-input"
+            id={ids.card}
+            value={cardId}
+            onChange={(event) => setCardId(event.target.value)}
+            disabled={create.isPending}
+          >
+            {cards.map((card) => (
+              <option key={card.id} value={card.id}>
+                {card.name} — {formatCents(card.cents)} owed
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+
+      {/*
+        Where it comes from. Chequing is the empty option and the default,
+        because it nearly always is - but the household asked to be able to
+        pay a card, or an expense, straight out of savings.
+      */}
+      {payFrom.length > 0 && kind !== "deposit" ? (
+        <Field label="Which account does it come out of?" htmlFor={ids.payFrom}>
+          <select
+            className="hr-input"
+            id={ids.payFrom}
+            value={paidFromAccountId}
+            onChange={(event) => setPaidFromAccountId(event.target.value)}
+            disabled={create.isPending}
+          >
+            <option value="">Chequing</option>
+            {payFrom
+              .filter((account) => kind !== "card" || account.id !== cardId)
+              .map((account) => (
+                <option key={account.id} value={account.id}>
+                  {account.name}
+                </option>
+              ))}
+          </select>
+        </Field>
+      ) : null}
 
       <fieldset className="sheet__choices">
         <legend className="hr-label">When?</legend>
