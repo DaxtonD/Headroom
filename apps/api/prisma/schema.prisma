@@ -76,9 +76,15 @@ enum AssetKind {
 /// whichever row was created first, so a savings balance could have been
 /// mistaken for the money available to spend. The kind is now stated rather
 /// than inferred from creation order.
+///
+/// `credit_card` is an account whose balance is money OWED rather than held.
+/// Its snapshots store that debt as a positive magnitude, the same convention
+/// `Asset` already uses for a liability: the kind says whether a figure is
+/// owned or owed, so no amount in this database is ever a negative balance.
 enum AccountKind {
   chequing
   savings
+  credit_card
 }
 
 /// What a pot of savings is for. Only one pot can sensibly feed the mortgage
@@ -259,6 +265,14 @@ model Account {
   /// Templates that transfer INTO this account. A savings account is an
   /// ordinary Account row; nothing distinguishes it but what points at it.
   transfersIn Template[]      @relation("templateTransferTarget")
+  /// Everything whose money comes OUT of this account. A charge on a credit
+  /// card and a bill out of chequing are the same row with a different source,
+  /// which is what keeps a card charge from draining the chequing forecast.
+  paidFromTemplates   Template[]   @relation("templatePaidFrom")
+  paidFromOccurrences Occurrence[] @relation("occurrencePaidFrom")
+  /// One-off transfers INTO this account: a card payment entered by hand has
+  /// no template to inherit a destination from.
+  transfersInOccurrences Occurrence[] @relation("occurrenceTransferTarget")
 
   @@index([householdId])
   @@map("account")
@@ -339,6 +353,20 @@ model Template {
   /// does leave chequing - so nothing about the running balance changes.
   transferToAccountId String? @db.Uuid
 
+  /// Which account this leaves. Null means chequing, which is what every row
+  /// was before cards existed.
+  ///
+  /// A charge on a credit card is an ordinary bill with this set. It keeps its
+  /// own date, its own amount and its own budget section - it is a real
+  /// monthly cost and belongs in the budget exactly as before - but it moves
+  /// no chequing money, because none moves. The chequing outflow is the
+  /// payment toward the card, which is its own row.
+  ///
+  /// So the budget counts the charges and the ledger counts the payment. Give
+  /// a card-payment template a `section` as well and the same money is
+  /// budgeted twice.
+  paidFromAccountId String? @db.Uuid
+
   /// The monthly budget figure, when the derived one is not wanted.
   ///
   /// Headroom works out what a recurring bill costs per month from its
@@ -363,9 +391,11 @@ model Template {
   owner             User?        @relation("templateOwner", fields: [ownerUserId], references: [id])
   budgetLine        BudgetLine?  @relation(fields: [budgetLineId], references: [id])
   transferToAccount Account?     @relation("templateTransferTarget", fields: [transferToAccountId], references: [id], onDelete: Restrict)
+  paidFromAccount   Account?     @relation("templatePaidFrom", fields: [paidFromAccountId], references: [id], onDelete: Restrict)
   occurrences       Occurrence[]
 
   @@index([householdId, active])
+  @@index([paidFromAccountId])
   @@map("template")
 }
 
@@ -390,6 +420,19 @@ model Occurrence {
   withdrawal         WithdrawalKind
   isOneOff           Boolean        @default(false)
   ownerUserId        String?        @db.Uuid
+
+  /// The two ends of the move. Null `paidFromAccountId` means chequing.
+  ///
+  /// Set only `paidFromAccountId` and this is money leaving that account: a
+  /// bill, or a charge on a card. Set `transferToAccountId` as well and it is
+  /// a transfer, so one tick moves two balances - chequing down and the card's
+  /// debt down by the same amount. That is what makes a payment toward a card
+  /// recordable at all.
+  ///
+  /// Both are copied from the template on generation, and both are editable on
+  /// the row, because a one-off payment has no template to inherit from.
+  paidFromAccountId   String? @db.Uuid
+  transferToAccountId String? @db.Uuid
 
   verifiedById String?   @db.Uuid
   verifiedAt   DateTime? @db.Timestamptz(6)
@@ -434,11 +477,18 @@ model Occurrence {
   clearedBy  User?        @relation("occurrenceClearer", fields: [clearedById], references: [id])
   anchor     Occurrence?  @relation("anchorChildren", fields: [anchorOccurrenceId], references: [id], onDelete: SetNull)
   anchored   Occurrence[] @relation("anchorChildren")
+  paidFromAccount   Account?  @relation("occurrencePaidFrom", fields: [paidFromAccountId], references: [id], onDelete: Restrict)
+  transferToAccount Account?  @relation("occurrenceTransferTarget", fields: [transferToAccountId], references: [id], onDelete: Restrict)
 
   @@unique([templateId, periodKey], name: "template_period_unique")
   @@index([householdId, date])
   @@index([householdId, clearedAt])
   @@index([anchorOccurrenceId, sortIndex])
+  /// Both ends are foreign keys with ON DELETE RESTRICT, so removing an
+  /// account has to check them. Postgres does not index a referencing column
+  /// on its own.
+  @@index([paidFromAccountId])
+  @@index([transferToAccountId])
   @@map("occurrence")
 }
 

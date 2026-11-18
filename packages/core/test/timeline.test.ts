@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { computeHorizonEnd, computePayPeriods, payPeriodWindows } from "../src/payPeriods.js";
-import { computeTimeline, effectiveBalance, orderTimeline,
+import { accountDelta, computeTimeline, effectiveBalance, orderTimeline,
   summariseTimeline,
 } from "../src/timeline.js";
 import type { PaySchedule, TimelineInput } from "../src/types.js";
@@ -948,6 +948,269 @@ describe("explaining a figure", () => {
       outCount: 0,
       endCents: 200_000n,
       lowestAfterName: null,
+    });
+  });
+});
+
+describe("money that moves between accounts", () => {
+  /*
+   * A credit card charge is not a chequing withdrawal, and never was. The
+   * household pays the card from chequing, in amounts and on days of their
+   * own choosing, so the chequing outflow is the payment - not the charge.
+   *
+   * Projecting it the old way meant the chequing forecast fell on the day the
+   * card was charged, for money that stayed in the account, and then had
+   * nowhere to put the real payment when it came out.
+   */
+  const CHEQUING = "account-chequing";
+  const VISA = "account-visa";
+  const SAVINGS = "account-savings";
+
+  /** A charge on a card: leaves the card, arrives nowhere, money is spent. */
+  function charge(id: string, date: string, cents: bigint, from: string): TimelineInput {
+    return { ...autoBill(id, date, cents), fromAccountId: from };
+  }
+
+  /** A payment toward a card: leaves one account and arrives in another. */
+  function transfer(
+    id: string,
+    date: string,
+    cents: bigint,
+    from: string,
+    to: string,
+  ): TimelineInput {
+    return {
+      id,
+      name: id,
+      cents,
+      kind: "bill",
+      placement: "flexible",
+      date,
+      fromAccountId: from,
+      toAccountId: to,
+    };
+  }
+
+  /**
+   * One cycle: two charges on the card, one payment toward it, one ordinary
+   * chequing bill. Every figure below is derived from this single list, run
+   * once per account.
+   */
+  const events: readonly TimelineInput[] = [
+    charge("rogers", "2026-11-24", -9_500n, VISA),
+    charge("netflix", "2026-11-25", -2_000n, VISA),
+    transfer("visa-payment", "2026-11-28", -40_000n, CHEQUING, VISA),
+    { ...autoBill("power", "2026-12-01", -14_000n), fromAccountId: CHEQUING },
+  ];
+
+  const chequing = computeTimeline({
+    events,
+    startBalanceCents: 240_000n,
+    accountId: CHEQUING,
+  });
+
+  // A card is projected as an ordinary signed balance where debt is negative,
+  // so owing $842.00 opens at -84_200. The flip to "owed" is for display only.
+  const visa = computeTimeline({
+    events,
+    startBalanceCents: -84_200n,
+    accountId: VISA,
+  });
+
+  describe("accountDelta", () => {
+    it("takes the money out of the source account", () => {
+      expect(accountDelta({ cents: -9_500n, fromAccountId: VISA }, VISA)).toBe(-9_500n);
+    });
+
+    it("leaves every other account alone", () => {
+      expect(accountDelta({ cents: -9_500n, fromAccountId: VISA }, CHEQUING)).toBe(0n);
+      expect(accountDelta({ cents: -9_500n, fromAccountId: VISA }, SAVINGS)).toBe(0n);
+    });
+
+    it("moves a transfer out of one account and into the other", () => {
+      const payment = { cents: -40_000n, fromAccountId: CHEQUING, toAccountId: VISA };
+
+      expect(accountDelta(payment, CHEQUING)).toBe(-40_000n);
+      // The card's balance rises by the same amount: less debt.
+      expect(accountDelta(payment, VISA)).toBe(40_000n);
+      expect(accountDelta(payment, SAVINGS)).toBe(0n);
+    });
+
+    it("brings money the other way when savings pays chequing", () => {
+      const move = { cents: -50_000n, fromAccountId: SAVINGS, toAccountId: CHEQUING };
+
+      expect(accountDelta(move, SAVINGS)).toBe(-50_000n);
+      expect(accountDelta(move, CHEQUING)).toBe(50_000n);
+    });
+
+    it("does not read a missing destination as the account being projected", () => {
+      /*
+       * The trap this guards. Both "no destination" and "the only account"
+       * are null, so an unguarded `to === accountId` would credit every
+       * ordinary bill back into the account it had just left, and the balance
+       * would never move at all.
+       */
+      expect(accountDelta({ cents: -9_500n }, null)).toBe(-9_500n);
+      expect(accountDelta({ cents: -9_500n, fromAccountId: VISA }, null)).toBe(0n);
+    });
+
+    it("nets a transfer into the account it came from to nothing", () => {
+      expect(
+        accountDelta({ cents: -40_000n, fromAccountId: VISA, toAccountId: VISA }, VISA),
+      ).toBe(0n);
+    });
+  });
+
+  describe("a charge on a card", () => {
+    it("stays on the ledger, and chequing carries straight past it", () => {
+      expect(chequing.rows.map((row) => row.event.id)).toEqual([
+        "rogers",
+        "netflix",
+        "visa-payment",
+        "power",
+      ]);
+
+      // Two charges, and the chequing balance is exactly where it started.
+      expect(chequing.rows[0]?.runningCents).toBe(240_000n);
+      expect(chequing.rows[1]?.runningCents).toBe(240_000n);
+      expect(chequing.rows[0]?.deltaCents).toBe(0n);
+      expect(chequing.rows[1]?.deltaCents).toBe(0n);
+    });
+
+    it("does not ask chequing to cover it", () => {
+      // Only the power bill is an automatic withdrawal out of chequing. The
+      // charges are automatic too, but not out of this account.
+      expect(chequing.coverage.autoWithdrawalCount).toBe(1);
+      expect(chequing.coverage.allCovered).toBe(true);
+    });
+
+    it("is not counted among chequing's estimates", () => {
+      // The payment and the power bill; not the two charges.
+      expect(chequing.estimatesCount).toBe(2);
+    });
+
+    it("is counted among the estimates of the card that carries it", () => {
+      // Every row that moves the card: both charges, and the payment, whose
+      // amount is equally unconfirmed. Nothing an account has to answer for
+      // goes uncounted by every account, which was the thing to avoid.
+      expect(visa.estimatesCount).toBe(3);
+    });
+
+    it("does not lower the chequing low point for money that stayed put", () => {
+      expect(chequing.lowest.cents).toBe(186_000n);
+      expect(chequing.lowest.afterEventId).toBe("power");
+      expect(chequing.safeToSpendNowCents).toBe(186_000n);
+    });
+  });
+
+  describe("a payment toward a card", () => {
+    it("comes out of chequing on the day it is paid", () => {
+      const row = chequing.rows.find((entry) => entry.event.id === "visa-payment");
+
+      expect(row?.deltaCents).toBe(-40_000n);
+      expect(row?.runningCents).toBe(200_000n);
+    });
+
+    it("comes off the card by the same amount, from the same row", () => {
+      const row = visa.rows.find((entry) => entry.event.id === "visa-payment");
+
+      expect(row?.deltaCents).toBe(40_000n);
+    });
+
+    it("is not an automatic withdrawal, so it can be moved when money is tight", () => {
+      const row = chequing.rows.find((entry) => entry.event.id === "visa-payment");
+
+      expect(row?.requiresCoverage).toBe(false);
+    });
+  });
+
+  describe("the card, projected on its own", () => {
+    it("owes more as charges land and less when a payment is made", () => {
+      const owed = (id: string): bigint => {
+        const row = visa.rows.find((entry) => entry.event.id === id);
+        if (!row) throw new Error(`no row ${id}`);
+        // Negative balance, read back as a positive debt.
+        return -row.runningCents;
+      };
+
+      expect(owed("rogers")).toBe(93_700n);
+      expect(owed("netflix")).toBe(95_700n);
+      expect(owed("visa-payment")).toBe(55_700n);
+      // The chequing bill is nothing to do with the card.
+      expect(owed("power")).toBe(55_700n);
+    });
+
+    it("ends the horizon still owing something, which is the warning's job", () => {
+      expect(-visa.leftThisCycleCents).toBe(55_700n);
+    });
+
+    it("reaches its deepest debt at the last charge before a payment", () => {
+      // `lowest` on a card is the most it ever owes, for free.
+      expect(-visa.lowest.cents).toBe(95_700n);
+      expect(visa.lowest.afterEventId).toBe("netflix");
+    });
+  });
+
+  describe("explaining a figure", () => {
+    it("adds up to the balance the ledger actually ends on", () => {
+      const breakdown = summariseTimeline(chequing);
+
+      // The payment and the power bill. The charges are not chequing's money
+      // going out, so an explanation that counted them would not reconcile.
+      expect(breakdown.outCents).toBe(54_000n);
+      expect(breakdown.outCount).toBe(2);
+      expect(breakdown.endCents).toBe(chequing.leftThisCycleCents);
+    });
+  });
+
+  describe("a pay period's totals", () => {
+    const periods = computePayPeriods({
+      timeline: chequing,
+      paySchedules: [JORDAN],
+      today: "2026-11-20",
+      periodCount: 2,
+      anchorScheduleId: JORDAN.id,
+    });
+
+    it("shows the charges in the window they fall in", () => {
+      expect(periods[0]?.rowIds).toEqual(["rogers", "netflix"]);
+    });
+
+    it("takes nothing out of chequing for a fortnight of card charges", () => {
+      expect(periods[0]?.autoCents).toBe(0n);
+      expect(periods[0]?.flexibleCents).toBe(0n);
+      expect(periods[0]?.leftCents).toBe(240_000n);
+    });
+
+    it("has no low point of its own when nothing in it moved", () => {
+      expect(periods[0]?.lowest).toBeNull();
+    });
+
+    it("counts the payment in the window it is paid from", () => {
+      expect(periods[1]?.rowIds).toEqual(["visa-payment", "power"]);
+      expect(periods[1]?.flexibleCents).toBe(40_000n);
+      expect(periods[1]?.autoCents).toBe(14_000n);
+    });
+  });
+
+  describe("naming an account to project", () => {
+    it("refuses a row that does not say where its money comes from", () => {
+      expect(() =>
+        computeTimeline({
+          events: [autoBill("power", "2026-12-01", -14_000n)],
+          startBalanceCents: 240_000n,
+          accountId: CHEQUING,
+        }),
+      ).toThrow(/no source account/);
+    });
+
+    it("still runs the single-account way when no account is named", () => {
+      const result = computeTimeline({
+        events: [autoBill("power", "2026-12-01", -14_000n)],
+        startBalanceCents: 240_000n,
+      });
+
+      expect(result.leftThisCycleCents).toBe(226_000n);
     });
   });
 });

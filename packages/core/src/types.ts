@@ -61,11 +61,40 @@ export interface TimelineInput {
    * balance checklist.
    */
   readonly settled?: boolean | undefined;
+  /**
+   * Which account the money leaves.
+   *
+   * Absent or null means "the account this timeline projects", which is what
+   * every row meant before there was more than one account to leave. A charge
+   * on a credit card sets this to that card: it is a real cost on a real date
+   * and it is shown, but it moves no chequing money, because none moves.
+   */
+  readonly fromAccountId?: string | null | undefined;
+  /**
+   * Which account the money arrives in, when this row is a transfer between
+   * two of them. Absent means there is no destination: the money is spent, not
+   * moved.
+   *
+   * A payment toward a credit card is the one that matters: chequing down,
+   * the card's debt down by the same amount, from one row and one tick. Paying
+   * money into savings is the same shape.
+   */
+  readonly toAccountId?: string | null | undefined;
 }
 
 /** One ordered row of the timeline, with the balance after it. */
 export interface TimelineRow {
   readonly event: TimelineInput;
+  /**
+   * How much this row moved the balance of the account being projected.
+   *
+   * Zero for a row that belongs to a different account, and zero for a
+   * settled row, which the opening balance has already been past. Computed
+   * once here so that the running balance, the window totals, the coverage
+   * check and the explain panels all read the same decision instead of each
+   * re-deriving it - which is how the two used to disagree.
+   */
+  readonly deltaCents: Cents;
   /** The balance once this row has happened. */
   readonly runningCents: Cents;
   /**
@@ -120,6 +149,29 @@ export interface TimelineOptions {
   readonly startBalanceCents: Cents;
   /** How much must remain for a withdrawal to count as covered. Default 0. */
   readonly cushionCents?: Cents;
+  /**
+   * The account this timeline projects. Absent means there is only one, which
+   * is how every caller read before credit cards existed.
+   *
+   * Run the same events once per account and each one gets its own balance,
+   * its own low point and its own set of rows that moved it. There is one
+   * engine, not one per kind of account.
+   */
+  readonly accountId?: string | null | undefined;
+}
+
+/**
+ * The parts of a row that decide which way money moves, and between what.
+ *
+ * Narrower than {@link TimelineInput} on purpose: the API applies the same
+ * direction rule to rows that have already settled, which are not timeline
+ * events at all, and must not reimplement the signs to do it.
+ */
+export interface AccountMove {
+  /** Signed: negative leaves the source account, positive arrives in it. */
+  readonly cents: Cents;
+  readonly fromAccountId?: string | null | undefined;
+  readonly toAccountId?: string | null | undefined;
 }
 
 /* -------------------------------------------------------------------------- */

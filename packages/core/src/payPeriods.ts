@@ -221,12 +221,24 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
     }
 
     for (const row of rows) {
-      // A settled row is already inside the opening balance, which for the
-      // current window is `startBalanceCents` above. Counting it again would
-      // show a window taking out money that left before the window began.
-      if (row.event.settled === true) continue;
+      /*
+       * What this row did to THIS account, which for two kinds of row is
+       * nothing.
+       *
+       * A settled row is already inside the opening balance - for the current
+       * window that is `startBalanceCents` above - so counting it again would
+       * show a window taking out money that left before the window began. A
+       * row on another account, a charge on a credit card above all, never
+       * came out of this one: the chequing outflow is the payment toward the
+       * card, which is its own row in whichever window it falls.
+       *
+       * Both arrive here as a delta of zero, so neither needs a rule of its
+       * own, and a window's totals cannot drift from the running balance the
+       * same deltas produced.
+       */
+      const cents = row.deltaCents;
+      if (cents === 0n) continue;
 
-      const cents = row.event.cents;
       if (cents > 0n) {
         inCents += cents;
       } else if (row.event.placement === "auto") {
@@ -344,17 +356,18 @@ function lowestInWindow(rows: readonly TimelineRow[]): PayPeriodLowest | null {
 
   for (const row of rows) {
     /*
-     * A settled row cannot be the low point, because it moves nothing: its
-     * running balance is whatever the row before it left. Without this the
-     * first row of a window would take the attribution simply for being
-     * first, and the screen would name a bill that was paid days ago as the
-     * reason the balance is where it is.
+     * A row that moved nothing cannot be the low point, because its running
+     * balance is whatever the row before it left. Without this the first row
+     * of a window would take the attribution simply for being first, and the
+     * screen would name a bill that was paid days ago - or a charge on a card
+     * that never touched this account - as the reason the balance is where it
+     * is.
      *
-     * The figure is unaffected either way - a settled row only ever ties the
-     * balance before it, never undercuts it. A window of nothing but settled
-     * rows has no low point of its own, which is the honest answer.
+     * The figure is unaffected either way: a row with no delta only ever ties
+     * the balance before it, never undercuts it. A window of nothing else has
+     * no low point of its own, which is the honest answer.
      */
-    if (row.event.settled === true) continue;
+    if (row.deltaCents === 0n) continue;
 
     if (lowest === null || row.runningCents < lowest.cents) {
       lowest = { cents: row.runningCents, date: row.effectiveDate, afterEventId: row.event.id };

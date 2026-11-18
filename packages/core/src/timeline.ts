@@ -13,6 +13,7 @@ import { compareDates } from "./dates.js";
 import type { PlainDate } from "./dates.js";
 import { minCents, sumCents, type Cents } from "./money.js";
 import type {
+  AccountMove,
   Coverage,
   LowestPoint,
   Shortfall,
@@ -38,15 +39,67 @@ const RANK_OTHER_DATED = 2;
  */
 const BEFORE_EVERYTHING = "0000-00-00";
 
-function isAutoWithdrawal(event: TimelineInput): boolean {
+/**
+ * How much one move changes one account's balance. The only place in Headroom
+ * that decides the sign of anything between accounts.
+ *
+ * Ordinary double entry: the amount leaves the source and arrives in the
+ * destination. `cents` is signed as the ledger stores it - a bill is negative
+ * - so the source gets `cents` and the destination gets its negation.
+ *
+ *   A charge on a card:      from card,     no destination,  cents -9500
+ *     the card's balance falls by 9500 and chequing is untouched.
+ *   A payment toward a card: from chequing, to the card,     cents -40000
+ *     chequing falls by 40000 and the card rises by 40000.
+ *
+ * A credit card is projected as an ordinary signed balance where owing money
+ * is a negative one. That is what lets a single engine run every account: the
+ * flip to "owed" happens once, at the edge, for display. No sign convention is
+ * special-cased in here.
+ *
+ * `settled` is deliberately ignored. The API applies this same rule to rows
+ * that have already settled, in order to add them to the typed-in figure they
+ * came after, and the timeline zeroes them separately. Two callers, two
+ * intentions, one set of signs.
+ *
+ * There is no default source. An absent one is null, which matches a
+ * projection of null - the single-account case every caller used before this
+ * existed - and matches nothing else. The alternative, "absent means whichever
+ * account is being projected", reads every ordinary chequing bill as money
+ * leaving the card while the card is the one being projected, and is wrong by
+ * the entire chequing ledger. {@link computeTimeline} refuses that input
+ * rather than defaulting it.
+ */
+export function accountDelta(move: AccountMove, accountId: string | null): Cents {
+  const from = move.fromAccountId ?? null;
+  const to = move.toAccountId ?? null;
+
+  let delta = 0n;
+  if (from === accountId) delta += move.cents;
+  // An absent destination is not this account. The money was spent rather
+  // than moved, and `null === null` must not read as "arrives here".
+  if (to !== null && to === accountId) delta -= move.cents;
+  return delta;
+}
+
+/** Whether this row moves the projected account at all, whatever the amount. */
+function touchesAccount(event: TimelineInput, accountId: string | null): boolean {
+  const from = event.fromAccountId ?? null;
+  const to = event.toAccountId ?? null;
+  return from === accountId || (to !== null && to === accountId);
+}
+
+function isAutoWithdrawal(event: TimelineInput, deltaCents: Cents): boolean {
   // Coverage is about money leaving on a date the bank has already chosen.
   // Paycheques and automatic deposits are dated too, but they bring money in,
   // so there is nothing to cover.
   //
   // A settled withdrawal has already gone. Asking whether the account can
   // cover it is asking about the past, and answering "no" would raise a
-  // shortfall over money that left days ago without incident.
-  return event.placement === "auto" && event.cents < 0n && event.settled !== true;
+  // shortfall over money that left days ago without incident. A charge on
+  // another account has the same nothing to cover here, for a different
+  // reason - and both arrive as a delta of zero.
+  return event.placement === "auto" && deltaCents < 0n;
 }
 
 /**
@@ -169,6 +222,25 @@ function effectiveDateOf(
  */
 export function computeTimeline(options: TimelineOptions): TimelineResult {
   const cushionCents = options.cushionCents ?? 0n;
+  const accountId = options.accountId ?? null;
+
+  /*
+   * Name an account to project and every row has to say where it comes from.
+   *
+   * Silence cannot mean "this account", because the same events are run once
+   * per account: a chequing bill would read as leaving whichever card was
+   * being projected at the time. The household's money is not worth a
+   * convenient default, so this is an error rather than a guess.
+   */
+  if (accountId !== null) {
+    const homeless = options.events.find((event) => (event.fromAccountId ?? null) === null);
+    if (homeless) {
+      throw new Error(
+        `"${homeless.name}" (${homeless.id}) has no source account, and this timeline projects one account in particular. Every row needs to say which account its money leaves.`,
+      );
+    }
+  }
+
   const ordered = orderTimeline(options.events);
 
   const paychequeDates = new Map<string, PlainDate>();
@@ -180,18 +252,30 @@ export function computeTimeline(options: TimelineOptions): TimelineResult {
   let running = options.startBalanceCents;
 
   for (const event of ordered) {
-    // A settled row is history: the balance this timeline opens with has
-    // already been past it. Adding it again would take the same bill out
-    // twice. The row is still pushed, so it is still shown and still ordered,
-    // and `runningCents` carries the balance through unchanged - which is
-    // what makes a column of settled rows read as "nothing moved here"
-    // rather than as a gap.
-    if (event.settled !== true) running += event.cents;
+    /*
+     * Two kinds of row move nothing here, and both are still shown.
+     *
+     * A settled row is history: the balance this timeline opens with has
+     * already been past it, and adding it again would take the same bill out
+     * twice. A row belonging to another account never moves this one at all -
+     * a charge on a credit card is the case that matters, and it is exactly
+     * why the chequing forecast stopped falling for money that never left
+     * chequing.
+     *
+     * Either way the row is pushed, so it is still ordered and still on
+     * screen, and `runningCents` carries straight through it - which is what
+     * makes a column of them read as "nothing moved here" rather than as a
+     * gap. A bill that vanishes the moment it is dealt with is a bill nobody
+     * can check.
+     */
+    const deltaCents = event.settled === true ? 0n : accountDelta(event, accountId);
+    running += deltaCents;
     rows.push({
       event,
+      deltaCents,
       runningCents: running,
       effectiveDate: effectiveDateOf(event, paychequeDates),
-      requiresCoverage: isAutoWithdrawal(event),
+      requiresCoverage: isAutoWithdrawal(event, deltaCents),
     });
   }
 
@@ -234,11 +318,24 @@ export function computeTimeline(options: TimelineOptions): TimelineResult {
     firstShortfall,
   };
 
-  // An amount nobody has confirmed yet is still a guess, and the UI says so.
-  // A settled bill is not a guess about the future whatever its amount says:
-  // the money is gone and the figure at the top already reflects it.
+  /*
+   * An amount nobody has confirmed yet is still a guess, and the UI says so.
+   *
+   * A settled bill is not a guess about the future whatever its amount says:
+   * the money is gone and the figure at the top already reflects it. Nor is a
+   * bill on another account a guess about THIS one - each account counts its
+   * own, so an unverified card charge is reported against the card.
+   *
+   * Membership is tested rather than the delta, because a bill of exactly zero
+   * on this account is the very thing worth flagging: an amount nobody has
+   * filled in yet.
+   */
   const estimatesCount = ordered.filter(
-    (event) => event.kind === "bill" && event.verified !== true && event.settled !== true,
+    (event) =>
+      event.kind === "bill" &&
+      event.verified !== true &&
+      event.settled !== true &&
+      touchesAccount(event, accountId),
   ).length;
 
   const lastRow = rows.at(-1);
@@ -274,7 +371,11 @@ export function summariseTimeline(result: TimelineResult): TimelineBreakdown {
   let outCount = 0;
 
   for (const row of result.rows) {
-    const cents = row.event.cents;
+    // The row's effect on THIS account, not its face value. Otherwise the
+    // explanation adds up a card charge the headline figure never counted,
+    // and `endCents` stops matching the last running balance - which is the
+    // one thing an explain panel must never do.
+    const cents = row.deltaCents;
     if (cents > 0n) {
       inCents += cents;
       inCount += 1;
