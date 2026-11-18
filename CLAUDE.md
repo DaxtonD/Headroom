@@ -110,9 +110,12 @@ Keep this list current as you build.
 Revised 2026-11-15, because three of the original gates described work the owner has since
 retired and one described a thing that was already finished. What is actually required:
 
-- **M0 to M5 complete and tagged.** Done and tagged through `m4`; M5 is complete and awaiting
-  its tag. **M6 is empty** - its three items were backups, `docs/DEPLOY.md` and a verified
-  compose run, and the owner took all three over or dropped them on 2026-11-14.
+- **M0 to M5 complete and tagged.** Done. `m0` to `m5` all exist locally and on the remote,
+  `m5` at 4f007a7. This said M5 was "awaiting its tag" until 2026-11-18, which was wrong and
+  was read as meaning the work itself had never been pushed - check `git ls-remote --tags
+  origin` before believing a line like this one. **M6 is empty** - its three items were
+  backups, `docs/DEPLOY.md` and a verified compose run, and the owner took all three over or
+  dropped them on 2026-11-14.
 - **CI green**, with the GHCR image published only when lint, typecheck and every test pass.
 - **The app runs from the GHCR image**, added as a plain container through Unraid's Docker
   Manager and pulling `latest`. This replaces the old gate of `docker compose up --build` from
