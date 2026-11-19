@@ -12,6 +12,7 @@
 import { formatCents } from "@headroom/core";
 import type { Cents } from "@headroom/core";
 import { useState } from "react";
+import { Thumb } from "../components/Thumb.js";
 import { useBudget, type BudgetLine, type BudgetSection } from "../lib/plannerQueries.js";
 import "./Budget.css";
 
@@ -180,7 +181,13 @@ function ExpenseSection({
         <ul className="budget__lines">
           {section.lines.map((line) => (
             <li className="budget__line" key={line.id ?? line.name}>
+              {/*
+                Beside the name rather than before the whole row: the name
+                takes a column of its own and the amounts line up down the
+                right-hand edge, which is how this page is read.
+              */}
               <span className="budget__line-name">
+                <Thumb imageId={line.imageId} size="line" />
                 {line.name}
                 {/* Where a stated monthly figure is being used instead of the
                     one worked out from the bill's cadence, say so, rather than

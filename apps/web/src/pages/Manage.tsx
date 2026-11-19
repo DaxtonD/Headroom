@@ -29,6 +29,8 @@ import { Amount, Chip, InitialBubble } from "../components/Badges.js";
 import { BillForm } from "../components/BillForm.js";
 import { CategoryForm } from "../components/CategoryForm.js";
 import { GoalForm } from "../components/GoalForm.js";
+import { ImagePicker } from "../components/ImagePicker.js";
+import { Thumb } from "../components/Thumb.js";
 import { PaydayForm } from "../components/PaydayForm.js";
 import { ApiError, OfflineError } from "../lib/api.js";
 import {
@@ -230,6 +232,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             name={bill.name}
             note={describeSchedule(bill)}
             amount={bill.defaultCents}
+            imageId={bill.imageId}
             canEdit={canEdit}
             onEdit={() => setEditing({ kind: "bill", bill, adding: "bill" })}
             extra={
@@ -270,6 +273,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
             name={bill.name}
             note={describeSchedule(bill)}
             amount={bill.defaultCents}
+            imageId={bill.imageId}
             canEdit={canEdit}
             onEdit={() => setEditing({ kind: "bill", bill, adding: "deposit" })}
             extra={
@@ -363,6 +367,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
                 : "Variable · it changes"
             }
             amount={category.monthlyCents}
+            imageId={category.imageId}
             canEdit={canEdit}
             onEdit={() => setEditing({ kind: "category", category })}
           />
@@ -630,6 +635,7 @@ function Row({
   onEdit,
   badge,
   extra,
+  imageId,
 }: {
   name: string;
   note: string | null;
@@ -638,6 +644,14 @@ function Row({
   onEdit: () => void;
   badge?: React.ReactNode;
   extra?: React.ReactNode;
+  /**
+   * The picture beside the name, where the thing has one.
+   *
+   * Only expenses and budget-only categories pass it: those are the two
+   * things the household asked for, and a goal or an asset is picked out of a
+   * list of three rather than a list of thirty.
+   */
+  imageId?: string | null;
 }): React.JSX.Element {
   return (
     <li className="manage__row">
@@ -648,6 +662,7 @@ function Row({
       */}
       <span className="manage__row-main">
         <span className="manage__row-head">
+          <Thumb imageId={imageId} size="line" />
           {badge}
           <span className="manage__row-name">{name}</span>
         </span>
@@ -764,6 +779,14 @@ function AccountsSection({
   const [error, setError] = useState<string | null>(null);
   const [adding, setAdding] = useState<"chequing" | "savings" | "credit_card" | null>(null);
   const [newName, setNewName] = useState("");
+  /**
+   * The picture, for the account being added and the one being renamed.
+   *
+   * Two pieces of state rather than one, because the add form and a rename can
+   * both be open and they are not the same account.
+   */
+  const [newImageId, setNewImageId] = useState<string | null>(null);
+  const [renameImageId, setRenameImageId] = useState<string | null>(null);
 
   const hasChequing = accounts.some((account) => account.kind === "chequing");
 
@@ -778,9 +801,10 @@ function AccountsSection({
     }
 
     try {
-      await create.mutateAsync({ name: trimmed, kind: adding });
+      await create.mutateAsync({ name: trimmed, kind: adding, imageId: newImageId });
       setAdding(null);
       setNewName("");
+      setNewImageId(null);
     } catch (caught) {
       if (caught instanceof OfflineError || caught instanceof ApiError) setError(caught.message);
       else setError("Could not add it.");
@@ -797,7 +821,10 @@ function AccountsSection({
       await patch.mutateAsync({
         id: account.id,
         version: account.version,
-        changes: { name: name.trim() },
+        // Both fields, because the rename form now edits both. A
+        // field-level PATCH only carries what it was given, so leaving the
+        // picture out would be the one way to never be able to change it.
+        changes: { name: name.trim(), imageId: renameImageId },
       });
       setRenaming(null);
     } catch (caught) {
@@ -840,7 +867,7 @@ function AccountsSection({
             <li className="manage__row" key={account.id}>
               {renaming === account.id ? (
                 <>
-                  <span className="manage__row-main">
+                  <span className="manage__row-main manage__row-main--editing">
                     <input
                       className="hr-input"
                       type="text"
@@ -849,6 +876,11 @@ function AccountsSection({
                       disabled={patch.isPending}
                       aria-label="Account name"
                       maxLength={60}
+                    />
+                    <ImagePicker
+                      value={renameImageId}
+                      onChange={setRenameImageId}
+                      disabled={patch.isPending}
                     />
                   </span>
                   <span className="manage__row-buttons">
@@ -874,6 +906,7 @@ function AccountsSection({
                 <>
                   <span className="manage__row-main">
                     <span className="manage__row-head">
+                      <Thumb imageId={account.imageId} size="line" />
                       <span className="manage__row-name">{account.name}</span>
                       {/*
                         Said on the row, because with two accounts the
@@ -904,6 +937,7 @@ function AccountsSection({
                       disabled={!canEdit}
                       onClick={() => {
                         setName(account.name);
+                        setRenameImageId(account.imageId);
                         setRenaming(account.id);
                       }}
                       aria-label={`Rename ${account.name}`}
@@ -962,11 +996,17 @@ function AccountsSection({
               onClick={() => {
                 setAdding(null);
                 setError(null);
+                setNewImageId(null);
               }}
             >
               Cancel
             </button>
           </div>
+          <ImagePicker
+            value={newImageId}
+            onChange={setNewImageId}
+            disabled={create.isPending}
+          />
         </div>
       ) : (
         <div className="manage__actions">

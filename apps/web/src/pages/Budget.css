@@ -183,7 +183,16 @@
   border-top: none;
 }
 
+/*
+ * A flex row now, because the picture sits inside it. `column` on the wrap so
+ * the "from a recurring bill" note stays under the name rather than beside it,
+ * which is where it was before the picture arrived.
+ */
 .budget__line-name {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-2);
+  flex-wrap: wrap;
   font-weight: 600;
   min-width: 0;
 }
@@ -254,6 +263,13 @@
 /* Why a figure is what it is: from a bill, or set by hand. */
 .budget__line-note {
   display: block;
+  /*
+   * Its own line, always. The name cell became a flex row when the picture
+   * went into it, and a block child of a flex container is a flex item - so
+   * without this the note would sit BESIDE the name whenever it happened to
+   * fit, which is not where it was before.
+   */
+  flex-basis: 100%;
   margin-top: 1px;
   font-size: 0.6875rem;
   font-weight: 400;

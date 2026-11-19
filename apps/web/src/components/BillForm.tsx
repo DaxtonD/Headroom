@@ -28,6 +28,7 @@ import {
   type PayScheduleEntry,
   type ScheduleSpec,
 } from "../lib/manageQueries.js";
+import { ImagePicker } from "./ImagePicker.js";
 import { Field, RemoveButton, Sheet } from "./Sheet.js";
 
 /** How a bill recurs, in the words someone would actually use. */
@@ -176,6 +177,8 @@ export function BillForm({
       ? ""
       : formatCents(existingOverride, { currencySymbol: false, grouping: false }),
   );
+  /** The picture beside the name. Uploaded when cropped, saved with the form. */
+  const [imageId, setImageId] = useState<string | null>(existing?.imageId ?? null);
   const [error, setError] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
 
@@ -301,6 +304,7 @@ export function BillForm({
             ownerUserId: ownerUserId === "" ? null : ownerUserId,
             monthlyBudgetOverrideCents: overrideValue,
             paidFromAccountId: paidFromAccountId === "" ? null : paidFromAccountId,
+            imageId,
           },
         });
       } else {
@@ -314,6 +318,7 @@ export function BillForm({
           ownerUserId: ownerUserId === "" ? null : ownerUserId,
           monthlyBudgetOverrideCents: overrideValue,
           paidFromAccountId: paidFromAccountId === "" ? null : paidFromAccountId,
+          imageId,
         });
       }
       onClose();
@@ -566,6 +571,13 @@ export function BillForm({
           ) : null}
         </Field>
       ) : null}
+
+      {/*
+        Last of the fields, because it is the one that changes nothing about
+        what the figures do - and the first thing anybody will look for when
+        they cannot tell two subscriptions apart on the ledger.
+      */}
+      <ImagePicker value={imageId} onChange={setImageId} disabled={saving} />
 
       <Field label={incoming ? "Whose is it?" : "Who gets this bill?"} htmlFor={ids.owner}>
         <select

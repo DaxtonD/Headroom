@@ -133,6 +133,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
           defaultCents: true,
           scheduleJson: true,
           monthlyBudgetOverrideCents: true,
+          imageId: true,
           version: true,
           // Only to find out whether this is a payment toward a card.
           transferToAccount: { select: { kind: true } },
@@ -182,6 +183,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
           yearlyCents: figure.yearlyCents,
           derivedMonthlyCents: figure.derivedMonthlyCents,
           overridden: figure.overridden,
+          imageId: template.imageId,
           version: template.version,
         },
       ];
@@ -205,6 +207,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
           version: bill.version,
           derivedMonthlyCents: bill.derivedMonthlyCents,
           overridden: bill.overridden,
+          imageId: bill.imageId,
         },
         engineLine: {
           name: bill.name,
@@ -220,6 +223,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
           version: line.version,
           derivedMonthlyCents: null,
           overridden: false,
+          imageId: line.imageId,
         },
         engineLine: {
           name: line.name,
@@ -266,6 +270,8 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
           // visible rather than hidden.
           derivedMonthlyCents: identity?.derivedMonthlyCents ?? null,
           overridden: identity?.overridden ?? false,
+          /** The picture beside the name, from whichever record this came from. */
+          imageId: identity?.imageId ?? null,
         };
       });
     };

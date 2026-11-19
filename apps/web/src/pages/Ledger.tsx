@@ -36,6 +36,7 @@ import { Amount, Chip, CoveragePill } from "../components/Badges.js";
 import { ExplainButton, ExplainPanel } from "../components/Explain.js";
 import { OccurrenceRow, type MoveTarget } from "../components/OccurrenceRow.js";
 import { OneOffForm } from "../components/OneOffForm.js";
+import { Thumb } from "../components/Thumb.js";
 import {
   explainInChequing,
   explainLeftThisCycle,
@@ -378,6 +379,7 @@ export function Ledger({
           <ul className="ledger__cards-list">
             {cards.map((card) => (
               <li className="ledger__card" key={card.id}>
+                <Thumb imageId={card.imageId} size="row" />
                 <span className="ledger__card-name">{card.name}</span>
                 <span className="ledger__card-owed hr-amount">{formatCents(card.cents)}</span>
                 <span className="ledger__card-ahead">

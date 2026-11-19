@@ -94,6 +94,11 @@
   --hr-radius-hero: 24px;
   --hr-radius-pill: 999px;
   --hr-radius-input: 14px;
+  /*
+   * The little square beside a name. Tighter than a card, because at 28px a
+   * card's radius would read as a circle and stop being a square at all.
+   */
+  --hr-radius-thumb: 9px;
 
   /* ---- Touch targets: 44px minimum, an M5 acceptance criterion ---- */
   --hr-touch-min: 44px;

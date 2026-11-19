@@ -149,6 +149,11 @@
   gap: 2px;
 }
 
+/* While a row is being edited it holds a stack, not one line of text. */
+.manage__row-main--editing {
+  gap: var(--hr-space-3);
+}
+
 .manage__row-head {
   display: flex;
   align-items: center;

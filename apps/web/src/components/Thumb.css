@@ -1,0 +1,53 @@
+/*
+ * The square beside a name: rounded corners, and never anything but square.
+ *
+ * `aspect-ratio` plus a fixed width rather than width and height both, so the
+ * square survives a text-size setting that scales rem units - these sit beside
+ * text and should keep their relationship to it rather than staying 28px while
+ * the name grows.
+ */
+.thumb {
+  display: block;
+  flex: 0 0 auto;
+  overflow: hidden;
+  border-radius: var(--hr-radius-thumb);
+  /*
+   * A hairline, so a picture with a white or transparent edge still reads as a
+   * square object rather than bleeding into the row. Low-contrast on purpose:
+   * it is a boundary, not a feature.
+   */
+  box-shadow: inset 0 0 0 1px var(--hr-card-border);
+  /* Shows through a picture with transparency in it - a cut-out logo. */
+  background: var(--hr-neutral-bg);
+}
+
+.thumb__image {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /*
+   * The crop already produced a square, so there is nothing to cut. `cover`
+   * is here for the one case that can still arrive: the server accepts a
+   * non-square image, because insisting on a square there would be a second
+   * rule to keep in step with this one.
+   */
+  object-fit: cover;
+}
+
+/* On a ledger row, beside the paid/verified badge. */
+.thumb--row {
+  width: 28px;
+  aspect-ratio: 1;
+}
+
+/* In a list on Manage or Budget, where the row is taller. */
+.thumb--line {
+  width: 36px;
+  aspect-ratio: 1;
+}
+
+/* Inside the picker, showing what is currently set. */
+.thumb--picker {
+  width: 56px;
+  aspect-ratio: 1;
+}

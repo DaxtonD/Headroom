@@ -548,11 +548,21 @@
  * The owed figure aligns with the running-balance column the rest of the
  * screen is read down, so the two can be scanned together.
  */
+/*
+ * A flex row rather than a two-column grid, since the picture is an optional
+ * third thing and a grid would have to declare a column for it whether it is
+ * there or not - leaving a hole on every card without one.
+ */
 .ledger__card {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: baseline;
+  display: flex;
+  align-items: center;
   column-gap: var(--hr-space-3);
+}
+
+/* Takes the slack, so the owed figure stays against the right-hand edge. */
+.ledger__card-name {
+  flex: 1;
+  min-width: 0;
 }
 
 .ledger__card-name {

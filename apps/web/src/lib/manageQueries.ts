@@ -55,6 +55,8 @@ export interface Bill {
   readonly paidFromAccountId: string | null;
   /** Set when this is a payment toward another account rather than a cost. */
   readonly transferToAccountId: string | null;
+  /** The picture beside the name, or null for none. */
+  readonly imageId: string | null;
   readonly version: number;
 }
 
@@ -95,6 +97,8 @@ export interface AccountEntry {
    * credit card is an account whose balance is money owed rather than held.
    */
   readonly kind: "chequing" | "savings" | "credit_card";
+  /** The picture beside the name, or null for none. */
+  readonly imageId: string | null;
   readonly version: number;
 }
 
@@ -128,6 +132,8 @@ export interface Category {
   readonly section: "fixed" | "variable";
   readonly monthlyCents: Cents;
   readonly yearlyCentsOverride: Cents | null;
+  /** The picture beside the name, or null for none. */
+  readonly imageId: string | null;
   readonly version: number;
 }
 
@@ -215,6 +221,7 @@ export function useCategories() {
           section: "fixed" | "variable";
           monthlyCents: string;
           yearlyCentsOverride: string | null;
+          imageId: string | null;
           version: number;
         }[];
       }>("/api/budget-lines");
@@ -226,6 +233,7 @@ export function useCategories() {
         monthlyCents: toCents(line.monthlyCents),
         yearlyCentsOverride:
           line.yearlyCentsOverride === null ? null : toCents(line.yearlyCentsOverride),
+        imageId: line.imageId,
         version: line.version,
       }));
     },
@@ -269,6 +277,8 @@ export interface BillInput {
   readonly monthlyBudgetOverrideCents?: string | null;
   readonly paidFromAccountId?: string | null;
   readonly transferToAccountId?: string | null;
+  /** The picture beside the name. Null takes it away. */
+  readonly imageId?: string | null;
 }
 
 export function useCreateBill() {
@@ -390,6 +400,8 @@ export interface CategoryInput {
   /** Integer cents, as a string. */
   readonly monthlyCents: string;
   readonly yearlyCentsOverride?: string | null;
+  /** The picture beside the name. Null takes it away. */
+  readonly imageId?: string | null;
 }
 
 export function useCreateCategory() {
@@ -567,7 +579,11 @@ export function useCreateAccount() {
   return useMutation({
     // `kind` absent means chequing, which is what a household's first account
     // is. Savings and a credit card are the same row with a different kind.
-    mutationFn: (input: { name: string; kind?: "chequing" | "savings" | "credit_card" }) =>
+    mutationFn: (input: {
+      name: string;
+      kind?: "chequing" | "savings" | "credit_card";
+      imageId?: string | null;
+    }) =>
       api.post("/api/accounts", input, { idempotencyKey: newIdempotencyKey() }),
     onSuccess: () => invalidateEverything(queryClient),
   });
@@ -577,7 +593,11 @@ export function usePatchAccount() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: { id: string; version: number; changes: { name?: string } }) =>
+    mutationFn: (input: {
+      id: string;
+      version: number;
+      changes: { name?: string; imageId?: string | null };
+    }) =>
       api.patch(`/api/accounts/${input.id}`, input.changes, {
         baseVersion: input.version,
         idempotencyKey: newIdempotencyKey(),

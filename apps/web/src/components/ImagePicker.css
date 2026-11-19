@@ -1,0 +1,154 @@
+/*
+ * The picture control inside an editing sheet.
+ *
+ * No new colour pairs: everything here is a pair `theme-contrast.test.ts`
+ * already holds at 4.5:1 across all five themes.
+ */
+.picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-2);
+}
+
+/* ---- Idle: what is set, and the way in ---- */
+
+.picker__current {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--hr-space-3);
+}
+
+/*
+ * A label with its own file input laid transparently over it, so the whole
+ * thing is the control. `position: relative` is what the input anchors to.
+ */
+.picker__choose {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--hr-touch-min);
+  padding: 0 var(--hr-space-5);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-pill);
+  background: transparent;
+  color: var(--hr-ink);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.picker__choose:hover {
+  background: var(--hr-neutral-bg);
+}
+
+/*
+ * Invisible, but really there and really the size of the button: it is the
+ * focusable control, and a hidden input poked by a button would not be.
+ */
+.picker__file {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  min-height: var(--hr-touch-min);
+  opacity: 0;
+  cursor: pointer;
+}
+
+/* The keyboard focus ring belongs on the label, since the input is clear. */
+.picker__choose:focus-within {
+  outline: 2px solid var(--hr-primary);
+  outline-offset: 2px;
+}
+
+.picker__remove {
+  min-height: var(--hr-touch-min);
+}
+
+/* ---- Cropping ---- */
+
+.picker__crop {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-3);
+}
+
+.picker__hint {
+  color: var(--hr-text-secondary);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+}
+
+/*
+ * The crop surface.
+ *
+ * `touch-action: none` is load-bearing, not tidying: without it a drag scrolls
+ * the sheet and the picture never moves at all. Its size is set inline from
+ * the one constant the crop arithmetic uses, so the two cannot drift.
+ */
+.picker__viewport {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  touch-action: none;
+  /* A button, so its own chrome has to go. Its size comes from the one
+     constant the crop arithmetic uses, set inline. */
+  padding: 0;
+  border: none;
+  /* Far larger than this in practice; declared so the 44px floor is explicit. */
+  min-height: var(--hr-touch-min);
+  border-radius: var(--hr-radius-card);
+  background: var(--hr-neutral-bg);
+  box-shadow: inset 0 0 0 1px var(--hr-card-border);
+  cursor: grab;
+}
+
+.picker__viewport:active {
+  cursor: grabbing;
+}
+
+.picker__viewport:focus-visible {
+  outline: 2px solid var(--hr-primary);
+  outline-offset: 2px;
+}
+
+.picker__source {
+  position: absolute;
+  /* Dragged, so the browser's own image drag must not take over. */
+  user-select: none;
+  -webkit-user-drag: none;
+  max-width: none;
+}
+
+.picker__zoom {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-3);
+}
+
+/*
+ * A real range input, left native apart from its height. The 44px is the
+ * thumb's target, which is the thing a finger has to find.
+ */
+.picker__slider {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--hr-touch-min);
+  accent-color: var(--hr-primary);
+  cursor: pointer;
+}
+
+.picker__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--hr-space-2);
+}
+
+.picker__error {
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-input);
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}

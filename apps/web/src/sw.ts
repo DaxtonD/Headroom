@@ -118,6 +118,36 @@ registerRoute(
   }),
 );
 
+/*
+ * Pictures, kept for ever.
+ *
+ * The one exception to "`/api` must reach the server", and it is a real
+ * exception rather than a convenience. An image URL is content-addressed: the
+ * id is derived from the bytes, so a re-crop produces a NEW id and the old one
+ * never comes to mean something different. There is therefore nothing to go
+ * stale, which is what makes a cache-first answer correct here and wrong for
+ * every other `/api` route.
+ *
+ * It is also what makes the squares survive offline. Offline is a read-only
+ * cache of the last numbers Headroom had, and a ledger of nameless grey
+ * rectangles would be a worse version of that than one with its pictures.
+ *
+ * Bounded, because these are the only bytes the app caches that the household
+ * can add to without limit.
+ */
+registerRoute(
+  /^\/api\/images\//,
+  new CacheFirst({
+    cacheName: "headroom-images",
+    plugins: [
+      new ExpirationPlugin({ maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 365 }),
+      // 200 only. A 401 while the session has lapsed must never be cached as
+      // though it were the picture.
+      new CacheableResponsePlugin({ statuses: [200] }),
+    ],
+  }),
+);
+
 /* -------------------------------------------------------------------------- */
 /* Notifications                                                              */
 /* -------------------------------------------------------------------------- */

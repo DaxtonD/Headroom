@@ -14,6 +14,7 @@
 import { formatCents, formatDateShort, parseCents } from "@headroom/core";
 import { useId, useState } from "react";
 import { Amount, Chip, PaidBadge, VerificationBadge } from "./Badges.js";
+import { Thumb } from "./Thumb.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
 import { conflictFrom, type ConflictInfo, type OccurrenceChange, type TimelineRow } from "../lib/queries.js";
 import "./OccurrenceRow.css";
@@ -191,6 +192,15 @@ export function OccurrenceRow({
         ) : (
           <VerificationBadge verified={row.verified} verifiedBy={row.verifiedBy} />
         )}
+
+        {/*
+          After the badge, not instead of it: the badge is state and this is
+          identity, and both are worth a glance. A row with a picture is a
+          little wider in its left column and so may wrap its name onto a
+          second line - which is already how this row prefers to handle a long
+          name, so it degrades into something the design already does.
+        */}
+        <Thumb imageId={row.imageId} size="row" />
 
         <span className="row__main">
           <span className="row__name">{row.name}</span>

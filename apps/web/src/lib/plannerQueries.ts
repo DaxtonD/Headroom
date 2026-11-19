@@ -37,6 +37,8 @@ export interface BudgetLine {
   /** What the derivation gave, when a stated figure was used instead. */
   readonly derivedMonthlyCents: Cents | null;
   readonly overridden: boolean;
+  /** The picture beside the name, or null for none. */
+  readonly imageId: string | null;
 }
 
 export interface BudgetSection {

@@ -30,6 +30,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| A picture beside a name | done | | 2026-11-19, at the owner's request. Expenses, accounts and budget-only categories; crop and zoom on the phone; bytes in Postgres so they are inside the existing backup. Cannot affect a figure - the engine does not know the table exists |
 
 ## Last session
 
@@ -101,6 +102,129 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## A picture beside a name (2026-11-19, at the owner's request)
+
+> "Is it a difficult task to add images to the expenses, accounts and budget only categories?
+> When adding one allow for attaching an image. It'll appear to the left of the name... The image
+> is published so we both see the same image. This tweak will really make it easy to identify the
+> item."
+
+Not difficult in the sense that matters, and worth saying why: **`packages/core` does not know
+this table exists.** No cents, no signs, no engine, no coverage. It is presentational metadata on
+three tables, so unlike everything else built here it cannot make a figure wrong. The risk is all
+plumbing, and plumbing fails loudly.
+
+Three decisions were theirs, asked before any code:
+
+- **Ledger rows as well as Manage and Budget** - their choice, from two options.
+- **Crop and zoom rather than the app deciding** - their own suggestion, and better than either
+  option offered. A logo wants all of itself kept and a photograph wants its middle, and only the
+  person looking at it knows which this is.
+- **Merge held until this is done**, rather than merging the tested work first.
+
+### Where the bytes live, and why that was the real decision
+
+**In Postgres, not on a volume.** Not for tidiness - because of the backup. The household's is a
+Duplicati job pointed at a folder of database dumps, so pictures on a filesystem would sit
+outside it and nobody would find out until they needed them. It also means no new volume mapping
+on the Unraid server, which is not a change this repository can make anyway.
+
+A cropped icon is some 15KB, so the whole set is smaller than one dump.
+
+### What made it smaller than it looks
+
+- **No new dependency and no multipart.** The picker crops and encodes on the phone, so what
+  arrives is base64 of about 15KB - well inside the 256KB `bodyLimit` already set - and it travels
+  the same Zod validation and the same idempotency machinery as every other write. A multipart
+  parser would be a second body path and a second place for a size limit to be forgotten.
+- **No CSP change.** `img-src` already allows `'self'` and `data:`. That is also why the preview
+  reads the file with `FileReader` rather than `URL.createObjectURL`: a `blob:` URL is **not**
+  allowed, so the obvious choice would have rendered nothing - and only in the built app, where no
+  test looks.
+- **Content-addressed.** The row is insert-only, keyed by uuid, and deduped on the SHA-256 of its
+  bytes. One logo on three subscriptions is one row. A re-crop is a **new** row rather than new
+  bytes at an old id, so an id never changes meaning - which is what lets the response be cached
+  for ever by the browser and by the service worker.
+
+### The integrity rules did not have to bend
+
+A picture is bytes, and every mutation here is a field-level PATCH carrying `If-Match` and an
+`Idempotency-Key`. So the upload is a resource of its own and then an ordinary PATCH sets
+`imageId`. Nothing about section 16 changes, and a half-applied change stays impossible.
+
+Two holes were closed that the database would otherwise have left open:
+
+- **`requireOwnImage`** - `imageId` is a plain foreign key on three tables, so another
+  household's picture would have been accepted. The same hole `requireValidRouting` closes for
+  accounts, closed the same way, with a 400 rather than a 404 so nothing is confirmed about rows
+  outside the household.
+- **`forgetImageIfUnused`** - counts all three tables before deleting. Without it the table grows
+  by a row on every re-crop, and the database is the backup too, so that growth is paid for twice.
+  Counting only the table that changed would delete a shared logo out from under the others.
+
+### Nothing is trusted about the file
+
+`readWebp` reads the real header: the magic bytes have to say WebP whatever the request claims,
+the declared length has to match what arrived - a dropped upload otherwise gets stored and served
+back for ever as a half-drawn square - and the dimensions are read out of the file rather than
+taken from the request. A phone is not a trust boundary.
+
+It is hand-written rather than a decoder, on purpose: this is four byte signatures and three ways
+of writing two integers, and **decoding untrusted bytes is the thing to avoid, not the thing to
+add a dependency for.** Nothing allocates anything proportional to the image's size; it reads
+about thirty bytes.
+
+### The lesson from bugs 24 and 25, applied before the fact
+
+Both of those were arithmetic hidden behind a grep that asserted the code said what the code
+said. So this time the arithmetic was extracted first and tested against numbers:
+
+- **`cropImage.ts`** holds every number as pure functions. 17 tests, including the property
+  everything leans on - **a clamped pan means the crop is always inside the image**, checked
+  across seven shapes, six zooms and twenty-five pans. That is why `cropRect` does no clamping of
+  its own: a second rule that could disagree with the first is exactly what went wrong twice.
+- It caught two real bugs immediately. A zero-size source produced a crop rectangle at -140 with
+  a side of 280 - a `drawImage` call that quietly draws nothing recognisable, reachable by a
+  picture that failed to decode. And `readWebp` refused a minimal lossless WebP, which can
+  legitimately be 25 bytes, because one length floor of 30 was applied to all three formats.
+- **And it caught me doing it again.** The first draft of `cropStyle` in the picker re-derived
+  the cover scale and the offsets by hand for CSS - two copies of one sum with only one of them
+  tested. It now calls `displayedSize` and `imageOffset`, and a test asserts the formula does not
+  reappear in the component.
+
+### Decisions made in the UI, and the reversible direction
+
+- **No placeholder.** A row with no picture draws nothing, so every screen looks exactly as it
+  does today until pictures start arriving. A column of grey initials on the ledger - opened
+  several times a day - would be real noise for no identification, since the name is right there.
+  The misalignment it leaves is temporary by nature: they are adding pictures *because* they want
+  to recognise things. Adding a placeholder later is a change to `Thumb.tsx` alone; taking a bad
+  one away would be a change to every screen.
+- **Beside the badge on a ledger row, not instead of it.** The badge is state and the picture is
+  identity, and both are worth a glance. It makes the left column wider, so a long name may wrap
+  onto a second line - which is already how that row prefers to handle a long name, so it
+  degrades into something the design already does.
+- **A slider for zoom, not a pinch.** One pointer, keyboard-operable, a 44px target, and it does
+  not fight the browser's own pinch-to-zoom on the sheet around it.
+- **The crop surface is a real `<button>`.** Two earlier attempts used `role="group"` and then
+  `role="application"`, and the linter refused both. It was right both times: a thing you focus
+  and drive with the arrow keys is a control, and the way to say that is to be one.
+
+### Known and deliberate: a cancelled form can leave one picture behind
+
+The picker uploads when the crop is confirmed, and the entity is saved afterwards. So abandoning
+the form after cropping leaves a row nothing points at, and `forgetImageIfUnused` never runs for
+it because nothing ever did. **Bounded and tiny** - one abandoned crop is about 15KB - and the
+case that would actually accumulate, re-cropping, is handled. Uploading at save time instead
+would mean the upload and its failure handling in all three forms. Worth revisiting only if the
+table ever looks bigger than it should.
+
+### Verified
+
+1247 tests: 367 engine, 372 web, 508 API. 72 are new - 46 API (18 of them pure byte arithmetic
+with no database) and 26 web. The migration applies to a clean database, lint, typecheck, the web
+build and `check:figures` are clean, and the new API tests pass pinned to another day.
 
 ## The two fast actions on the ledger (2026-11-18, both reported from use)
 
@@ -3121,6 +3245,20 @@ the repository as public" still holds, and it is.
 
 ## Decisions made without asking
 
+- 2026-11-19: **A row with no picture draws nothing** - no placeholder and no grey initial. Every
+  screen therefore looks exactly as it does today until pictures start arriving, and the ledger
+  does not gain a column of letters that identify nothing. It is also the reversible direction:
+  adding a placeholder later is one file, removing a bad one would be every screen.
+- 2026-11-19: **The picture's bytes are in the database rather than on a volume.** The deciding
+  reason is the backup: Duplicati is pointed at a folder of database dumps, so anything on a
+  filesystem would be outside it and nobody would find out until they needed it. It also avoids a
+  new volume mapping on the server, which this repository cannot make anyway.
+- 2026-11-19: **A ledger row takes its picture from its bill, not from the row.** So one change
+  changes every month of it, which is the only thing "change the image" could reasonably mean. A
+  one-off has none: there is nothing recurring to recognise.
+- 2026-11-19: **The size limit is hard-coded rather than an environment variable**, matching
+  `bodyLimit` in `app.ts`. It is a safety bound on a shape of request, not something a deployment
+  tunes - so no new variable, and nothing to add to `.env.example`.
 - 2026-11-18: **"Has it happened?" defaults to yes on a one-off.** The complaint was about the
   extra step, so a choice defaulting the other way would be the same number of taps as before.
   The old behaviour is one tap away and plainly labelled. If it turns out that what gets typed in
@@ -3346,7 +3484,7 @@ pnpm -F @headroom/api db:generate
 pnpm -F @headroom/core build
 
 node scripts/testdb.mjs up      # throwaway Postgres for tests
-pnpm test                       # 1156 tests: 367 engine, 327 web, 462 API
+pnpm test                       # 1247 tests: 367 engine, 372 web, 508 API
 pnpm lint && pnpm typecheck
 pnpm build
 node scripts/testdb.mjs down

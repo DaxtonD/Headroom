@@ -59,6 +59,7 @@ interface AccountWire {
   readonly extremeCents: string;
   readonly scheduledInCents: string;
   readonly needsPayment: boolean;
+  readonly imageId: string | null;
 }
 
 interface DashboardWire {
@@ -120,6 +121,7 @@ interface TimelineRowWire {
   readonly transferToAccountId: string | null;
   readonly version: number;
   readonly fromTemplate: boolean;
+  readonly imageId: string | null;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -176,6 +178,14 @@ export interface Account {
    * looks healthy. It is shown inside the hero, not below it.
    */
   readonly needsPayment: boolean;
+  /**
+   * The picture beside the name, or null for none.
+   *
+   * An id, not a URL: the component builds `/api/images/<id>`, which is
+   * immutable because a re-crop produces a new id rather than new bytes at
+   * the old one.
+   */
+  readonly imageId: string | null;
 }
 
 export interface Dashboard {
@@ -256,6 +266,13 @@ export interface TimelineRow {
   readonly paidFromAccountId: string | null;
   /** Set when this row is a payment toward another account. */
   readonly transferToAccountId: string | null;
+  /**
+   * The picture, taken from the bill this row came from.
+   *
+   * So changing a bill's picture changes every row of it. A one-off has none:
+   * there is nothing recurring to recognise.
+   */
+  readonly imageId: string | null;
   readonly version: number;
 }
 
@@ -567,6 +584,28 @@ export function usePatchOccurrence() {
         },
       ),
     onSuccess: () => invalidateMoney(queryClient),
+  });
+}
+
+/**
+ * Store a cropped picture, and get back the id to point something at.
+ *
+ * Its own request, because a picture is bytes and every other write here is a
+ * field-level PATCH carrying `If-Match`. Uploading separately and then setting
+ * `imageId` as an ordinary field means none of those rules has to bend.
+ *
+ * Nothing is invalidated on success: an image is immutable and content-
+ * addressed, so there is no cached list of them to be stale. What changes a
+ * screen is the PATCH that points at it, and that invalidates as usual.
+ */
+export function useUploadImage() {
+  return useMutation({
+    mutationFn: (input: { base64: string; idempotencyKey?: string }) =>
+      api.post<{ image: { id: string; width: number; height: number } }>(
+        "/api/images",
+        { base64: input.base64 },
+        { idempotencyKey: input.idempotencyKey ?? newIdempotencyKey() },
+      ),
   });
 }
 

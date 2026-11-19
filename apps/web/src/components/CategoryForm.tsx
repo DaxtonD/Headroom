@@ -19,6 +19,7 @@ import {
   usePatchCategory,
   type Category,
 } from "../lib/manageQueries.js";
+import { ImagePicker } from "./ImagePicker.js";
 import { Field, RemoveButton, Sheet } from "./Sheet.js";
 
 export function CategoryForm({
@@ -38,6 +39,8 @@ export function CategoryForm({
     existing ? formatCents(existing.monthlyCents, { currencySymbol: false, grouping: false }) : "",
   );
   const [section, setSection] = useState<"fixed" | "variable">(existing?.section ?? "variable");
+  /** The picture beside the name. Uploaded when cropped, saved with the form. */
+  const [imageId, setImageId] = useState<string | null>(existing?.imageId ?? null);
 
   // Spelled out rather than `existing?.yearlyCentsOverride !== null`, which is
   // true for a new category because `undefined !== null`.
@@ -115,6 +118,7 @@ export function CategoryForm({
             section,
             monthlyCents: monthlyCents.toString(),
             yearlyCentsOverride: yearlyValue,
+            imageId,
           },
         });
       } else {
@@ -123,6 +127,7 @@ export function CategoryForm({
           section,
           monthlyCents: monthlyCents.toString(),
           yearlyCentsOverride: yearlyValue,
+          imageId,
         });
       }
       onClose();
@@ -193,6 +198,8 @@ export function CategoryForm({
           required
         />
       </Field>
+
+      <ImagePicker value={imageId} onChange={setImageId} disabled={saving} />
 
       <Field label="Fixed or variable?" htmlFor={ids.section}>
         <select
