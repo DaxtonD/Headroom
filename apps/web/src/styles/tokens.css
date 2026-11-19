@@ -98,6 +98,18 @@
   /* ---- Touch targets: 44px minimum, an M5 acceptance criterion ---- */
   --hr-touch-min: 44px;
 
+  /*
+   * How tall the sticky app header is, for anything that has to sit directly
+   * below it.
+   *
+   * `Shell.tsx` measures the real header and overwrites this on the document
+   * element, because the true figure includes `env(safe-area-inset-top)` and
+   * so differs between a browser tab and an installed app. This value is only
+   * what holds for the frame before that runs: one line of text, 44px
+   * controls, 12px of padding each side and the hairline under it.
+   */
+  --hr-header-h: 69px;
+
   /* ---- Spacing ---- */
   --hr-space-1: 4px;
   --hr-space-2: 8px;

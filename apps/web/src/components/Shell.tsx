@@ -9,8 +9,10 @@
  * Writes are online-only on purpose: queueing an edit to money and replaying
  * it later is the failure this design exists to prevent (section 16.2 rule 2).
  */
+import { useEffect, useRef } from "react";
 import { NavLink } from "react-router";
 import { firstNameOf } from "../lib/people.js";
+import { trackHeaderHeight } from "../lib/pinnedHeader.js";
 import { useSettingsRoute } from "../lib/settingsRoute.js";
 import type { LiveStatus } from "../lib/useLiveUpdates.js";
 import "./Shell.css";
@@ -49,9 +51,22 @@ export function Shell({
 }): React.JSX.Element {
   const settings = useSettingsRoute();
 
+  /*
+   * Publish the header's own height, so a screen can pin something directly
+   * below it - the ledger's balance line does. `pinnedHeader.ts` says why it
+   * has to be measured rather than written down, and owns the measuring; this
+   * only hands it the element and tidies up after.
+   */
+  const headerRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    const header = headerRef.current;
+    if (!header) return undefined;
+    return trackHeaderHeight(header);
+  }, []);
+
   return (
     <div className="shell-layout">
-      <header className="shell-header">
+      <header className="shell-header" ref={headerRef}>
         <p className="shell-header__wordmark">Headroom</p>
 
         <div className="shell-header__right">

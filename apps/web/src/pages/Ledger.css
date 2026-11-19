@@ -48,14 +48,29 @@
   font-size: 0.875rem;
 }
 
-.ledger__update {
+/*
+ * Both buttons, side by side, and stacked when there is not room for two.
+ *
+ * `auto-fit` rather than a media query: what decides is whether two readable
+ * labels fit in the hero, which depends on the text scale as much as the
+ * phone. At 150px each they sit side by side on anything from a small phone
+ * up, and drop to one column rather than becoming two truncated words.
+ */
+.ledger__hero-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--hr-space-2);
   margin-top: var(--hr-space-4);
+}
+
+.ledger__hero-action {
   width: 100%;
+  /* Inverted against the hero: the same two colours, the other way round. */
   background: var(--hr-hero-text);
   color: var(--hr-hero-bg);
 }
 
-.ledger__update:hover:not(:disabled) {
+.ledger__hero-action:hover:not(:disabled) {
   background: var(--hr-hero-raise);
 }
 
@@ -104,6 +119,151 @@
   color: var(--hr-hero-muted);
   font-size: 0.8125rem;
   line-height: 1.45;
+}
+
+/*
+ * The bottom edge of the hero: a marker with no height, watched by
+ * `pinnedHeader.ts`.
+ *
+ * The negative margin cancels the gap `.ledger` would otherwise put around
+ * it. A zero-height child of a flex column with a gap is not free.
+ */
+.ledger__hero-end {
+  /*
+   * 1px and not 0. A zero-area target is handled by the Intersection Observer
+   * spec, and has historically been handled inconsistently by browsers - and
+   * the failure is silent: the bar simply never arrives. One pixel with no
+   * background costs nothing and leaves nothing to find out the hard way.
+   */
+  height: 1px;
+  /* Cancels the gap `.ledger` would put around it; it is not a row. */
+  margin-top: calc(var(--hr-space-4) * -1);
+}
+
+/* ---- The pinned line, once the hero has gone ---- */
+
+/*
+ * Fixed, not sticky, and that is the whole design.
+ *
+ * Sticky would mean this took up space in the scroll, so arriving and leaving
+ * would change how tall the page is - and a page that gets shorter when the
+ * bar appears scrolls up, which can take the hero back into view, which hides
+ * the bar again. Fixed takes it out of the flow entirely: the document is
+ * exactly as tall either way, so nothing it does can move the page.
+ *
+ * `top` is the measured header height, published by `Shell.tsx`, and the
+ * z-index puts it under the header (10) and under anything modal (50). So it
+ * slides out from behind the header rather than over the top of it, which is
+ * what makes it read as the hero changing shape.
+ */
+.ledger__pinned {
+  position: fixed;
+  top: var(--hr-header-h);
+  left: 0;
+  right: 0;
+  z-index: 9;
+  background: var(--hr-hero-bg);
+  color: var(--hr-hero-text);
+  border-bottom: 1px solid var(--hr-hero-divider);
+  box-shadow: var(--hr-shadow-hero);
+  opacity: 0;
+  transform: translateY(-100%);
+  /* Belt and braces with `inert`, which is what really takes it out. */
+  pointer-events: none;
+  transition: opacity 140ms ease, transform 200ms ease;
+}
+
+.ledger__pinned--shown {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Lines up with `.shell-main`, so the figures sit under the ones above. */
+.ledger__pinned-inner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  width: 100%;
+  min-width: 0;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: var(--hr-space-1) var(--hr-space-4);
+}
+
+.ledger__pinned-figures {
+  display: flex;
+  align-items: baseline;
+  gap: var(--hr-space-2);
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ledger__pinned-amount {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+}
+
+/* First to go when the line is tight; the balance never truncates. */
+.ledger__pinned-safe {
+  overflow: hidden;
+  color: var(--hr-hero-muted);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ledger__pinned-buttons {
+  display: flex;
+  flex: none;
+  gap: var(--hr-space-2);
+}
+
+/*
+ * Outlined rather than filled, and short labels.
+ *
+ * Two solid buttons in a 52px line read as a toolbar and crowd out the figure
+ * that the line exists to show. The full wording is three words away in the
+ * hero; here they only have to be unmistakable.
+ */
+.ledger__pinned-button {
+  min-height: var(--hr-touch-min);
+  padding: 0 var(--hr-space-3);
+  border: 1px solid var(--hr-hero-divider);
+  border-radius: var(--hr-radius-pill);
+  background: transparent;
+  color: var(--hr-hero-text);
+  font-size: 0.875rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.ledger__pinned-button:hover:not(:disabled) {
+  background: var(--hr-hero-track);
+}
+
+.ledger__pinned-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/*
+ * Asked not to be moved: no slide and no fade, it is simply there or not.
+ *
+ * Last of the three rules on purpose. A media query carries no extra
+ * specificity, so source order is what makes this win over
+ * `.ledger__pinned--shown` above.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .ledger__pinned {
+    transform: none;
+    transition: none;
+  }
 }
 
 /* ---- Coverage ---- */
@@ -279,9 +439,23 @@
   font-size: 0.875rem;
 }
 
-.ledger__actions {
-  display: flex;
-  justify-content: center;
+/*
+ * Desktop: clear of the left nav, and lined up with the wider content.
+ *
+ * `.shell-main` is 880px with a 24px gutter there, and the nav is a real
+ * 220px column rather than a bar at the bottom - so a bar pinned from the
+ * left edge would sit across it.
+ */
+@media (min-width: 1024px) {
+  .ledger__pinned {
+    left: 220px;
+  }
+
+  .ledger__pinned-inner {
+    max-width: 880px;
+    margin: 0;
+    padding: var(--hr-space-1) var(--hr-space-5);
+  }
 }
 
 /* ---- The bottom line ---- */

@@ -21,6 +21,14 @@
  *  - **Room to save**, which is new here: what could go into savings out of
  *    this window without pushing any later balance below the cushion. It is
  *    what turns a third paycheque from "silently absorbed" into a decision.
+ *
+ * One scroll has one cost, and it took using the screen to see it: the two
+ * things you came here to do leave the top of the page as soon as you look at
+ * anything. So both buttons are in the hero, side by side - "Add a one-off"
+ * was at the bottom, under four pay windows, which is a long way to scroll to
+ * record something that has just happened - and once the hero has gone behind
+ * the header a single line takes its place carrying the balance, what is safe
+ * to spend, and both buttons again. Asked for from use, in those words.
  */
 import { formatCents, formatDateShort } from "@headroom/core";
 import { useCallback, useId, useMemo, useState } from "react";
@@ -35,6 +43,7 @@ import {
 } from "../lib/explain.js";
 import { useBackDismiss } from "../lib/backDismiss.js";
 import { useLaunchedBy } from "../lib/launchAction.js";
+import { useScrolledPast } from "../lib/pinnedHeader.js";
 import {
   useDashboard,
   usePatchOccurrence,
@@ -64,8 +73,18 @@ export function Ledger({
   // conflict with the other phone, and the one-off form reports its own. An
   // error banner up here would be a second place to look for the same news.
   const [expandedId, setExpandedId] = useState<string | null>(null);
-  // Opened by the button below the list, or by the manifest shortcut.
+  // Opened by either copy of the button, or by the manifest shortcut.
   const [addingOneOff, setAddingOneOff] = useState(useLaunchedBy("add-one-off"));
+
+  /*
+   * The hero has gone behind the header, so the pinned line takes over.
+   *
+   * The marker sits at the bottom of the hero, so this turns true at the
+   * moment the last of it disappears and false again as it comes back - which
+   * is what makes the two read as one thing changing shape rather than as a
+   * bar that appears from nowhere.
+   */
+  const [heroEndRef, heroGone] = useScrolledPast();
 
   // An opened row is a step, so Android's Back closes it rather than leaving
   // the ledger.
@@ -188,9 +207,25 @@ export function Ledger({
             })}
           />
         ) : null}
-        <button className="hr-button ledger__update" type="button" onClick={onUpdateBalance}>
-          Update balance
-        </button>
+        {/*
+          Both of them, at the top, side by side - which is where the one that
+          was already here has always been, and where the other one had to
+          come to be any use. They stack on a narrow phone rather than
+          shrinking to two unreadable labels.
+        */}
+        <div className="ledger__hero-actions">
+          <button className="hr-button ledger__hero-action" type="button" onClick={onUpdateBalance}>
+            Update balance
+          </button>
+          <button
+            className="hr-button ledger__hero-action"
+            type="button"
+            disabled={!canEdit}
+            onClick={() => setAddingOneOff(true)}
+          >
+            Add a one-off
+          </button>
+        </div>
 
         <div className="ledger__hero-split">
           <div>
@@ -257,6 +292,70 @@ export function Ledger({
             : `The lowest it gets is ${formatCents(data.lowest.cents)}.`}
         </p>
       </section>
+
+      {/*
+        The bottom edge of the hero, with no height of its own.
+
+        A marker rather than the hero itself: it is the whole thing having
+        gone that matters, and a thing that never changes size cannot start
+        the loop that watching a collapsing element invites. See
+        `pinnedHeader.ts`.
+      */}
+      <div className="ledger__hero-end" ref={heroEndRef} aria-hidden="true" />
+
+      {/*
+        ---- The same figures and the same two buttons, in one line ----
+
+        Fixed below the header, so the page never reflows when it arrives: the
+        document is exactly as tall either way, which is what stops showing
+        the bar from scrolling the page and hiding it again.
+
+        `inert` while it is away, or it would be a second set of buttons
+        sitting in the tab order behind the header where nobody can see what
+        they have focused. While it is showing, its figures are marked
+        `aria-hidden` instead: they are the hero's own numbers a second time,
+        and the hero has already said them.
+      */}
+      <div
+        className={`ledger__pinned${heroGone ? " ledger__pinned--shown" : ""}`}
+        inert={!heroGone}
+      >
+        <div className="ledger__pinned-inner">
+          <p className="ledger__pinned-figures" aria-hidden="true">
+            <span className="ledger__pinned-amount hr-amount">
+              {formatCents(data.balance.cents)}
+            </span>
+            <span className="ledger__pinned-safe">
+              {formatCents(data.safeToSpendNowCents)} safe to spend
+            </span>
+          </p>
+          {/*
+            Short on screen, full when read out. One line has room for a
+            figure or for two full labels and not both - but "Balance" alone
+            does not say what the button does, and the name is the only thing
+            a screen reader has to go on.
+          */}
+          <div className="ledger__pinned-buttons">
+            <button
+              className="ledger__pinned-button"
+              type="button"
+              aria-label="Update balance"
+              onClick={onUpdateBalance}
+            >
+              Balance
+            </button>
+            <button
+              className="ledger__pinned-button"
+              type="button"
+              aria-label="Add a one-off"
+              disabled={!canEdit}
+              onClick={() => setAddingOneOff(true)}
+            >
+              One-off
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/*
         ---- The cards ----
@@ -382,21 +481,6 @@ export function Ledger({
         </ol>
       )}
 
-      {/*
-        The spreadsheet's "add a few extra rows": a dentist bill, or an extra
-        amount into savings because a third cheque landed.
-      */}
-      <div className="ledger__actions">
-        <button
-          className="hr-button"
-          type="button"
-          disabled={!canEdit}
-          onClick={() => setAddingOneOff(true)}
-        >
-          Add a one-off
-        </button>
-      </div>
-
       {/* ---- The bottom line ---- */}
       <section className="ledger__footer">
         <p className="ledger__footer-label">Left for gas, groceries &amp; everyday</p>
@@ -411,6 +495,7 @@ export function Ledger({
         <OneOffForm
           paydays={moveTargets}
           accounts={data.accounts}
+          today={data.today}
           onClose={() => setAddingOneOff(false)}
         />
       ) : null}
