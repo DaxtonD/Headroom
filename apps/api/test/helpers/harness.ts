@@ -18,6 +18,7 @@ import type { FastifyInstance } from "fastify";
 import { buildApp } from "../../src/app.js";
 import { createDatabase, type Database } from "../../src/db.js";
 import { parseEnv, type Env } from "../../src/env.js";
+import { todayInZone } from "../../src/lib/timelineService.js";
 
 const API_DIR = resolve(import.meta.dirname, "../..");
 
@@ -27,6 +28,28 @@ const DEFAULT_TEST_DATABASE_URL =
 
 export function testDatabaseUrl(): string {
   return process.env.TEST_DATABASE_URL ?? DEFAULT_TEST_DATABASE_URL;
+}
+
+/** The `Household.timezone` default, which is what `seedHousehold` gets. */
+export const TEST_TIMEZONE = "America/Regina";
+
+/**
+ * A plain date, a given number of days from the household's own today.
+ *
+ * Use this and not `new Date()` with `setUTCHours(0, 0, 0, 0)`, which is the
+ * obvious thing to write and is wrong for six hours out of every twenty-four.
+ * It builds the date in UTC, and the server reckons today in `America/Regina`
+ * - so from 18:00 local onwards UTC has already rolled over and `inDays(0)`
+ * means tomorrow. Two tests written in the afternoon passed all day and went
+ * red that evening, which is a worse way to find this out than a comment.
+ *
+ * `todayInZone` is the server's own function, so there is one answer to
+ * "what day is it" rather than a second one that agrees most of the time.
+ */
+export function inDays(days: number, now: Date = new Date()): string {
+  const at = new Date(`${todayInZone(TEST_TIMEZONE, now)}T00:00:00Z`);
+  at.setUTCDate(at.getUTCDate() + days);
+  return at.toISOString().slice(0, 10);
 }
 
 /**

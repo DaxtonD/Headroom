@@ -23,7 +23,14 @@
  */
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { createHarness, migrateTestDatabase, seedHousehold, signIn, type Harness } from "./helpers/harness.js";
+import {
+  createHarness,
+  inDays,
+  migrateTestDatabase,
+  seedHousehold,
+  signIn,
+  type Harness,
+} from "./helpers/harness.js";
 
 let harness: Harness;
 let cookie: string;
@@ -69,20 +76,15 @@ function get(url: string) {
   return harness.app.inject({ method: "GET", url, headers: { cookie } });
 }
 
-/** A day of the month that is still ahead, so generation reaches it. */
+/**
+ * A day of the month that is still ahead, so generation reaches it.
+ *
+ * Off the household's own today, like `inDays` - see the note on it in the
+ * harness. Reading the day out of a UTC date is wrong for the six hours a day
+ * when UTC has rolled over and Regina has not.
+ */
 function dayInAFewDays(): number {
-  const date = new Date();
-  date.setUTCHours(0, 0, 0, 0);
-  date.setUTCDate(date.getUTCDate() + 3);
-  return date.getUTCDate();
-}
-
-/** A date inside the horizon, whatever today happens to be. */
-function inDays(days: number): string {
-  const date = new Date();
-  date.setUTCHours(0, 0, 0, 0);
-  date.setUTCDate(date.getUTCDate() + days);
-  return date.toISOString().slice(0, 10);
+  return Number(inDays(3).slice(8, 10));
 }
 
 interface WireAccount {
