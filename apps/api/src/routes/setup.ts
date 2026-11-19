@@ -18,6 +18,7 @@ import {
   syncPaychequeDefault,
 } from "../lib/generateService.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
+import { forgetImageIfUnused, requireOwnImage } from "../lib/images.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
 import { wireCents } from "../lib/wire.js";
@@ -72,12 +73,16 @@ const accountCreate = z
      * and nothing else in this row needs to know.
      */
     kind: z.enum(["chequing", "savings", "credit_card"]).optional(),
+    /** The picture beside the name, uploaded to `/api/images` first. */
+    imageId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
 const accountPatch = z
   .object({
     name: z.string().trim().min(1).max(60).optional(),
+    /** The picture beside the name, uploaded to `/api/images` first. */
+    imageId: z.string().uuid().nullable().optional(),
     baseVersion: z.number().int().min(1).optional(),
   })
   .strict();
@@ -95,7 +100,13 @@ function serialiseSchedule(row: PaySchedule & { user?: { id: string; name: strin
 }
 
 function serialiseAccount(row: Account) {
-  return { id: row.id, name: row.name, kind: row.kind, version: row.version };
+  return {
+    id: row.id,
+    name: row.name,
+    kind: row.kind,
+    imageId: row.imageId,
+    version: row.version,
+  };
 }
 
 export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
@@ -485,10 +496,13 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
       requestHash: hashRequest("POST", "/api/accounts", request.body),
       ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
       work: async (tx) => {
+        await requireOwnImage(tx, user.householdId, parsed.data.imageId);
+
         const created = await tx.account.create({
           data: {
             householdId: user.householdId,
             name: parsed.data.name,
+            imageId: parsed.data.imageId ?? null,
             // Absent means chequing, so an existing client keeps working.
             ...(parsed.data.kind === undefined ? {} : { kind: parsed.data.kind }),
             updatedById: user.id,
@@ -545,6 +559,8 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
         });
         if (!existing) throw new HttpError(404, "not_found", "That account no longer exists.");
 
+        await requireOwnImage(tx, user.householdId, changes["imageId"] as string | null | undefined);
+
         const applied = await applyVersionedChange<Account>({
           tx: tx as unknown as PrismaLike,
           entity: "account",
@@ -562,6 +578,16 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
             }),
           snapshot: (row) => ({ version: row.version, name: row.name }),
         });
+
+        /*
+         * The picture it used to have, if nothing points at it any more. A
+         * re-crop is a new row by design, so without this the table grows by
+         * one every time somebody adjusts a picture - and the database is also
+         * the backup, so that growth is paid for twice.
+         */
+        if ("imageId" in changes && existing.imageId !== applied.row.imageId) {
+          await forgetImageIfUnused(tx, existing.imageId);
+        }
 
         await publishChange(tx, {
           householdId: user.householdId,

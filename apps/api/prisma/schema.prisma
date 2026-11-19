@@ -184,8 +184,52 @@ model Household {
   bankedHours        BankedHoursEntry[]
   mortgages          Mortgage[]
   retirementSettings RetirementSettings?
+  images             Image[]
 
   @@map("household")
+}
+
+/// An uploaded picture: the little square beside a name.
+///
+/// INSERT-ONLY and content-addressed. `sha256` is the hash of the bytes, so
+/// re-cropping makes a new row rather than changing one, and the same picture
+/// given to two things is stored once. An id therefore never comes to mean
+/// different bytes, which is what lets `/api/images/:id` be cached for ever
+/// and what makes the service worker's copy safe to keep.
+///
+/// The bytes live in the database rather than on a volume, and the reason that
+/// matters is the backup: the household's is a Duplicati job pointed at a
+/// folder of database dumps, so anything on a filesystem would sit outside it
+/// and nobody would find out until they needed it. It also means no new volume
+/// mapping on the server. A cropped icon is some 15KB, so the whole set is
+/// smaller than one dump.
+///
+/// Nothing here is derived and nothing here is money. This table cannot affect
+/// a figure: `packages/core` does not know it exists.
+model Image {
+  id          String @id @default(uuid()) @db.Uuid
+  householdId String @db.Uuid
+  /// Lower-case hex SHA-256 of `bytes`, unique within the household.
+  sha256      String @db.Char(64)
+  bytes       Bytes
+  /// Always `image/webp`. The picker encodes it, so there is one decoder path
+  /// and nothing has to trust what a client claims a file is.
+  contentType String
+  width       Int
+  height      Int
+  byteSize    Int
+
+  createdAt   DateTime @default(now()) @db.Timestamptz(6)
+  createdById String?  @db.Uuid
+
+  household   Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  accounts    Account[]
+  templates   Template[]
+  budgetLines BudgetLine[]
+
+  @@unique([householdId, sha256])
+  @@index([householdId])
+  @@map("image")
 }
 
 model User {
@@ -252,6 +296,9 @@ model Account {
   name        String
   /// Defaults to chequing, which is what every existing row is.
   kind        AccountKind @default(chequing)
+  /// The square beside the name. Null is the default, and what every existing
+  /// row is.
+  imageId     String?     @db.Uuid
 
   version     Int       @default(1)
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
@@ -261,6 +308,7 @@ model Account {
   deletedById String?   @db.Uuid
 
   household Household         @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  image     Image?            @relation(fields: [imageId], references: [id], onDelete: SetNull)
   snapshots BalanceSnapshot[]
   /// Templates that transfer INTO this account. A savings account is an
   /// ordinary Account row; nothing distinguishes it but what points at it.
@@ -275,6 +323,7 @@ model Account {
   transfersInOccurrences Occurrence[] @relation("occurrenceTransferTarget")
 
   @@index([householdId])
+  @@index([imageId])
   @@map("account")
 }
 
@@ -337,6 +386,8 @@ model Template {
   scheduleJson Json
   section      BudgetSection?
   budgetLineId String?        @db.Uuid
+  /// The square beside the name. Null is the default.
+  imageId      String?        @db.Uuid
 
   /// Set this and the template stops being a bill: it is a transfer into that
   /// account.
@@ -390,12 +441,14 @@ model Template {
   household         Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
   owner             User?        @relation("templateOwner", fields: [ownerUserId], references: [id])
   budgetLine        BudgetLine?  @relation(fields: [budgetLineId], references: [id])
+  image             Image?       @relation(fields: [imageId], references: [id], onDelete: SetNull)
   transferToAccount Account?     @relation("templateTransferTarget", fields: [transferToAccountId], references: [id], onDelete: Restrict)
   paidFromAccount   Account?     @relation("templatePaidFrom", fields: [paidFromAccountId], references: [id], onDelete: Restrict)
   occurrences       Occurrence[]
 
   @@index([householdId, active])
   @@index([paidFromAccountId])
+  @@index([imageId])
   @@map("template")
 }
 
@@ -505,6 +558,8 @@ model BudgetLine {
   /// Set only where the yearly figure is not monthly x 12.
   yearlyCentsOverride BigInt?
   sortIndex    Int           @default(0)
+  /// The square beside the name. Null is the default.
+  imageId      String?       @db.Uuid
 
   version     Int       @default(1)
   createdAt   DateTime  @default(now()) @db.Timestamptz(6)
@@ -514,9 +569,11 @@ model BudgetLine {
   deletedById String?   @db.Uuid
 
   household Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  image     Image?     @relation(fields: [imageId], references: [id], onDelete: SetNull)
   templates Template[]
 
   @@index([householdId, section])
+  @@index([imageId])
   @@map("budget_line")
 }
 

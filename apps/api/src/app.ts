@@ -31,6 +31,7 @@ import { registerTemplateRoutes } from "./routes/templates.js";
 import { registerViewRoutes } from "./routes/views.js";
 import { registerYearRoutes } from "./routes/year.js";
 import { registerHealthRoutes } from "./routes/health.js";
+import { registerImageRoutes } from "./routes/images.js";
 import { registerWebApp, webDistDir } from "./routes/web.js";
 import { resolveSessionUser, type SessionUser } from "./auth/session.js";
 import { contentSecurityPolicy, inlineScriptHashes } from "./lib/csp.js";
@@ -197,6 +198,7 @@ export async function buildApp({ env, db, changeStream }: BuildAppOptions): Prom
   await app.register(registerHealthRoutes, { prefix: "/api" });
   await app.register(registerAuthRoutes, { prefix: "/api" });
   await app.register(registerViewRoutes, { prefix: "/api" });
+  await app.register(registerImageRoutes, { prefix: "/api" });
   await app.register(registerOccurrenceRoutes, { prefix: "/api" });
   await app.register(registerBalanceRoutes, { prefix: "/api" });
   await app.register(registerTemplateRoutes, { prefix: "/api" });

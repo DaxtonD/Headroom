@@ -153,6 +153,8 @@ export interface AccountOutlook {
   readonly id: string;
   readonly name: string;
   readonly kind: AccountKind;
+  /** The picture beside the name, or null for none. */
+  readonly imageId: string | null;
   /** The last figure somebody typed in, exactly as they typed it. */
   readonly snapshotCents: bigint;
   readonly asOf: Date | null;
@@ -240,7 +242,7 @@ export async function loadTimelineContext(
     }),
     prisma.account.findMany({
       where: { householdId, deletedAt: null },
-      select: { id: true, name: true, kind: true, createdAt: true },
+      select: { id: true, name: true, kind: true, imageId: true, createdAt: true },
       orderBy: { createdAt: "asc" },
     }),
   ]);
@@ -554,6 +556,7 @@ export async function loadTimelineContext(
       id: row.id,
       name: row.name,
       kind,
+      imageId: row.imageId,
       snapshotCents: snapshots.get(row.id)?.cents ?? 0n,
       asOf: snapshots.get(row.id)?.asOf ?? null,
       enteredBy: snapshots.get(row.id)?.enteredBy ?? null,
@@ -624,6 +627,16 @@ function addDaysToPlainDate(value: PlainDate, days: number): PlainDate {
 export interface OccurrenceDecoration {
   readonly version: number;
   readonly templateId: string | null;
+  /**
+   * The picture beside the name, taken from the bill this row came from.
+   *
+   * On the template rather than the row: a picture belongs to the thing, not
+   * to one month of it, so changing it once changes every row - which is the
+   * only behaviour anybody would expect from "change the image". A one-off has
+   * no template and so has no picture, which is correct: there is nothing
+   * recurring to recognise.
+   */
+  readonly imageId: string | null;
   /** Null means chequing, which is what the UI shows when nothing is set. */
   readonly paidFromAccountId: string | null;
   readonly transferToAccountId: string | null;
@@ -652,6 +665,7 @@ export async function loadOccurrenceDecorations(
       id: true,
       version: true,
       templateId: true,
+      template: { select: { imageId: true } },
       verifiedAt: true,
       paidAt: true,
       paidFromAccountId: true,
@@ -668,6 +682,7 @@ export async function loadOccurrenceDecorations(
       {
         version: row.version,
         templateId: row.templateId,
+        imageId: row.template?.imageId ?? null,
         paidFromAccountId: row.paidFromAccountId,
         transferToAccountId: row.transferToAccountId,
         owner: row.owner,

@@ -76,6 +76,14 @@ function serialiseTimelineRow(row: TimelineRow, decoration: OccurrenceDecoration
     paidFromAccountId: decoration?.paidFromAccountId ?? null,
     /** Set when this row is a payment toward another account. */
     transferToAccountId: decoration?.transferToAccountId ?? null,
+    /**
+     * The picture, taken from the bill this row came from.
+     *
+     * So changing a bill's picture changes every row of it, which is the only
+     * behaviour "change the image" could reasonably mean. A one-off has no
+     * template and so no picture: there is nothing recurring to recognise.
+     */
+    imageId: decoration?.imageId ?? null,
     version: decoration?.version ?? 1,
     fromTemplate: decoration?.templateId !== null,
   };
@@ -93,6 +101,7 @@ function serialiseAccount(account: AccountOutlook) {
     id: account.id,
     name: account.name,
     kind: account.kind,
+    imageId: account.imageId,
     cents: account.effectiveCents,
     snapshotCents: account.snapshotCents,
     asOf: account.asOf?.toISOString() ?? null,

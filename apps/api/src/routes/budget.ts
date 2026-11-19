@@ -19,6 +19,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
+import { forgetImageIfUnused, requireOwnImage } from "../lib/images.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
 import { scheduleSchema } from "../lib/generateService.js";
@@ -33,6 +34,8 @@ const createBody = z
     /** Only where the yearly cost is not twelve times the monthly one. */
     yearlyCentsOverride: wireCents.nullable().optional(),
     sortIndex: z.number().int().min(0).max(100_000).optional(),
+    /** The picture beside the name, uploaded to `/api/images` first. */
+    imageId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -43,6 +46,14 @@ const patchBody = z
     monthlyCents: wireCents.optional(),
     yearlyCentsOverride: wireCents.nullable().optional(),
     sortIndex: z.number().int().min(0).max(100_000).optional(),
+    /**
+     * The picture beside the name, or null to take it away.
+     *
+     * An ordinary field like any other, which is the point of uploading the
+     * bytes separately: this is a field-level PATCH carrying `If-Match` and an
+     * `Idempotency-Key`, exactly as every other change is.
+     */
+    imageId: z.string().uuid().nullable().optional(),
     baseVersion: z.number().int().min(1).optional(),
   })
   .strict();
@@ -67,6 +78,7 @@ function serialiseLine(row: BudgetLine) {
     monthlyCents: row.monthlyCents.toString(),
     yearlyCentsOverride: row.yearlyCentsOverride?.toString() ?? null,
     sortIndex: row.sortIndex,
+    imageId: row.imageId,
     version: row.version,
   };
 }
@@ -317,6 +329,8 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
       requestHash: hashRequest("POST", "/api/budget-lines", request.body),
       ttlHours: app.env.IDEMPOTENCY_KEY_TTL_HOURS,
       work: async (tx) => {
+        await requireOwnImage(tx, user.householdId, input.imageId);
+
         const created = await tx.budgetLine.create({
           data: {
             householdId: user.householdId,
@@ -325,6 +339,7 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
             monthlyCents: input.monthlyCents,
             yearlyCentsOverride: input.yearlyCentsOverride ?? null,
             sortIndex: input.sortIndex ?? 0,
+            imageId: input.imageId ?? null,
             updatedById: user.id,
           },
         });
@@ -390,6 +405,8 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
         });
         if (!existing) throw new HttpError(404, "not_found", "That budget line no longer exists.");
 
+        await requireOwnImage(tx, user.householdId, changes["imageId"] as string | null | undefined);
+
         const applied = await applyVersionedChange<BudgetLine>({
           tx: tx as unknown as PrismaLike,
           entity: "budget_line",
@@ -407,6 +424,16 @@ export async function registerBudgetRoutes(app: FastifyInstance): Promise<void> 
             }),
           snapshot: snapshotLine,
         });
+
+        /*
+         * The picture it used to have, if nothing points at it any more. A
+         * re-crop is a new row by design, so without this the table grows by
+         * one every time somebody adjusts a picture - and the database is also
+         * the backup, so that growth is paid for twice.
+         */
+        if ("imageId" in changes && existing.imageId !== applied.row.imageId) {
+          await forgetImageIfUnused(tx, existing.imageId);
+        }
 
         await publishChange(tx, {
           householdId: user.householdId,

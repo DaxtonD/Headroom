@@ -16,6 +16,7 @@ import {
 } from "../lib/generateService.js";
 import { HttpError, hashRequest, requireBaseVersion, requireIdempotencyKey } from "../lib/http.js";
 import { requireValidRouting, routingAfter } from "../lib/accounts.js";
+import { forgetImageIfUnused, requireOwnImage } from "../lib/images.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { labelKindFor } from "../lib/activityLabels.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
@@ -43,6 +44,8 @@ const createBody = z
     section: z.enum(["income", "fixed", "variable"]).nullable().optional(),
     /** Overrides the monthly figure Headroom would derive from the cadence. */
     monthlyBudgetOverrideCents: centsSchema.nullable().optional(),
+    /** The picture beside the name, uploaded to `/api/images` first. */
+    imageId: z.string().uuid().nullable().optional(),
     active: z.boolean().optional(),
     /**
      * Which account this comes out of. Null or absent means chequing.
@@ -77,6 +80,14 @@ const patchBody = z
     schedule: scheduleSchema.optional(),
     paidFromAccountId: z.string().uuid().nullable().optional(),
     transferToAccountId: z.string().uuid().nullable().optional(),
+    /**
+     * The picture beside the name, or null to take it away.
+     *
+     * An ordinary field like any other, which is the point of uploading the
+     * bytes separately: this is a field-level PATCH carrying `If-Match` and an
+     * `Idempotency-Key`, exactly as every other change is.
+     */
+    imageId: z.string().uuid().nullable().optional(),
     baseVersion: z.number().int().min(1).optional(),
   })
   .strict();
@@ -96,6 +107,7 @@ function serialiseTemplate(row: Template) {
     active: row.active,
     paidFromAccountId: row.paidFromAccountId,
     transferToAccountId: row.transferToAccountId,
+    imageId: row.imageId,
     version: row.version,
   };
 }
@@ -195,6 +207,7 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
           paidFromAccountId: input.paidFromAccountId ?? null,
           transferToAccountId: input.transferToAccountId ?? null,
         });
+        await requireOwnImage(tx, user.householdId, input.imageId);
 
         const created = await tx.template.create({
           data: {
@@ -211,6 +224,7 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
             active: input.active ?? true,
             paidFromAccountId: input.paidFromAccountId ?? null,
             transferToAccountId: input.transferToAccountId ?? null,
+            imageId: input.imageId ?? null,
             updatedById: user.id,
           },
         });
@@ -285,6 +299,7 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
         if (!existing) throw new HttpError(404, "not_found", "That template no longer exists.");
 
         await requireValidRouting(tx, user.householdId, routingAfter(existing, changes));
+        await requireOwnImage(tx, user.householdId, changes["imageId"] as string | null | undefined);
 
         const applied = await applyVersionedChange<Template>({
           tx: tx as unknown as PrismaLike,
@@ -318,6 +333,16 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
           snapshot: snapshotTemplate,
           labelKind: labelKindFor(existing.kind),
         });
+
+        /*
+         * The picture it used to have, if nothing points at it any more. A
+         * re-crop is a new row by design, so without this the table grows by
+         * one every time somebody adjusts a picture - and the database is also
+         * the backup, so that growth is paid for twice.
+         */
+        if ("imageId" in changes && existing.imageId !== applied.row.imageId) {
+          await forgetImageIfUnused(tx, existing.imageId);
+        }
 
         await publishChange(tx, {
           householdId: user.householdId,
