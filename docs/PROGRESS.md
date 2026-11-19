@@ -28,6 +28,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Production seeded from the workbooks | done | | Net worth, retirement and the mortgage, at the owner's request on 2026-11-15. Backed up and rehearsed on a restored copy first |
 | The balance follows a tick | done | | Bug 16 revisited 2026-11-17, the owner's own design. Marking a bill paid lowers the balance shown and the row stays on the ledger, marked |
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
+| A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
+| Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons |
 
 ## Last session
 
@@ -57,7 +59,14 @@ Claude Code updates this file at the end of every milestone and every work sessi
   revised after they found that three of its sections were read-only.
 - **Biweekly/monthly redesign** - done, untagged. The whole of the agreed plan: engine, schema,
   API, the Year screen, the Savings screen, and the ledger merge.
-- **M5, M6** - not started.
+- **M5 PWA + desktop polish** - done, tagged `m5` at 4f007a7, installed and in daily use.
+- **M6 Ops** - **empty.** All three of its items were retired or taken over by the owner on
+  2026-11-14; see "Scope settled" and the status table.
+
+**The six bullets above this heading describe the run that ended on 2026-11-08 and are kept for
+the shape of it. They are not the current state** - they say 796 tests and "M5, M6 not started",
+both of which were true then. The status table at the top of this file is the current state, and
+the dated sections below are newest-first.
 
 ## Next session: start here
 
@@ -71,16 +80,17 @@ Claude Code updates this file at the end of every milestone and every work sessi
 4. **The owner is setting up the real household** through Unraid's Docker Manager, entering the
    environment variables by hand so no real value is in a file. `docs/DEPLOY.md` has the runbook.
    Only three variables have no default: `APP_ORIGIN`, `DATABASE_URL`, `SESSION_SECRET`.
-5. The redesign is finished, so **M5 next**: PWA and polish. `vite-plugin-pwa` is a dependency but is not wired up, so
-   there is no manifest, no icons and no service worker. Needs: the installable manifest and
-   icons, the read-only offline cache behind the "Offline, as of ..." banner that
-   `useLiveUpdates` already drives, the App Badging API for the count of unverified bills, an
-   "Update balance" manifest shortcut, desktop layouts, and the accessibility pass
-   (44px targets, 4.5:1 contrast).
-6. Then M6: backup sidecar with a tested restore, `import-seed` for the real figures, and
-   finishing `docs/DEPLOY.md`. The GHCR image is done early, since the owner needed something to pull;
-   `scripts/backup.mjs` covers dump/verify/restore by hand, so M6's remaining job there is the
-   scheduled sidecar.
+5. **Items 3 and 4 above still hold. Items 5 and 6 used to say "M5 next: the PWA is not wired
+   up" and "then M6", and both were overtaken months of work ago** - rewritten 2026-11-18 after
+   the same kind of stale line in `CLAUDE.md` was read as meaning the M5 work had never been
+   pushed. Every milestone through `m5` is done and tagged on the remote, M6 is empty by the
+   owner's decision, and the app is installed and in daily use. **Where the work actually is:
+   whatever the owner is testing on the `dev` branch**, which has its own image
+   (`ghcr.io/daxtond/headroom:dev`) and its own container and database - see
+   `docs/DEPLOY.md`, "A second container, for trying things first".
+6. There are open questions below, not open milestones. Each has a defensible default built and
+   editable in the app, so none of them blocks anything; any one of them could still be quietly
+   wrong in the budget actually in use.
 
 **Constraint on `import-seed`, found 2026-11-08 while answering a question from the owner.** It must
 create **templates** and then run generation - never insert occurrences directly. Most of the demo
@@ -91,6 +101,141 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## The two fast actions on the ledger (2026-11-18, both reported from use)
+
+Two things asked for after a few days of running the household on the new screens, and they
+turn out to be the same complaint from two directions: the ledger is one long scroll with the
+figure at the top, which is right - and the two things you actually came to do were either an
+extra step or a long way down.
+
+### 1. A one-off arrives with its tick on
+
+> "When I add a one-off, it's placed on the ledger. I then have to open it again to mark it as
+> paid."
+
+Two steps to say one thing, and the wrong two. A one-off is nearly always typed in **after** the
+fact - a bill paid at the counter, a payment made to a card on the bank's own app - so the row
+being added is a record, not a plan. The old form only knew how to add plans.
+
+So the form asks **"Has it happened?"** and defaults to yes. A one-off created that way carries
+`paid` from the start, which moves the balance from the one request: name, amount, Add it, and
+nothing to go back and find.
+
+**`paid` on create means exactly what `paid` on a PATCH means.** Same two columns, same audit
+entry, same `settledMoment`. That is not a detail - it is what stops this being a second kind of
+state that every figure in the engine then has to know about, and there is a test comparing the
+two routes row for row, because the day they diverge is the day a figure disagrees with itself.
+
+Two things follow from "already done", and both are the kind that only show up once:
+
+- **It is always dated, and the paycheque choice is not offered.** A cheque to hang off is a way
+  of moving a payment that has not been made yet; there is nothing to move about one that has.
+- **Already done and a future date cannot both be true.** This one matters more than it looks: a
+  settled row is left out of the forecast, so a future payment marked done would quietly stop
+  counting towards anything at all. The form refuses it, where the date being argued about is on
+  screen. The API still takes it, because the same state has always been reachable by ticking a
+  future row by hand, and a rule in one route and not the other is worse than the thing it
+  guards against.
+
+The default date is **the server's today**, passed down from the dashboard, not `new Date()` on
+the phone. A phone the wrong side of midnight would otherwise date a payment yesterday - and
+that is not hypothetical, see the test helper below.
+
+It does **not** mark the amount verified. Those are two different statements: "paid" is what
+happened to the money, "verified" is somebody having confirmed the figure against a bill. A
+settled row is left out of the estimate count anyway, so there was nothing to gain by quietly
+asserting the second one.
+
+### 2. Both buttons at the top, and a line that stays
+
+> "Let's move the Add a one-off button to the top. Maybe beside the Update balance button? When
+> the screen is scrolled up the Balance and both buttons morph into a single-line sticky heading
+> that stays when the screen is scrolled."
+
+"Add a one-off" was at the very bottom, under every pay window - a long scroll to record
+something that had just happened. Both buttons are now in the hero, side by side, and they stack
+rather than truncating when two labels will not fit. The bottom copy is gone rather than
+duplicated: a second place to look for the same button is its own small cost.
+
+Once the hero has gone behind the header, a single line takes over carrying the balance, what is
+safe to spend, and both buttons again.
+
+**It is fixed, not sticky, and that is the whole design.** Sticky would mean it took up space in
+the scroll, so the page would get *shorter* when it appeared - which scrolls up, which can bring
+the hero back into view, which hides it again. A bar that flickers at one scroll position is the
+classic version of this and it is unfixable once the shape is wrong. Fixed takes it out of the
+flow entirely: the document is exactly as tall either way, so nothing the bar does can move the
+page.
+
+Three smaller decisions, each of which is a bug if reversed:
+
+- **It sits under the header in the stack** (z-index 9 against the header's 10), so it slides out
+  from behind the header rather than over the top of it. That is what makes the two read as the
+  hero changing shape rather than as a bar appearing from nowhere - which is as close to the
+  "morph" asked for as two separate elements get.
+- **`top` is measured, not written down.** The header is a line of text plus 44px controls plus
+  `env(safe-area-inset-top)`, which is 0 in a browser tab, something else in an installed app,
+  and changes on rotation. `Shell.tsx` measures the real header with a `ResizeObserver` and
+  publishes `--hr-header-h`; `tokens.css` declares a static default for the frame before that
+  runs.
+- **It is `inert` while it is away.** Otherwise it is a second Update balance and a second Add a
+  one-off sitting in the tab order, behind the header, where nobody can see what they have
+  focused. While it is showing, its figures are `aria-hidden` instead - they are the hero's own
+  numbers a second time, and the hero has already said them. The buttons stay real, because a
+  sighted keyboard user has to be able to reach them.
+
+Watched with an `IntersectionObserver` on a 1px marker at the bottom of the hero, not a scroll
+handler: a scroll handler does this work on the main thread on every frame of every flick, and
+an observer fires twice. The marker is 1px rather than 0 because a zero-area target has
+historically been reported inconsistently, and the failure is silent - the bar simply never
+arrives. No new colours: the line uses `--hr-hero-bg` and `--hr-hero-text`, already held at
+4.5:1 across all five themes.
+
+### A timezone bug in a test helper, found by the clock
+
+Two of the credit-card tests written this morning went red this evening, having passed all day.
+Nothing had changed about them.
+
+Their `inDays()` helper built dates with `new Date()` and `setUTCHours(0, 0, 0, 0)` - which is
+the obvious thing to write and is **wrong for six hours out of every twenty-four**. It builds the
+date in UTC while the server reckons today in `America/Regina`, so from 18:00 local onwards UTC
+has already rolled over and `inDays(0)` quietly means tomorrow. Both failing tests were the ones
+where "today exactly" matters: a row dated tomorrow is not a clearable candidate.
+
+Now one helper in the harness, built on the server's own `todayInZone`, so there is one answer to
+"what day is it" rather than a second one that agrees most of the time. `PIN_DATE` could not have
+caught this - it pins to midday UTC on purpose, which is the half of the day where the two agree.
+
+### `PIN_DATE` cannot make the whole API suite green, and never could
+
+Worth writing down, because `CLAUDE.md` lists the pinned run as a command and reads as though it
+should pass. `clock.test.ts` and `databaseTimezone.test.ts` both assert that the app's clock and
+the **database's** clock agree to within a minute, and `pinclock.ts` fakes only the app's - as its
+own comment says it must, or Fastify and Prisma would never resolve anything. Pinned to a date a
+month out, those two necessarily fail by a month.
+
+Nothing is wrong with any of the three files. Either the two clock tests should skip themselves
+when `PIN_DATE` is set, or the command's note should say to expect them - **left for the owner to
+choose**, because quietly editing somebody's clock tests to make a command look green is the
+wrong instinct. The new work here passes pinned.
+
+### Verified
+
+367 engine, 316 web and 462 API tests, 1145 in all. 12 of the API tests are new and run against
+real Postgres, including the household's own case end to end: a one-off created already done
+moves the balance from the one request, is the same row as one created and then ticked, and moves
+both balances when it is a payment toward a card. 21 new web source checks cover the display
+side, where there is no DOM to test against - including the three decisions above that are a bug
+if reversed.
+
+One of the new tests has to wait 30ms after typing a balance, and says why: a settled row counts
+toward a typed figure only when it settled *strictly* later, and ties go to the snapshot, which is
+the safe direction. In real time two consecutive requests are milliseconds apart and the order is
+never in doubt; under `PIN_DATE` the faked clock advances in 20ms steps, so two requests inside
+one step read the identical instant and the tick is correctly ignored. The harness being coarse,
+not the app being wrong - so the test states what it depends on rather than the rule being
+loosened to suit it.
 
 ## Credit cards, and which account each row leaves (2026-11-18, decided with the owner)
 
@@ -2897,6 +3042,19 @@ the repository as public" still holds, and it is.
 
 ## Decisions made without asking
 
+- 2026-11-18: **"Has it happened?" defaults to yes on a one-off.** The complaint was about the
+  extra step, so a choice defaulting the other way would be the same number of taps as before.
+  The old behaviour is one tap away and plainly labelled. If it turns out that what gets typed in
+  is more often a plan than a record, this is one line to flip.
+- 2026-11-18: **A one-off created as already done is not marked verified.** Two different
+  statements: "paid" is what happened to the money, "verified" is somebody having confirmed the
+  figure against a bill. A settled row is left out of the estimate count regardless, so there was
+  nothing to gain by asserting the second one on the household's behalf.
+- 2026-11-18: **The pinned line duplicates the hero's figures rather than moving them.** A true
+  morph would mean one element that collapses, which has to be sticky, which makes the page
+  change height as it collapses - and a page that gets shorter scrolls up, which can undo the
+  thing that triggered it. Two elements and a cross-fade cannot do that. The cost is the figures
+  existing twice in the markup, paid for with `aria-hidden` and `inert`.
 - 2026-11-18: **A card balance is stored as what it OWES, a positive magnitude**, like every
   other amount in this database - the kind says whether a figure is owned or owed, which is the
   rule `Asset` already uses for a liability. The engine projects it as a negative balance,
@@ -3109,7 +3267,7 @@ pnpm -F @headroom/api db:generate
 pnpm -F @headroom/core build
 
 node scripts/testdb.mjs up      # throwaway Postgres for tests
-pnpm test                       # 1112 tests: 367 engine, 295 web, 450 API
+pnpm test                       # 1145 tests: 367 engine, 316 web, 462 API
 pnpm lint && pnpm typecheck
 pnpm build
 node scripts/testdb.mjs down
