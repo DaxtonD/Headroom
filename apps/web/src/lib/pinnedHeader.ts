@@ -30,23 +30,40 @@
  * marker never changes size, so nothing here can start the loop that watching
  * a collapsing element invites.
  *
- * ## The bug this file shipped with, because it is the whole subtlety
+ * ## The bug class this file shipped with twice, because it is the whole subtlety
  *
- * The first version asked `!isIntersecting && boundingClientRect.top < 0`,
- * and the bar never appeared once.
+ * An observer fires only when intersection CHANGES. So the answer computed at
+ * that instant is the answer until the next change - and if it is wrong there
+ * is no second chance to correct it. A predicate that disagrees with the
+ * observer's own test by even a pixel therefore does not produce a glitch, it
+ * produces a stuck bar.
  *
- * Those two halves are measured against different edges. `isIntersecting` is
- * against the root as `rootMargin` has adjusted it - the header's bottom, say
- * y=69 - while `boundingClientRect.top` is against the raw viewport. So at
- * the one moment the callback fires, the marker is at y≈68: it has stopped
- * intersecting, and 68 is nowhere near below 0. And because an observer only
- * fires when intersection CHANGES, no later callback ever came to correct it.
- * Scrolling on produced nothing at all.
+ * It happened in both directions, which is what finally named the class:
  *
- * So the comparison is against the root's own top edge, which is the line
- * that decided the callback in the first place. `isPastTheHeader` is exported
- * and tested with real numbers, because the grep that was guarding this
- * asserted the broken expression itself and passed all the way to a phone.
+ *  1. `!isIntersecting && boundingClientRect.top < 0` - and the bar never
+ *     appeared at all. Those halves are measured against different edges:
+ *     `isIntersecting` against the root as `rootMargin` adjusted it (the
+ *     header's bottom, say y=69), `top` against the raw viewport. At the one
+ *     moment the callback fired the marker sat at y≈68, which has stopped
+ *     intersecting and is nowhere near below 0.
+ *  2. `boundingClientRect.top < rootBounds.top` - which fixed going down and
+ *     broke coming back. A 1px marker starts intersecting again when its
+ *     BOTTOM passes the edge, so its top is then at y≈68.4 - still less than
+ *     69, so the bar stayed shown, and scrolling gently to the very top left
+ *     it there, overlapping. Reported from use, in those words.
+ *
+ * Fix 1 also claimed `isIntersecting` "was never doing the work". That was
+ * wrong, and bug 2 is what wrong looked like: it is the browser's own answer
+ * to which side of the edge we are on, and it is the only part of this that
+ * cannot disagree with the observer that produced it.
+ *
+ * So the predicate below is built to one rule: **every ambiguous case must
+ * resolve to the answer a later callback can still correct.** Returning "not
+ * past" while the marker is still intersecting is safe, because leaving will
+ * fire. Returning "past" as it comes back was not, because nothing fires
+ * afterwards. `isPastTheHeader` is exported and tested with real numbers at
+ * both transitions, because the grep that guarded version 1 asserted the
+ * broken expression itself and passed all the way onto a phone.
  */
 import { useEffect, useState } from "react";
 
@@ -96,28 +113,43 @@ export function trackHeaderHeight(header: HTMLElement): () => void {
  * Has the marker gone above the header's bottom edge?
  *
  * Pure, exported and tested, because this is the one line with real geometry
- * in it and the one line that was wrong. `rootBounds.top` is where
- * `rootMargin` put the root's top edge - the header's bottom - and it is the
- * same line the observer used to decide to call us, so the two agree by
- * construction.
+ * in it and the one line that has been wrong twice.
  *
- * Note what is NOT here: a check on `isIntersecting`. It is not needed and it
- * was half of the original mistake. A marker still below the fold is not
- * intersecting either, and this returns false for it because its `top` is a
- * large positive number - well below nothing.
+ * Two parts, and each does a job the other cannot:
+ *
+ *  - **`isIntersecting` settles the direction.** It is the browser's own
+ *    answer to which side of the edge the marker is on, so it cannot
+ *    disagree with the observation it arrived in. Still intersecting means
+ *    still on screen below the header, whatever the sub-pixel arithmetic
+ *    says - and it is the half that makes coming back up correct, because
+ *    the marker starts intersecting again while its top is still above the
+ *    edge.
+ *  - **The BOTTOM edge against the root's top** separates "above" from
+ *    "below the fold", which `isIntersecting` alone cannot: a marker nobody
+ *    has scrolled to yet is not intersecting either.
+ *
+ * The bottom edge and not the top, so this asks the same question the
+ * observer asked - a marker is clear of the root exactly when its bottom has
+ * passed the root's top. That also makes it independent of the marker's
+ * height, which the previous version quietly depended on.
  *
  * `rootBounds` is null in a cross-origin frame, which this app is never in;
- * the fallback is the same figure the margin was built from rather than 0,
- * which would quietly reintroduce the original bug.
+ * the fallback is the figure the margin was built from rather than 0, which
+ * would be version 1 of this bug reached by another route.
  */
 export function isPastTheHeader(
   entry: {
-    readonly boundingClientRect: { readonly top: number };
+    readonly isIntersecting: boolean;
+    readonly boundingClientRect: { readonly bottom: number };
     readonly rootBounds: { readonly top: number } | null;
   },
   headerPx: number,
 ): boolean {
-  return entry.boundingClientRect.top < (entry.rootBounds?.top ?? headerPx);
+  // On screen below the header. Said first, so a tie on the edge below can
+  // never be read as "gone" - that is the one mistake with no way back.
+  if (entry.isIntersecting) return false;
+
+  return entry.boundingClientRect.bottom <= (entry.rootBounds?.top ?? headerPx);
 }
 
 /**

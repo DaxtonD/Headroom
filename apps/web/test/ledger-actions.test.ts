@@ -148,69 +148,127 @@ describe("both buttons at the top", () => {
 });
 
 /*
- * The one piece of real geometry here, and the one that was wrong.
+ * The one piece of real geometry here, and the one that has been wrong twice.
  *
- * The first version of this shipped asking `!isIntersecting &&
- * boundingClientRect.top < 0`, and the bar never appeared once. The two
- * halves are measured against different edges: `isIntersecting` against the
- * root as `rootMargin` adjusted it - the header's bottom, y=69 - and `top`
- * against the raw viewport. At the one moment the callback fires the marker
- * is at y≈68, which has stopped intersecting and is nowhere near below 0; and
- * an observer only fires when intersection CHANGES, so no later callback came
- * to correct it.
+ * An observer fires only when intersection CHANGES, so the answer computed at
+ * that instant stands until the next change. Get it wrong and there is no
+ * second chance: the bar sticks.
  *
- * It was "covered" by a grep asserting that exact expression, which passed
- * all the way onto a phone. Hence this: a pure function and real numbers,
- * which is a test that can disagree with the code.
+ * Both failures were a predicate that disagreed with the observer's own test
+ * by a pixel, in opposite directions:
+ *
+ *  1. `!isIntersecting && top < 0` compared against the raw viewport while
+ *     the observer compared against the margin-adjusted root, so at the one
+ *     moment it fired the marker sat at y≈68 and the bar never appeared.
+ *  2. `top < rootBounds.top` fixed going down and broke coming back: a 1px
+ *     marker starts intersecting again when its BOTTOM passes the edge, so
+ *     its top is then at y≈68.4 - still under 69. Scrolling gently to the top
+ *     left the bar there, overlapping. Reported from use.
+ *
+ * So these are written as the two transitions, with the numbers that bit, and
+ * both directions of each.
  */
 describe("deciding that the hero has gone", () => {
   /** What `rootMargin: "-69px 0 0 0"` makes the root's top edge. */
   const root = { top: FALLBACK_HEADER_PX };
 
-  it("says no while the marker is on screen below the header", () => {
-    expect(isPastTheHeader({ boundingClientRect: { top: 420 }, rootBounds: root }, 69)).toBe(false);
+  /** A 1px marker whose top is at `top`, as an observation would carry it. */
+  const at = (top: number, isIntersecting: boolean) => ({
+    isIntersecting,
+    boundingClientRect: { bottom: top + 1 },
+    rootBounds: root,
   });
 
-  it("says no when the marker has not been reached yet", () => {
-    // Below the fold is not intersecting either, which is why the old
-    // `!isIntersecting` half was never the thing doing the work.
-    expect(isPastTheHeader({ boundingClientRect: { top: 1200 }, rootBounds: root }, 69)).toBe(
-      false,
-    );
+  describe("going down, as the hero leaves", () => {
+    it("says no while the marker is on screen below the header", () => {
+      expect(isPastTheHeader(at(420, true), 69)).toBe(false);
+    });
+
+    it("says yes the moment it clears the header", () => {
+      /*
+       * Bug 1, with the number that exposed it. A 1px marker stops
+       * intersecting when its bottom reaches the edge, so its top is at 68 -
+       * and the callback that fires here is the only one there will be.
+       */
+      expect(isPastTheHeader(at(68, false), 69)).toBe(true);
+      // Against the viewport's top rather than the root's, this read false.
+      expect(68 < 0).toBe(false);
+    });
+
+    it("says yes once it is well above", () => {
+      expect(isPastTheHeader(at(-900, false), 69)).toBe(true);
+    });
   });
 
-  it("says yes the moment it goes behind the header", () => {
-    /*
-     * The regression, with the number that exposed it. A 1px marker stops
-     * intersecting when its BOTTOM reaches the root's top edge, so its own
-     * top is at 68 - strictly less than 69, and the callback that fires here
-     * is the only one there will be.
-     */
-    expect(isPastTheHeader({ boundingClientRect: { top: 68 }, rootBounds: root }, 69)).toBe(true);
+  describe("coming back up, as the hero returns", () => {
+    it("says no the moment it starts coming back", () => {
+      /*
+       * Bug 2, with the number that exposed it. Coming up, the marker starts
+       * intersecting again while its top is still above the edge - 68.4 here
+       * - and 68.4 < 69, so comparing tops left the bar shown. Nothing fires
+       * after this, so a gentle scroll to the very top kept it there.
+       */
+      expect(isPastTheHeader(at(68.4, true), 69)).toBe(false);
+      // The comparison that got this wrong, stated so it cannot come back.
+      expect(68.4 < 69).toBe(true);
+    });
 
-    // And the broken comparison, stated so it cannot come back: against the
-    // viewport's top rather than the root's, this very case reads as false.
-    expect(68 < 0).toBe(false);
+    it("says no at rest at the top of the page", () => {
+      expect(isPastTheHeader(at(419, true), 69)).toBe(false);
+    });
+
+    it("trusts intersecting over the edge arithmetic, in either direction", () => {
+      // The rule the predicate is built to: an ambiguous case has to resolve
+      // to the answer a later callback can still correct. "Not past" while
+      // intersecting is safe, because leaving fires. The reverse is not.
+      expect(isPastTheHeader(at(69, true), 69)).toBe(false);
+      expect(isPastTheHeader(at(-5, true), 69)).toBe(false);
+    });
   });
 
-  it("says yes once it is well above", () => {
-    expect(isPastTheHeader({ boundingClientRect: { top: -900 }, rootBounds: root }, 69)).toBe(true);
+  it("says no for a marker nobody has scrolled to yet", () => {
+    // Below the fold is not intersecting either, which is why the edge check
+    // is needed as well as `isIntersecting` - and why it is the BOTTOM edge.
+    expect(isPastTheHeader(at(1200, false), 69)).toBe(false);
   });
 
   it("falls back to the header height, not to zero, with no root bounds", () => {
-    // Zero would be the original bug again, reached by a different route.
-    expect(isPastTheHeader({ boundingClientRect: { top: 68 }, rootBounds: null }, 69)).toBe(true);
-    expect(isPastTheHeader({ boundingClientRect: { top: 420 }, rootBounds: null }, 69)).toBe(false);
+    // Zero would be bug 1 again, reached by a different route.
+    const noBounds = (top: number) => ({
+      isIntersecting: false,
+      boundingClientRect: { bottom: top + 1 },
+      rootBounds: null,
+    });
+    expect(isPastTheHeader(noBounds(68), 69)).toBe(true);
+    expect(isPastTheHeader(noBounds(420), 69)).toBe(false);
   });
 
   it("works for a tall header, which is what an installed app has", () => {
     // A notched phone adds the safe-area inset, so the edge is far lower and
     // every figure above moves with it.
     const tall = { top: 116 };
-    expect(isPastTheHeader({ boundingClientRect: { top: 115 }, rootBounds: tall }, 116)).toBe(true);
-    expect(isPastTheHeader({ boundingClientRect: { top: 117 }, rootBounds: tall }, 116)).toBe(
-      false,
-    );
+    const atTall = (top: number, isIntersecting: boolean) => ({
+      isIntersecting,
+      boundingClientRect: { bottom: top + 1 },
+      rootBounds: tall,
+    });
+    expect(isPastTheHeader(atTall(115, false), 116)).toBe(true);
+    expect(isPastTheHeader(atTall(115.4, true), 116)).toBe(false);
+    expect(isPastTheHeader(atTall(300, true), 116)).toBe(false);
+  });
+
+  it("does not depend on the marker being any particular height", () => {
+    /*
+     * The previous version did, quietly: it needed the marker to be at least
+     * 1px for its strict `<` never to land on a tie. Asking about the bottom
+     * edge - the same edge the observer asks about - removes that.
+     */
+    const tallMarker = {
+      isIntersecting: false,
+      boundingClientRect: { bottom: 60 },
+      rootBounds: root,
+    };
+    expect(isPastTheHeader(tallMarker, 69)).toBe(true);
   });
 });
 

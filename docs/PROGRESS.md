@@ -29,7 +29,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | The balance follows a tick | done | | Bug 16 revisited 2026-11-17, the owner's own design. Marking a bill paid lowers the balance shown and the row stays on the ledger, marked |
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
-| Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bug 24 the same evening: the line never appeared, and the grep guarding it asserted the broken expression |
+| Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
 
 ## Last session
 
@@ -192,55 +192,84 @@ historically been reported inconsistently, and the failure is silent - the bar s
 arrives. No new colours: the line uses `--hr-hero-bg` and `--hr-hero-text`, already held at
 4.5:1 across all five themes.
 
-### Bug 24: the pinned line never appeared, and a test said it did
+### Bug 24 and bug 25: the pinned line, wrong in both directions
 
-Reported from the dev container the same evening: "the transition/crossfade isn't happening.
-Everything just scrolls off the screen." Exactly that - the bar never arrived once.
+One bug class, found twice in one evening, and worth the space because the second one is what
+named it.
 
-The condition was `!entry.isIntersecting && entry.boundingClientRect.top < 0`, and **its two
-halves are measured against different edges.** `isIntersecting` is against the root as
-`rootMargin` has adjusted it - the header's bottom, say y=69 - while `boundingClientRect.top` is
-against the raw viewport. So at the single moment the callback fires, the marker is at y≈68: it
-has stopped intersecting, and 68 is nowhere near below 0. And because an observer only fires when
-intersection **changes**, no later callback ever came to correct it. Scrolling on produced
-nothing at all.
+**An `IntersectionObserver` fires only when intersection CHANGES.** So the answer computed at
+that instant stands until the next change, and if it is wrong there is no second chance. A
+predicate that disagrees with the observer's own test by a single pixel therefore does not
+produce a glitch - it produces a stuck bar.
 
-A fast fling did work, which is worth knowing: the marker could jump from inside the root to
-y=-800 between two samples, and `-800 < 0` is true. So the failure was total on an ordinary
-scroll and absent on a flick, which is the pattern to recognise next time.
+**Bug 24: it never appeared at all.** Reported as "the transition/crossfade isn't happening.
+Everything just scrolls off the screen." The condition was
+`!entry.isIntersecting && entry.boundingClientRect.top < 0`, and its two halves were measured
+against different edges: `isIntersecting` against the root as `rootMargin` had adjusted it (the
+header's bottom, y=69), `top` against the raw viewport. At the one moment the callback fired the
+marker sat at y≈68 - stopped intersecting, nowhere near below 0 - and nothing fired again.
 
-The fix is to compare against the root's own top edge - `entry.rootBounds.top`, the same line
-that decided to call us in the first place - and to drop the `isIntersecting` half entirely,
-which was never doing the work: a marker still below the fold is not intersecting either, and it
-is excluded by its `top` being a large positive number. With no root bounds the fallback is the
-header height rather than 0, which would be the original bug reached by a different route.
+A fast fling *did* work, which is the pattern to recognise: the marker can jump from inside the
+root to y=-800 between two samples, and -800 < 0 is true. Total failure on an ordinary scroll,
+fine on a flick.
 
-**The test that was guarding this asserted the broken expression itself**, so it passed all the
-way onto a phone:
+**Bug 25: it would not go away.** Reported immediately after the first fix shipped: "if I drag up
+slowly and don't flick, the sticky header doesn't disappear when I've reached the top of the
+screen... it's possible to be left with a sticky header overlapping." The fix for 24 compared
+`boundingClientRect.top` against `rootBounds.top`, which is right going down and wrong coming
+back: a 1px marker starts intersecting **again** when its *bottom* passes the edge, so its top is
+then at y≈68.4 - still less than 69. The bar stayed shown, and because that was the last
+intersection change, scrolling gently to the very top left it there.
+
+**And the fix for 24 asserted something false in passing**, which is the honest part of this: it
+said `isIntersecting` "was never doing the work". Bug 25 is what that looked like. It is the
+browser's own answer to which side of the edge the marker is on, and the only part of the
+predicate that cannot disagree with the observation it arrived in.
+
+So the predicate is now built to one rule, stated in the file: **every ambiguous case must
+resolve to the answer a later callback can still correct.** Returning "not past" while the marker
+is still intersecting is safe, because leaving will fire. Returning "past" as it comes back was
+not, because nothing fires afterwards. In full:
+
+- `isIntersecting` settles the direction, and is checked first;
+- the marker's **bottom** edge against the root's top separates "above" from "below the fold",
+  which `isIntersecting` alone cannot - a marker nobody has scrolled to yet is not intersecting
+  either.
+
+The bottom edge and not the top, because that is the same question the observer asked: a marker
+is clear of the root exactly when its bottom has passed the root's top. It also drops a hidden
+dependency - the previous version needed the marker to be at least 1px for its strict `<` never
+to land on a tie.
+
+### What the testing lesson actually is
+
+Bug 24 was "covered" by a grep asserting the broken expression itself:
 
 ```
 expect(pinned).toMatch(/!entry\.isIntersecting && entry\.boundingClientRect\.top < 0/);
 ```
 
-That is the real lesson here and it generalises past this bug. A source check is the right tool
-for a layout decision with a reason behind it, and the wrong tool for anything with arithmetic in
-it - it can only confirm that the code says what the code says. So the decision is now a pure
-exported function, `isPastTheHeader`, tested with real pixel numbers including y=68, the value
-that exposed this. Reintroducing the old comparison was tried deliberately: three of the new
-tests go red, which is the check that the test can disagree with the code at all.
+That can only confirm the code says what the code says. **A source check is the right tool for a
+layout decision with a reason behind it, and the wrong tool for anything with arithmetic in it.**
+There is no DOM in the web suite, which is why so much of it is greps - but that is a reason to
+extract the arithmetic into something testable, not a reason to grep it.
 
-Two things were fixed alongside it, both found by looking again rather than reported:
+So the decision is a pure exported function, `isPastTheHeader`, tested as the two transitions with
+the numbers that actually bit: y=68 going down, y=68.4 coming back. Both shipped versions were
+put back deliberately to check the tests can disagree with the code - version 1 fails 4 of them,
+version 2 fails 3. That is the property the grep never had.
 
-- **The header height is now reactive**, so the observer is rebuilt when it is measured or
-  resized. React runs a child's effects before its parent's, so the ledger could observe before
-  the shell had measured - and with cached data on screen that is a real sequence, not a
-  theoretical one. It left the margin built on the 69px fallback, out by the whole safe-area
-  inset on an installed app. It also retires the "stale after a rotation" caveat the first
-  version documented as acceptable.
-- **The 1px marker turns out to be load-bearing twice.** It was 1px rather than 0 because a
-  zero-area observer target has historically been reported inconsistently; it also guarantees
-  the strict `<` above can never be a tie, because a marker of height h stops intersecting when
-  its top reaches `rootBounds.top - h`.
+Two more fixed alongside bug 24, found by looking rather than reported:
+
+- **The header height is reactive**, so the observer is rebuilt when it is measured or resized.
+  React runs a child's effects before its parent's, so the ledger could observe before the shell
+  had measured - a real sequence when cached data is already on screen, not a theoretical one. It
+  left the margin on the 69px fallback, out by the whole safe-area inset on an installed app, and
+  would have shown up as the bar arriving late even after bug 24 was fixed. It also retires the
+  "stale after a rotation" caveat the first version documented as acceptable.
+- **The 1px marker.** It was 1px rather than 0 because a zero-area observer target has
+  historically been reported inconsistently. After bug 25 the predicate no longer depends on its
+  height at all, so that is now its only job.
 
 ### A timezone bug in a test helper, found by the clock
 
@@ -3317,7 +3346,7 @@ pnpm -F @headroom/api db:generate
 pnpm -F @headroom/core build
 
 node scripts/testdb.mjs up      # throwaway Postgres for tests
-pnpm test                       # 1152 tests: 367 engine, 323 web, 462 API
+pnpm test                       # 1156 tests: 367 engine, 327 web, 462 API
 pnpm lint && pnpm typecheck
 pnpm build
 node scripts/testdb.mjs down
