@@ -10,15 +10,27 @@
  * both existed and nothing connected them, so the only way to add a row was
  * SQL - which is exactly the gap the wiring test was written to find, and did.
  *
- * Two choices matter here and both default to what the household does most:
+ * Three choices matter here and all of them default to what the household
+ * does most:
  *
  *  - **What it is** decides which way the money goes. The server signs the
  *    amount from the kind, so the amount is always typed as a plain positive
  *    number and never with a minus.
+ *  - **Has it happened** decides whether the row arrives with its tick
+ *    already on. It defaults to yes, because a one-off is nearly always typed
+ *    in after the fact: a dentist bill paid at the counter, a payment made to
+ *    a card on the bank's own app. Reported from use, in those words - "I
+ *    then have to open it again to mark it as paid". That was two steps to
+ *    say one thing.
  *  - **When** is either a date or a paycheque. Attached to a paycheque it can
  *    be moved to an earlier or later one when a week is tight, which is the
  *    whole point of a flexible row; on a date it cannot, because the bank acts
  *    on that day whatever else is happening.
+ *
+ * Something already done has a day it happened on, so it is always dated and
+ * the paycheque choice is not offered for it. Hanging it off a cheque is a
+ * statement about a payment that has not been made yet, which is the opposite
+ * of what "already done" says.
  */
 import { formatCents, parseCents } from "@headroom/core";
 import { useId, useState } from "react";
@@ -51,12 +63,22 @@ const KINDS: readonly { readonly kind: Kind; readonly label: string }[] = [
 export function OneOffForm({
   paydays,
   accounts = [],
+  today,
   onClose,
 }: {
   /** "Now" plus each upcoming payday, as built by the screen showing them. */
   paydays: readonly MoveTarget[];
   /** The household's accounts. Empty means the old single-account form. */
   accounts?: readonly Account[];
+  /**
+   * Today, as the server reckons it (`America/Regina`).
+   *
+   * Not `new Date()` on the phone: the default date for something already
+   * done, and the check that it is not in the future, both have to agree with
+   * the clock every other figure is built from. A phone an hour the wrong
+   * side of midnight would otherwise date a payment yesterday.
+   */
+  today: string;
   onClose: () => void;
 }): React.JSX.Element {
   const create = useCreateOneOff();
@@ -77,8 +99,15 @@ export function OneOffForm({
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
   const [kind, setKind] = useState<Kind>("bill");
+  /**
+   * Already done, so the row arrives ticked and the balance moves at once.
+   *
+   * The default, and the reason the form exists in the shape it does: what
+   * gets typed in here is a record far more often than it is a plan.
+   */
+  const [happened, setHappened] = useState(true);
   const [placement, setPlacement] = useState<"payday" | "date">("payday");
-  const [date, setDate] = useState("");
+  const [date, setDate] = useState(today);
   // The first real payday if there is one, rather than "Now": something added
   // by hand is nearly always for a cheque that has not arrived yet.
   const [payday, setPayday] = useState<string>(
@@ -89,6 +118,14 @@ export function OneOffForm({
   /** Where the money comes from. "" is chequing, as the API spells it. */
   const [paidFromAccountId, setPaidFromAccountId] = useState("");
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * Something that has happened happened on a day. So the placement choice
+   * belongs to the other branch only, and `placement` is left alone while
+   * this one is on rather than being overwritten - switch back and the
+   * paycheque that was picked is still picked.
+   */
+  const onADate = happened || placement === "date";
 
   const preview = (() => {
     try {
@@ -121,8 +158,20 @@ export function OneOffForm({
       return;
     }
 
-    if (placement === "date" && date === "") {
-      setError("Pick the date it comes out.");
+    if (onADate && date === "") {
+      setError(happened ? "Pick the day it happened." : "Pick the date it comes out.");
+      return;
+    }
+
+    /*
+     * "Already done" and a date in the future cannot both be true, and the
+     * combination is worse than it looks: a settled row is left out of the
+     * forecast, so a future payment marked done would quietly stop counting
+     * towards anything. Caught here, where the date being argued about is on
+     * screen.
+     */
+    if (happened && date > today) {
+      setError("That date has not happened yet. Change it, or choose \u201cStill to come\u201d.");
       return;
     }
 
@@ -140,7 +189,10 @@ export function OneOffForm({
         kind: kind === "card" ? "transfer" : kind,
         ...(kind === "card" ? { transferToAccountId: cardId } : {}),
         ...(paidFromAccountId === "" ? {} : { paidFromAccountId }),
-        ...(placement === "date"
+        // Created with the tick already on, rather than added and then found
+        // again on the ledger to tick. Same field, same meaning.
+        ...(happened ? { paid: true } : {}),
+        ...(onADate
           ? { date }
           : // An empty selection is "Now", which the API spells as a null anchor.
             { anchorOccurrenceId: payday === "" ? null : payday }),
@@ -156,7 +208,7 @@ export function OneOffForm({
   return (
     <Sheet
       title="Add a one-off"
-      intro="Something that happens once. It appears on the timeline straight away and never comes back."
+      intro="Something that happens once. It appears on the ledger straight away and never comes back. If it has already happened it arrives ticked, and the balance moves with it."
       error={error}
       saving={create.isPending}
       saveLabel="Add it"
@@ -255,33 +307,76 @@ export function OneOffForm({
         </Field>
       ) : null}
 
+      {/*
+        The one that answers the complaint. Default yes, so the common case -
+        typing in something that has already been paid - is name, amount and
+        Add it, with nothing to go back and tick afterwards.
+      */}
       <fieldset className="sheet__choices">
-        <legend className="hr-label">When?</legend>
+        <legend className="hr-label">Has it happened?</legend>
         <label className="sheet__choice">
           <input
             type="radio"
-            name="one-off-when"
-            value="payday"
-            checked={placement === "payday"}
-            onChange={() => setPlacement("payday")}
+            name="one-off-happened"
+            value="done"
+            checked={happened}
+            onChange={() => {
+              setHappened(true);
+              // A thing that happened happened on a day, and today is very
+              // nearly always the day somebody is typing it in about.
+              if (date === "") setDate(today);
+            }}
             disabled={create.isPending}
           />
-          <span>With a paycheque — can be moved later if the week is tight</span>
+          <span>Already done — tick it now, and move the balance</span>
         </label>
         <label className="sheet__choice">
           <input
             type="radio"
-            name="one-off-when"
-            value="date"
-            checked={placement === "date"}
-            onChange={() => setPlacement("date")}
+            name="one-off-happened"
+            value="coming"
+            checked={!happened}
+            onChange={() => setHappened(false)}
             disabled={create.isPending}
           />
-          <span>On a date — the bank takes it that day</span>
+          <span>Still to come — it waits on the ledger until you tick it</span>
         </label>
       </fieldset>
 
-      {placement === "payday" ? (
+      {/*
+        Only for something still to come. A paycheque to hang off is a way of
+        moving a payment that has not been made yet; there is nothing to move
+        about one that has.
+      */}
+      {happened ? null : (
+        <fieldset className="sheet__choices">
+          <legend className="hr-label">When?</legend>
+          <label className="sheet__choice">
+            <input
+              type="radio"
+              name="one-off-when"
+              value="payday"
+              checked={placement === "payday"}
+              onChange={() => setPlacement("payday")}
+              disabled={create.isPending}
+            />
+            <span>With a paycheque — can be moved later if the week is tight</span>
+          </label>
+          <label className="sheet__choice">
+            <input
+              type="radio"
+              name="one-off-when"
+              value="date"
+              checked={placement === "date"}
+              onChange={() => setPlacement("date")}
+              disabled={create.isPending}
+            />
+            <span>On a date — the bank takes it that day</span>
+          </label>
+        </fieldset>
+      )}
+
+      {!onADate ? (
         <Field label="Which paycheque?" htmlFor={ids.payday}>
           <select
             className="hr-input"
@@ -298,12 +393,16 @@ export function OneOffForm({
           </select>
         </Field>
       ) : (
-        <Field label="What date?" htmlFor={ids.date}>
+        <Field label={happened ? "When did it happen?" : "What date?"} htmlFor={ids.date}>
           <input
             className="hr-input"
             id={ids.date}
             type="date"
             value={date}
+            // Today is as late as something already done can be. The check in
+            // `submit` is the one that decides; this only stops the phone's
+            // own picker offering a day that will be refused.
+            {...(happened ? { max: today } : {})}
             onChange={(event) => setDate(event.target.value)}
             disabled={create.isPending}
             required
@@ -316,7 +415,13 @@ export function OneOffForm({
           <p className="sheet__preview-title">On the timeline</p>
           <p className="sheet__preview-amount hr-amount">{formatCents(preview)}</p>
           <p className="sheet__preview-note">
-            {preview < 0n ? "Taken off the balance." : "Added to the balance."}
+            {happened
+              ? preview < 0n
+                ? "Already gone, so it comes off the balance as soon as this is added."
+                : "Already in, so it goes on the balance as soon as this is added."
+              : preview < 0n
+                ? "Taken off the balance."
+                : "Added to the balance."}
           </p>
         </div>
       ) : null}

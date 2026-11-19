@@ -578,6 +578,11 @@ export function useCreateOneOff() {
       name: string;
       cents: string;
       kind?: "bill" | "deposit" | "transfer";
+      /**
+       * True when the row is a record of something already done, so it is
+       * created with the tick on it and the balance moves at once.
+       */
+      paid?: boolean;
       date?: string;
       anchorOccurrenceId?: string | null;
       /** Absent means chequing. */

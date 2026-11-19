@@ -96,6 +96,22 @@ const createBody = z
     name: z.string().trim().min(1, "Give this a name.").max(120),
     cents: centsSchema,
     kind: z.enum(["paycheque", "bill", "deposit", "transfer"]).default("bill"),
+    /**
+     * "This has already happened."
+     *
+     * A one-off is nearly always typed in after the fact - a dentist bill
+     * paid at the counter, a payment made to a card on the bank's own app -
+     * so the row being added is a record, not a plan. Creating it unpaid and
+     * then asking the household to find it on the ledger and tick it was two
+     * steps to say one thing, and reported as such.
+     *
+     * Exactly the same two columns a tick on the row sets, with the same
+     * meaning and the same audit entry. Nothing here is a new kind of state:
+     * a row created this way is indistinguishable from one created and then
+     * ticked, which is what keeps `settledMoment` the only thing any figure
+     * has to read.
+     */
+    paid: z.boolean().optional(),
     // A one-off is either dated, or hung off a paycheque.
     date: plainDateSchema.optional(),
     anchorOccurrenceId: z.string().uuid().nullable().optional(),
@@ -392,6 +408,16 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
             ownerUserId: input.ownerUserId ?? null,
             paidFromAccountId: input.paidFromAccountId ?? null,
             transferToAccountId: input.transferToAccountId ?? null,
+            /*
+             * Already done, so the money has moved and the balance at the top
+             * has to move with it.
+             *
+             * The server's clock, not the phone's: `paidAt` is what decides
+             * whether a row sits before or after the last typed balance, and
+             * a phone an hour out would put a payment on the wrong side of
+             * that line and have it counted twice or not at all.
+             */
+            ...(input.paid === true ? { paidAt: new Date(), paidById: user.id } : {}),
             createdById: user.id,
             updatedById: user.id,
           },
