@@ -57,7 +57,25 @@
   gap: 3px;
 }
 
+/*
+ * The picture and the name, on one line.
+ *
+ * Centred on each other, so a name that wraps to two lines has the square
+ * centred against the pair of them rather than hanging off the first. That is
+ * what "centered on the expense text" asks for, and it is also the only
+ * reading that does not move when a name gets longer.
+ */
+.row__title {
+  display: flex;
+  align-items: center;
+  gap: var(--hr-space-2);
+  /* So the name may shrink and clamp instead of widening the row. */
+  min-width: 0;
+}
+
 .row__name {
+  /* Same reason, one level down: a flex item's floor is its content. */
+  min-width: 0;
   font-weight: 600;
   /*
    * Wrapped, not truncated. A name that does not fit on one line is still

@@ -50,6 +50,7 @@ const categoryForm = web("components", "CategoryForm.tsx");
 const manage = web("pages", "Manage.tsx");
 const budget = web("pages", "Budget.tsx");
 const row = web("components", "OccurrenceRow.tsx");
+const rowCss = web("components", "OccurrenceRow.css");
 const ledger = web("pages", "Ledger.tsx");
 const sw = web("sw.ts");
 
@@ -290,14 +291,37 @@ describe("where the square shows up", () => {
     );
   });
 
-  it("on the ledger rows, beside the badge rather than instead of it", () => {
-    // The badge is state and the picture is identity; both are worth a
-    // glance, and the row already prefers a taller line to a truncated name.
+  it("on the ledger rows, on the name's own line", () => {
+    /*
+     * Where this went wrong first. The picture was a sibling of the badge, in
+     * the row's left gutter - and because that gutter is centred against a
+     * two-line block, it floated between the name and the chips and read as
+     * though it belonged to the chips. Reported in those terms: "I'd like
+     * this image centered on the expense text."
+     *
+     * So it is inside `row__main`, on the title line, before the chips. The
+     * badge stays in the gutter, where it was before any of this.
+     */
     expect(row).toMatch(/imageId=\{row\.imageId\}/);
-    const thumbAt = row.indexOf("<Thumb");
+
     const mainAt = row.indexOf('<span className="row__main">');
-    expect(thumbAt).toBeGreaterThan(0);
-    expect(thumbAt).toBeLessThan(mainAt);
+    const titleAt = row.indexOf('<span className="row__title">');
+    const thumbAt = row.indexOf("<Thumb");
+    const chipsAt = row.indexOf('<span className="row__chips">');
+
+    expect(mainAt).toBeGreaterThan(0);
+    expect(titleAt).toBeGreaterThan(mainAt);
+    expect(thumbAt).toBeGreaterThan(titleAt);
+    expect(thumbAt).toBeLessThan(chipsAt);
+  });
+
+  it("centres the square on the name rather than on the first line of it", () => {
+    // A name that wraps to two lines has the square centred against the pair
+    // of them. It is the only reading that does not move as a name grows.
+    expect(rowCss).toMatch(/\.row__title \{[^}]*align-items: center/s);
+    // And the name may shrink and clamp rather than widening the row - the
+    // whole-page-widening bug that `layout-width.test.ts` exists for.
+    expect(rowCss).toMatch(/\.row__title \{[^}]*min-width: 0/s);
   });
 
   it("lines the ledger names up, which is what was reported", () => {

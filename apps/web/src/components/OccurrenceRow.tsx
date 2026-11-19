@@ -193,31 +193,38 @@ export function OccurrenceRow({
           <VerificationBadge verified={row.verified} verifiedBy={row.verifiedBy} />
         )}
 
-        {/*
-          After the badge, not instead of it: the badge is state and this is
-          identity, and both are worth a glance. A row with a picture is a
-          little wider in its left column and so may wrap its name onto a
-          second line - which is already how this row prefers to handle a long
-          name, so it degrades into something the design already does.
-        */}
-        <Thumb
-          imageId={row.imageId}
-          size="row"
-          /*
-            A lettered square where there is no picture, so the names line up
-            down the column. Reported as soon as the first version shipped
-            without one: a list where some names start further left than
-            others reads as broken rather than as incomplete.
-
-            Not for a paycheque. That row already carries its own green mark
-            and a tinted background, so a letter beside it would be noise
-            competing with a signal.
-          */
-          fallback={isPaycheque ? null : row.name}
-        />
-
         <span className="row__main">
-          <span className="row__name">{row.name}</span>
+          {/*
+            The picture belongs to the NAME, so it sits on the name's line.
+
+            It was a sibling of the badge at first, which put it in the row's
+            left gutter - and because that gutter is centred against a
+            two-line block, it floated between the name and the chips and read
+            as though it belonged to the chips. Reported in those terms: "I'd
+            like this image centered on the expense text."
+
+            A wrapper rather than putting it inside `row__name`, because that
+            element carries the two-line clamp and an image inside a
+            `-webkit-box` is not something to rely on.
+          */}
+          <span className="row__title">
+            <Thumb
+              imageId={row.imageId}
+              size="row"
+              /*
+                A lettered square where there is no picture, so the names line
+                up down the column. Asked for as soon as the first version
+                shipped without one: a list where some names start further
+                left than others reads as broken rather than as incomplete.
+
+                Not for a paycheque. That row already carries its own green
+                mark and a tinted background, so a letter beside it would be
+                noise competing with a signal.
+              */
+              fallback={isPaycheque ? null : row.name}
+            />
+            <span className="row__name">{row.name}</span>
+          </span>
           <span className="row__chips">
             {/*
               Driven by `settled`, not by `paid`. A row taken into a typed

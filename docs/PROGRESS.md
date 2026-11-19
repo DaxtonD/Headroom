@@ -201,10 +201,13 @@ said. So this time the arithmetic was extracted first and tested against numbers
   broken, and the letter is there to make the column a column. The one judgement that held up is
   that this was the reversible direction to be wrong in - one component, one stylesheet, four call
   sites.
-- **Beside the badge on a ledger row, not instead of it.** The badge is state and the picture is
-  identity, and both are worth a glance. It makes the left column wider, so a long name may wrap
-  onto a second line - which is already how that row prefers to handle a long name, so it
-  degrades into something the design already does.
+- **On the name's own line, not in the row's left gutter.** Corrected by the owner after seeing
+  it: "I'd like this image centered on the expense text." The first version made the picture a
+  sibling of the badge, and because that gutter is centred against a two-line block it floated
+  between the name and the chips - reading as though it belonged to the chips rather than to the
+  thing being named. It is inside `row__main` now, on a title line with the name, centred against
+  the name as a whole so a name that wraps does not push it off centre. The badge stays in the
+  gutter, where it was before any of this: it is state, and the picture is identity.
 - **A slider for zoom, not a pinch.** One pointer, keyboard-operable, a 44px target, and it does
   not fight the browser's own pinch-to-zoom on the sheet around it.
 - **The crop surface is a real `<button>`.** Two earlier attempts used `role="group"` and then
@@ -222,7 +225,7 @@ table ever looks bigger than it should.
 
 ### Verified
 
-1257 tests: 367 engine, 382 web, 508 API. 82 are new - 46 API (18 of them pure byte arithmetic
+1258 tests: 367 engine, 383 web, 508 API. 83 are new - 46 API (18 of them pure byte arithmetic
 with no database) and 26 web. The migration applies to a clean database, lint, typecheck, the web
 build and `check:figures` are clean, and the new API tests pass pinned to another day.
 
@@ -3494,7 +3497,7 @@ pnpm -F @headroom/api db:generate
 pnpm -F @headroom/core build
 
 node scripts/testdb.mjs up      # throwaway Postgres for tests
-pnpm test                       # 1257 tests: 367 engine, 382 web, 508 API
+pnpm test                       # 1258 tests: 367 engine, 383 web, 508 API
 pnpm lint && pnpm typecheck
 pnpm build
 node scripts/testdb.mjs down
