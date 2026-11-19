@@ -39,6 +39,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { FALLBACK_HEADER_PX, isPastTheHeader } from "../src/lib/pinnedHeader.js";
 
 const read = (...parts: string[]): string =>
   readFileSync(resolve(import.meta.dirname, "..", "src", ...parts), "utf8");
@@ -146,6 +147,73 @@ describe("both buttons at the top", () => {
   });
 });
 
+/*
+ * The one piece of real geometry here, and the one that was wrong.
+ *
+ * The first version of this shipped asking `!isIntersecting &&
+ * boundingClientRect.top < 0`, and the bar never appeared once. The two
+ * halves are measured against different edges: `isIntersecting` against the
+ * root as `rootMargin` adjusted it - the header's bottom, y=69 - and `top`
+ * against the raw viewport. At the one moment the callback fires the marker
+ * is at y≈68, which has stopped intersecting and is nowhere near below 0; and
+ * an observer only fires when intersection CHANGES, so no later callback came
+ * to correct it.
+ *
+ * It was "covered" by a grep asserting that exact expression, which passed
+ * all the way onto a phone. Hence this: a pure function and real numbers,
+ * which is a test that can disagree with the code.
+ */
+describe("deciding that the hero has gone", () => {
+  /** What `rootMargin: "-69px 0 0 0"` makes the root's top edge. */
+  const root = { top: FALLBACK_HEADER_PX };
+
+  it("says no while the marker is on screen below the header", () => {
+    expect(isPastTheHeader({ boundingClientRect: { top: 420 }, rootBounds: root }, 69)).toBe(false);
+  });
+
+  it("says no when the marker has not been reached yet", () => {
+    // Below the fold is not intersecting either, which is why the old
+    // `!isIntersecting` half was never the thing doing the work.
+    expect(isPastTheHeader({ boundingClientRect: { top: 1200 }, rootBounds: root }, 69)).toBe(
+      false,
+    );
+  });
+
+  it("says yes the moment it goes behind the header", () => {
+    /*
+     * The regression, with the number that exposed it. A 1px marker stops
+     * intersecting when its BOTTOM reaches the root's top edge, so its own
+     * top is at 68 - strictly less than 69, and the callback that fires here
+     * is the only one there will be.
+     */
+    expect(isPastTheHeader({ boundingClientRect: { top: 68 }, rootBounds: root }, 69)).toBe(true);
+
+    // And the broken comparison, stated so it cannot come back: against the
+    // viewport's top rather than the root's, this very case reads as false.
+    expect(68 < 0).toBe(false);
+  });
+
+  it("says yes once it is well above", () => {
+    expect(isPastTheHeader({ boundingClientRect: { top: -900 }, rootBounds: root }, 69)).toBe(true);
+  });
+
+  it("falls back to the header height, not to zero, with no root bounds", () => {
+    // Zero would be the original bug again, reached by a different route.
+    expect(isPastTheHeader({ boundingClientRect: { top: 68 }, rootBounds: null }, 69)).toBe(true);
+    expect(isPastTheHeader({ boundingClientRect: { top: 420 }, rootBounds: null }, 69)).toBe(false);
+  });
+
+  it("works for a tall header, which is what an installed app has", () => {
+    // A notched phone adds the safe-area inset, so the edge is far lower and
+    // every figure above moves with it.
+    const tall = { top: 116 };
+    expect(isPastTheHeader({ boundingClientRect: { top: 115 }, rootBounds: tall }, 116)).toBe(true);
+    expect(isPastTheHeader({ boundingClientRect: { top: 117 }, rootBounds: tall }, 116)).toBe(
+      false,
+    );
+  });
+});
+
 describe("the pinned balance line", () => {
   it("is fixed, not sticky", () => {
     /*
@@ -190,10 +258,7 @@ describe("the pinned balance line", () => {
     expect(ledger).toMatch(/className="ledger__pinned-figures" aria-hidden="true"/);
   });
 
-  it("appears when the hero has gone, not merely when it is out of view", () => {
-    // A marker still below the fold has not been reached yet. Treating that
-    // as past would pin the bar before the screen had been scrolled at all.
-    expect(pinned).toMatch(/!entry\.isIntersecting && entry\.boundingClientRect\.top < 0/);
+  it("is wired to the marker at the bottom of the hero", () => {
     expect(ledger).toMatch(/const \[heroEndRef, heroGone\] = useScrolledPast\(\)/);
     expect(ledger).toMatch(/className="ledger__hero-end" ref=\{heroEndRef\}/);
   });
@@ -208,7 +273,17 @@ describe("the pinned balance line", () => {
   it("allows for the header when deciding, or it arrives late", () => {
     // Without the margin the marker counts as visible while it sits behind
     // the header, and the bar is a header's height of scrolling late.
-    expect(pinned).toMatch(/rootMargin: `-\$\{Math\.trunc\(measured \?\? FALLBACK_HEADER_PX\)\}px/);
+    expect(pinned).toMatch(/rootMargin: `-\$\{Math\.trunc\(headerPx\)\}px/);
+  });
+
+  it("rebuilds the observer when the header is measured or resized", () => {
+    /*
+     * React runs a child's effects before its parent's, so the ledger can
+     * observe before the shell has measured. Reading the height once left the
+     * margin built on the fallback - out by the whole safe-area inset on an
+     * installed app.
+     */
+    expect(pinned).toMatch(/\}, \[marker, headerPx\]\)/);
   });
 
   it("keeps still for anybody who asked for that", () => {

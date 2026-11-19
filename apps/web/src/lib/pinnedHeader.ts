@@ -25,24 +25,44 @@
  * ## Why a marker and not the element itself
  *
  * Observing the hero would mean reacting to it being *partly* out of view,
- * which is several thresholds and some arithmetic. A zero-height marker at
- * the bottom of it answers the only question being asked: has the whole thing
- * gone? And a marker never changes size, so nothing here can start the loop
- * that watching a collapsing element invites.
+ * which is several thresholds and some arithmetic. A marker at the bottom of
+ * it answers the only question being asked: has the whole thing gone? And a
+ * marker never changes size, so nothing here can start the loop that watching
+ * a collapsing element invites.
+ *
+ * ## The bug this file shipped with, because it is the whole subtlety
+ *
+ * The first version asked `!isIntersecting && boundingClientRect.top < 0`,
+ * and the bar never appeared once.
+ *
+ * Those two halves are measured against different edges. `isIntersecting` is
+ * against the root as `rootMargin` has adjusted it - the header's bottom, say
+ * y=69 - while `boundingClientRect.top` is against the raw viewport. So at
+ * the one moment the callback fires, the marker is at y≈68: it has stopped
+ * intersecting, and 68 is nowhere near below 0. And because an observer only
+ * fires when intersection CHANGES, no later callback ever came to correct it.
+ * Scrolling on produced nothing at all.
+ *
+ * So the comparison is against the root's own top edge, which is the line
+ * that decided the callback in the first place. `isPastTheHeader` is exported
+ * and tested with real numbers, because the grep that was guarding this
+ * asserted the broken expression itself and passed all the way to a phone.
  */
 import { useEffect, useState } from "react";
 
 /**
  * The value `tokens.css` declares, for before the shell has measured.
  *
- * Only a fallback, and only a few pixels out: one line of text, 44px
- * controls, 12px of padding each side and the hairline under it, with no
- * safe-area inset - which is the part that cannot be guessed.
+ * Only a fallback, and only a few pixels out in a browser tab: one line of
+ * text, 44px controls, 12px of padding each side and the hairline under it,
+ * with no safe-area inset - which is the part that cannot be guessed, and on
+ * a notched phone is most of the answer.
  */
-const FALLBACK_HEADER_PX = 69;
+export const FALLBACK_HEADER_PX = 69;
 
-/** What the shell last measured. `null` until it has. */
+/** What the shell last measured, and who wants telling when it changes. */
 let measured: number | null = null;
+const listeners = new Set<() => void>();
 
 /**
  * Keep `--hr-header-h` in step with the real header. Returns the teardown.
@@ -54,8 +74,11 @@ let measured: number | null = null;
 export function trackHeaderHeight(header: HTMLElement): () => void {
   const publish = (): void => {
     const { height } = header.getBoundingClientRect();
-    measured = height;
     document.documentElement.style.setProperty("--hr-header-h", `${height}px`);
+
+    if (height === measured) return;
+    measured = height;
+    for (const listener of listeners) listener();
   };
 
   publish();
@@ -70,11 +93,62 @@ export function trackHeaderHeight(header: HTMLElement): () => void {
 }
 
 /**
- * A ref to put on a marker, and whether the page has scrolled past it.
+ * Has the marker gone above the header's bottom edge?
  *
- * "Past" means off the top, behind the header - not merely out of view. A
- * marker still below the fold has not been reached yet, and treating that as
- * past would pin the bar before the screen had been scrolled at all.
+ * Pure, exported and tested, because this is the one line with real geometry
+ * in it and the one line that was wrong. `rootBounds.top` is where
+ * `rootMargin` put the root's top edge - the header's bottom - and it is the
+ * same line the observer used to decide to call us, so the two agree by
+ * construction.
+ *
+ * Note what is NOT here: a check on `isIntersecting`. It is not needed and it
+ * was half of the original mistake. A marker still below the fold is not
+ * intersecting either, and this returns false for it because its `top` is a
+ * large positive number - well below nothing.
+ *
+ * `rootBounds` is null in a cross-origin frame, which this app is never in;
+ * the fallback is the same figure the margin was built from rather than 0,
+ * which would quietly reintroduce the original bug.
+ */
+export function isPastTheHeader(
+  entry: {
+    readonly boundingClientRect: { readonly top: number };
+    readonly rootBounds: { readonly top: number } | null;
+  },
+  headerPx: number,
+): boolean {
+  return entry.boundingClientRect.top < (entry.rootBounds?.top ?? headerPx);
+}
+
+/**
+ * The header's height, re-rendering whoever asks when it changes.
+ *
+ * Not read once: React runs a child's effects before its parent's, so the
+ * ledger can mount, observe and decide before the shell has measured
+ * anything. With cached data on screen that is a real sequence, not a
+ * theoretical one, and it would leave the observer built on the fallback -
+ * out by the whole safe-area inset on an installed app.
+ */
+function useHeaderHeight(): number {
+  const [height, setHeight] = useState(() => measured ?? FALLBACK_HEADER_PX);
+
+  useEffect(() => {
+    const onChange = (): void => setHeight(measured ?? FALLBACK_HEADER_PX);
+    listeners.add(onChange);
+    // And once now: the measurement can land between this component
+    // rendering and this line, and waiting for a change that has already
+    // happened would mean waiting for ever.
+    onChange();
+    return () => {
+      listeners.delete(onChange);
+    };
+  }, []);
+
+  return height;
+}
+
+/**
+ * A ref to put on a marker, and whether the page has scrolled past it.
  *
  * A callback ref rather than `useRef`, because the effect has to re-run when
  * the node appears: the ledger renders a loading state first, so on the first
@@ -84,6 +158,7 @@ export function trackHeaderHeight(header: HTMLElement): () => void {
 export function useScrolledPast(): readonly [(node: HTMLElement | null) => void, boolean] {
   const [marker, setMarker] = useState<HTMLElement | null>(null);
   const [past, setPast] = useState(false);
+  const headerPx = useHeaderHeight();
 
   useEffect(() => {
     // No observer, no pinned bar - which is the state of the app today, and
@@ -94,33 +169,31 @@ export function useScrolledPast(): readonly [(node: HTMLElement | null) => void,
       (entries) => {
         const entry = entries.at(-1);
         if (!entry) return;
-        setPast(!entry.isIntersecting && entry.boundingClientRect.top < 0);
+        setPast(isPastTheHeader(entry, headerPx));
       },
       {
         /*
          * The viewport, with its top edge pushed down to where the header
          * ends. Without this the marker would still count as visible while it
-         * sat behind the header, and the bar would arrive a header's height of
-         * scrolling late - long enough to read as a glitch.
+         * sat behind the header, and the bar would arrive a header's height
+         * of scrolling late - long enough to read as a glitch.
          *
          * A whole number of pixels: a screen at a non-integer text scale
          * measures fractionally, and `rootMargin` is the one place a bad
          * length throws rather than being ignored. `Math.trunc` and not the
          * rounding this codebase forbids - that rule is about money, and this
          * is a scroll offset.
-         *
-         * Read once, when the observer is made. A rotation can change the
-         * safe-area inset and leave this a few pixels stale until the screen
-         * is next mounted, which is not worth rebuilding an observer for.
          */
-        rootMargin: `-${Math.trunc(measured ?? FALLBACK_HEADER_PX)}px 0px 0px 0px`,
+        rootMargin: `-${Math.trunc(headerPx)}px 0px 0px 0px`,
         threshold: 0,
       },
     );
 
     observer.observe(marker);
     return () => observer.disconnect();
-  }, [marker]);
+    // Rebuilt when the header is measured or resized, so the margin is never
+    // stale - including after a rotation changes the safe-area inset.
+  }, [marker, headerPx]);
 
   return [setMarker, past];
 }

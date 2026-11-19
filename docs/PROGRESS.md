@@ -29,7 +29,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | The balance follows a tick | done | | Bug 16 revisited 2026-11-17, the owner's own design. Marking a bill paid lowers the balance shown and the row stays on the ledger, marked |
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
-| Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons |
+| Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bug 24 the same evening: the line never appeared, and the grep guarding it asserted the broken expression |
 
 ## Last session
 
@@ -191,6 +191,56 @@ an observer fires twice. The marker is 1px rather than 0 because a zero-area tar
 historically been reported inconsistently, and the failure is silent - the bar simply never
 arrives. No new colours: the line uses `--hr-hero-bg` and `--hr-hero-text`, already held at
 4.5:1 across all five themes.
+
+### Bug 24: the pinned line never appeared, and a test said it did
+
+Reported from the dev container the same evening: "the transition/crossfade isn't happening.
+Everything just scrolls off the screen." Exactly that - the bar never arrived once.
+
+The condition was `!entry.isIntersecting && entry.boundingClientRect.top < 0`, and **its two
+halves are measured against different edges.** `isIntersecting` is against the root as
+`rootMargin` has adjusted it - the header's bottom, say y=69 - while `boundingClientRect.top` is
+against the raw viewport. So at the single moment the callback fires, the marker is at y≈68: it
+has stopped intersecting, and 68 is nowhere near below 0. And because an observer only fires when
+intersection **changes**, no later callback ever came to correct it. Scrolling on produced
+nothing at all.
+
+A fast fling did work, which is worth knowing: the marker could jump from inside the root to
+y=-800 between two samples, and `-800 < 0` is true. So the failure was total on an ordinary
+scroll and absent on a flick, which is the pattern to recognise next time.
+
+The fix is to compare against the root's own top edge - `entry.rootBounds.top`, the same line
+that decided to call us in the first place - and to drop the `isIntersecting` half entirely,
+which was never doing the work: a marker still below the fold is not intersecting either, and it
+is excluded by its `top` being a large positive number. With no root bounds the fallback is the
+header height rather than 0, which would be the original bug reached by a different route.
+
+**The test that was guarding this asserted the broken expression itself**, so it passed all the
+way onto a phone:
+
+```
+expect(pinned).toMatch(/!entry\.isIntersecting && entry\.boundingClientRect\.top < 0/);
+```
+
+That is the real lesson here and it generalises past this bug. A source check is the right tool
+for a layout decision with a reason behind it, and the wrong tool for anything with arithmetic in
+it - it can only confirm that the code says what the code says. So the decision is now a pure
+exported function, `isPastTheHeader`, tested with real pixel numbers including y=68, the value
+that exposed this. Reintroducing the old comparison was tried deliberately: three of the new
+tests go red, which is the check that the test can disagree with the code at all.
+
+Two things were fixed alongside it, both found by looking again rather than reported:
+
+- **The header height is now reactive**, so the observer is rebuilt when it is measured or
+  resized. React runs a child's effects before its parent's, so the ledger could observe before
+  the shell had measured - and with cached data on screen that is a real sequence, not a
+  theoretical one. It left the margin built on the 69px fallback, out by the whole safe-area
+  inset on an installed app. It also retires the "stale after a rotation" caveat the first
+  version documented as acceptable.
+- **The 1px marker turns out to be load-bearing twice.** It was 1px rather than 0 because a
+  zero-area observer target has historically been reported inconsistently; it also guarantees
+  the strict `<` above can never be a tie, because a marker of height h stops intersecting when
+  its top reaches `rootBounds.top - h`.
 
 ### A timezone bug in a test helper, found by the clock
 
@@ -3267,7 +3317,7 @@ pnpm -F @headroom/api db:generate
 pnpm -F @headroom/core build
 
 node scripts/testdb.mjs up      # throwaway Postgres for tests
-pnpm test                       # 1145 tests: 367 engine, 316 web, 462 API
+pnpm test                       # 1152 tests: 367 engine, 323 web, 462 API
 pnpm lint && pnpm typecheck
 pnpm build
 node scripts/testdb.mjs down
