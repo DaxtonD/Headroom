@@ -187,7 +187,7 @@ function ExpenseSection({
                 right-hand edge, which is how this page is read.
               */}
               <span className="budget__line-name">
-                <Thumb imageId={line.imageId} size="line" />
+                <Thumb imageId={line.imageId} size="line" fallback={line.name} />
                 {line.name}
                 {/* Where a stated monthly figure is being used instead of the
                     one worked out from the bill's cadence, say so, rather than

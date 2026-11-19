@@ -195,12 +195,12 @@ said. So this time the arithmetic was extracted first and tested against numbers
 
 ### Decisions made in the UI, and the reversible direction
 
-- **No placeholder.** A row with no picture draws nothing, so every screen looks exactly as it
-  does today until pictures start arriving. A column of grey initials on the ledger - opened
-  several times a day - would be real noise for no identification, since the name is right there.
-  The misalignment it leaves is temporary by nature: they are adding pictures *because* they want
-  to recognise things. Adding a placeholder later is a change to `Thumb.tsx` alone; taking a bad
-  one away would be a change to every screen.
+- **A lettered placeholder.** Built without one first, and corrected by the owner on sight - see
+  the struck-through entry under "Decisions made without asking". The first version argued that a
+  grey letter identifies nothing, which is true and beside the point: a ragged left edge reads as
+  broken, and the letter is there to make the column a column. The one judgement that held up is
+  that this was the reversible direction to be wrong in - one component, one stylesheet, four call
+  sites.
 - **Beside the badge on a ledger row, not instead of it.** The badge is state and the picture is
   identity, and both are worth a glance. It makes the left column wider, so a long name may wrap
   onto a second line - which is already how that row prefers to handle a long name, so it
@@ -222,7 +222,7 @@ table ever looks bigger than it should.
 
 ### Verified
 
-1247 tests: 367 engine, 372 web, 508 API. 72 are new - 46 API (18 of them pure byte arithmetic
+1257 tests: 367 engine, 382 web, 508 API. 82 are new - 46 API (18 of them pure byte arithmetic
 with no database) and 26 web. The migration applies to a clean database, lint, typecheck, the web
 build and `check:figures` are clean, and the new API tests pass pinned to another day.
 
@@ -3245,10 +3245,20 @@ the repository as public" still holds, and it is.
 
 ## Decisions made without asking
 
-- 2026-11-19: **A row with no picture draws nothing** - no placeholder and no grey initial. Every
-  screen therefore looks exactly as it does today until pictures start arriving, and the ledger
-  does not gain a column of letters that identify nothing. It is also the reversible direction:
-  adding a placeholder later is one file, removing a bad one would be every screen.
+- ~~2026-11-19: **A row with no picture draws nothing** - no placeholder and no grey initial.~~
+  **Reversed by the owner the same day, on sight:** "to ensure visual continuity on the ledger,
+  items with no image should still show the image placeholder. Perhaps with the first letter of
+  the item." They are right, and the reasoning that produced the first version was aimed at the
+  wrong thing - it argued that a grey letter identifies nothing, which is true and beside the
+  point. **A list where some names start 36px further left than others does not read as "those
+  have no picture yet". It reads as broken.** The letter is not identification; it is what makes
+  the column a column.
+
+  Being the reversible direction is what made it cheap to be wrong about: one component, one
+  stylesheet and four call sites. Applied to the ledger, the card strip, Manage and Budget rather
+  than the ledger alone, because one behaviour is easier to explain than two and the continuity
+  argument holds wherever names are listed. **Not** on a paycheque row, which already carries its
+  own green mark, nor in the picker, where an empty square would read as a failed load.
 - 2026-11-19: **The picture's bytes are in the database rather than on a volume.** The deciding
   reason is the backup: Duplicati is pointed at a folder of database dumps, so anything on a
   filesystem would be outside it and nobody would find out until they needed it. It also avoids a
@@ -3484,7 +3494,7 @@ pnpm -F @headroom/api db:generate
 pnpm -F @headroom/core build
 
 node scripts/testdb.mjs up      # throwaway Postgres for tests
-pnpm test                       # 1247 tests: 367 engine, 372 web, 508 API
+pnpm test                       # 1257 tests: 367 engine, 382 web, 508 API
 pnpm lint && pnpm typecheck
 pnpm build
 node scripts/testdb.mjs down

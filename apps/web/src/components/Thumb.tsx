@@ -5,30 +5,37 @@
  * account, expense or category... this tweak will really make it easy to
  * identify the item."
  *
- * ## Nothing is drawn when there is no picture
+ * ## The placeholder, and why the first version did not have one
  *
- * No placeholder, no grey initial. Three reasons, in order of how much they
- * matter:
+ * It was built with nothing drawn where there was no picture, on the reasoning
+ * that a column of grey letters identifies nothing and every screen should
+ * look unchanged until pictures start arriving.
  *
- *  1. Every screen looks exactly as it does today until the household starts
- *     adding pictures, so this cannot make anything worse on the way in.
- *  2. A column of grey letters on the ledger - the screen opened several times
- *     a day - is real visual noise in exchange for nothing: the name is right
- *     there, and a letter is not identification.
- *  3. The misalignment it leaves is temporary by nature. They are adding
- *     pictures *because* they want to recognise things, so the end state is
- *     that most rows have one.
+ * That was wrong about the thing that actually matters, and the household said
+ * so as soon as they saw it: **"to ensure visual continuity on the ledger,
+ * items with no image should still show the image placeholder."** A list where
+ * some names start 36px further left than others does not read as "those ones
+ * have no picture yet" - it reads as broken. The letter is not there to
+ * identify anything; it is there so the column is a column.
  *
- * It is the reversible direction, too: adding a placeholder later is a change
- * to this file alone. Taking a bad one away would be a change to every screen.
+ * ## Which is why `fallback` is a prop and not a default
  *
- * ## Why `alt=""`
+ * The screen decides, because two places genuinely should not have one:
  *
- * It is decorative. The name it sits beside says what the thing is, in text,
- * always - so a screen reader announcing the picture as well would be reading
- * the same item twice. The one thing a picture must never be here is the only
- * way to tell two rows apart.
+ *  - a **paycheque** row already carries its own green mark and a tinted
+ *    background, so a letter square beside that is noise competing with a
+ *    signal;
+ *  - the **picker** itself, where an empty square next to "Add a picture"
+ *    would read as a picture that failed to load.
+ *
+ * ## Why `alt=""` and `aria-hidden`
+ *
+ * Both are decorative. The name sits beside them, in text, always - so a
+ * screen reader announcing the picture or reading out "V" would be saying the
+ * same item twice. A picture must never be the only way to tell two rows
+ * apart.
  */
+import { initialFor } from "../lib/initials.js";
 import "./Thumb.css";
 
 /** How big, by where it is being used. The CSS holds the actual sizes. */
@@ -37,11 +44,30 @@ export type ThumbSize = "row" | "line" | "picker";
 export function Thumb({
   imageId,
   size = "row",
+  fallback = null,
 }: {
   readonly imageId: string | null | undefined;
   readonly size?: ThumbSize;
+  /**
+   * The name, when this should show a lettered square rather than nothing in
+   * the absence of a picture. Null draws nothing at all.
+   */
+  readonly fallback?: string | null;
 }): React.JSX.Element | null {
-  if (imageId === null || imageId === undefined || imageId === "") return null;
+  const hasImage = imageId !== null && imageId !== undefined && imageId !== "";
+
+  if (!hasImage) {
+    const initial = fallback === null ? null : initialFor(fallback);
+    // Nothing to draw, and nothing worth drawing: an empty square against an
+    // unnamed row would be a hole rather than a placeholder.
+    if (initial === null) return null;
+
+    return (
+      <span className={`thumb thumb--${size} thumb--empty`} aria-hidden="true">
+        <span className="thumb__initial">{initial}</span>
+      </span>
+    );
+  }
 
   return (
     <span className={`thumb thumb--${size}`}>

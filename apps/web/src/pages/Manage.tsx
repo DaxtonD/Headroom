@@ -662,7 +662,8 @@ function Row({
       */}
       <span className="manage__row-main">
         <span className="manage__row-head">
-          <Thumb imageId={imageId} size="line" />
+          {/* Lettered where there is none, so the column lines up. */}
+          <Thumb imageId={imageId} size="line" fallback={name} />
           {badge}
           <span className="manage__row-name">{name}</span>
         </span>
@@ -906,7 +907,7 @@ function AccountsSection({
                 <>
                   <span className="manage__row-main">
                     <span className="manage__row-head">
-                      <Thumb imageId={account.imageId} size="line" />
+                      <Thumb imageId={account.imageId} size="line" fallback={account.name} />
                       <span className="manage__row-name">{account.name}</span>
                       {/*
                         Said on the row, because with two accounts the

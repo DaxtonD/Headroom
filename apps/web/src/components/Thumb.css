@@ -34,10 +34,39 @@
   object-fit: cover;
 }
 
+/*
+ * The lettered square, for a thing with no picture yet.
+ *
+ * Not identification - the name is right beside it. It is there so a list of
+ * names is a column rather than a ragged edge, which is what the household
+ * reported as soon as they saw the first version without it.
+ *
+ * `--hr-neutral-fg` on `--hr-neutral-bg` is a pair `theme-contrast.test.ts`
+ * already holds at 4.5:1 across all five themes, so this adds no new colour.
+ */
+.thumb--empty {
+  display: grid;
+  place-items: center;
+}
+
+.thumb__initial {
+  color: var(--hr-neutral-fg);
+  font-family: var(--hr-font-display);
+  font-weight: 600;
+  /* Centres better than the baseline does inside a small square. */
+  line-height: 1;
+  /* A letter is not a word: no ellipsis, no wrap, no selection. */
+  user-select: none;
+}
+
 /* On a ledger row, beside the paid/verified badge. */
 .thumb--row {
   width: 28px;
   aspect-ratio: 1;
+}
+
+.thumb--row .thumb__initial {
+  font-size: 0.875rem;
 }
 
 /* In a list on Manage or Budget, where the row is taller. */
@@ -46,8 +75,16 @@
   aspect-ratio: 1;
 }
 
+.thumb--line .thumb__initial {
+  font-size: 1.0625rem;
+}
+
 /* Inside the picker, showing what is currently set. */
 .thumb--picker {
   width: 56px;
   aspect-ratio: 1;
+}
+
+.thumb--picker .thumb__initial {
+  font-size: 1.5rem;
 }

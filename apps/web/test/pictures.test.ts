@@ -19,6 +19,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
+import { initialFor } from "../src/lib/initials.js";
 
 const web = (...parts: string[]): string =>
   readFileSync(resolve(import.meta.dirname, "..", "src", ...parts), "utf8");
@@ -53,14 +54,39 @@ const ledger = web("pages", "Ledger.tsx");
 const sw = web("sw.ts");
 
 describe("the square itself", () => {
-  it("draws nothing at all when there is no picture", () => {
+  it("shows a lettered square where there is no picture", () => {
     /*
-     * The decision, and the reversible direction. No placeholder means every
-     * screen looks exactly as it does today until the household starts adding
-     * pictures - and a column of grey initials on the ledger would be real
-     * noise for no identification, since the name is right there.
+     * The first version drew nothing, on the reasoning that a grey letter
+     * identifies nothing. That was wrong about the thing that matters, and
+     * the household said so on sight: "to ensure visual continuity on the
+     * ledger, items with no image should still show the image placeholder."
+     *
+     * A list where some names start 36px further left than others does not
+     * read as "those have no picture yet", it reads as broken. The letter is
+     * not identification - it is what makes the column a column.
      */
-    expect(thumb).toMatch(/if \(imageId === null \|\| imageId === undefined \|\| imageId === ""\) return null/);
+    expect(thumb).toMatch(/thumb--empty/);
+    expect(thumb).toMatch(/initialFor\(fallback\)/);
+  });
+
+  it("draws nothing when the screen asks for no placeholder", () => {
+    // `fallback` is a prop and not a default, because two places should not
+    // have one: a paycheque row, which carries its own mark already, and the
+    // picker, where an empty square would read as a failed load.
+    expect(thumb).toMatch(/fallback = null/);
+    expect(thumb).toMatch(/if \(initial === null\) return null/);
+  });
+
+  it("keeps the letter out of what a screen reader says", () => {
+    // The name is beside it, so reading out "V" would say the item twice.
+    expect(thumb).toMatch(/className=\{`thumb thumb--\$\{size\} thumb--empty`\} aria-hidden="true"/);
+  });
+
+  it("uses a colour pair the contrast test already holds", () => {
+    // --hr-neutral-fg on --hr-neutral-bg, checked at 4.5:1 across all five
+    // themes. The square's own background is that same token.
+    expect(thumbCss).toMatch(/\.thumb__initial \{[^}]*color: var\(--hr-neutral-fg\)/s);
+    expect(thumbCss).toMatch(/\.thumb \{[^}]*background: var\(--hr-neutral-bg\)/s);
   });
 
   it("is decorative, so a screen reader does not read the item twice", () => {
@@ -86,6 +112,40 @@ describe("the square itself", () => {
     expect(thumbCss).toMatch(/aspect-ratio: 1/);
     expect(thumbCss).toMatch(/\.thumb \{[^}]*overflow: hidden/s);
     expect(thumbCss).toMatch(/\.thumb \{[^}]*border-radius: var\(--hr-radius-thumb\)/s);
+  });
+});
+
+describe("the letter that stands in for a picture", () => {
+  it("takes the first character, upper-cased", () => {
+    expect(initialFor("Netflix")).toBe("N");
+    expect(initialFor("groceries")).toBe("G");
+  });
+
+  it("ignores leading space, which would otherwise be the letter", () => {
+    expect(initialFor("  Spotify")).toBe("S");
+  });
+
+  it("keeps a character whole that does not fit in one code unit", () => {
+    /*
+     * The reason this is not `name[0]`. A household can call a category
+     * anything, and taking the leading surrogate of an emoji on its own
+     * renders as a replacement box - a square with a broken glyph in it,
+     * which is worse than no square.
+     */
+    expect(initialFor("\u{1F3E0} House")).toBe("\u{1F3E0}");
+    expect(initialFor("\u{1F3E0} House")).toHaveLength(2);
+  });
+
+  it("answers null for a name with nothing in it", () => {
+    // Null and not "", so the component can draw nothing rather than an
+    // empty square - which would read as a picture that failed to load.
+    expect(initialFor("")).toBeNull();
+    expect(initialFor("   ")).toBeNull();
+  });
+
+  it("leaves a digit or a symbol as it found it", () => {
+    expect(initialFor("7-Eleven")).toBe("7");
+    expect(initialFor("\u00e9lectricit\u00e9")).toBe("\u00c9");
   });
 });
 
@@ -219,25 +279,42 @@ describe("where the square shows up", () => {
   it("on the Manage rows, for the two things that have one", () => {
     expect(manage).toMatch(/imageId=\{bill\.imageId\}/);
     expect(manage).toMatch(/imageId=\{category\.imageId\}/);
-    expect(manage).toMatch(/<Thumb imageId=\{account\.imageId\} size="line" \/>/);
+    expect(manage).toMatch(
+      /<Thumb imageId=\{account\.imageId\} size="line" fallback=\{account\.name\} \/>/,
+    );
   });
 
   it("on the Budget rows", () => {
-    expect(budget).toMatch(/<Thumb imageId=\{line\.imageId\} size="line" \/>/);
+    expect(budget).toMatch(
+      /<Thumb imageId=\{line\.imageId\} size="line" fallback=\{line\.name\} \/>/,
+    );
   });
 
   it("on the ledger rows, beside the badge rather than instead of it", () => {
     // The badge is state and the picture is identity; both are worth a
     // glance, and the row already prefers a taller line to a truncated name.
-    expect(row).toMatch(/<Thumb imageId=\{row\.imageId\} size="row" \/>/);
+    expect(row).toMatch(/imageId=\{row\.imageId\}/);
     const thumbAt = row.indexOf("<Thumb");
     const mainAt = row.indexOf('<span className="row__main">');
     expect(thumbAt).toBeGreaterThan(0);
     expect(thumbAt).toBeLessThan(mainAt);
   });
 
+  it("lines the ledger names up, which is what was reported", () => {
+    // Every row gets a square, so the column has one left edge.
+    expect(row).toMatch(/fallback=\{isPaycheque \? null : row\.name\}/);
+  });
+
+  it("leaves a paycheque row alone, which already has its own mark", () => {
+    // A green circle and a letter square side by side is two marks competing
+    // where one already says everything.
+    expect(row).toMatch(/isPaycheque \? null/);
+  });
+
   it("on the card strip in the hero", () => {
-    expect(ledger).toMatch(/<Thumb imageId=\{card\.imageId\} size="row" \/>/);
+    expect(ledger).toMatch(
+      /<Thumb imageId=\{card\.imageId\} size="row" fallback=\{card\.name\} \/>/,
+    );
   });
 });
 

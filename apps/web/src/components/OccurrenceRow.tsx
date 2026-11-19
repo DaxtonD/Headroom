@@ -200,7 +200,21 @@ export function OccurrenceRow({
           second line - which is already how this row prefers to handle a long
           name, so it degrades into something the design already does.
         */}
-        <Thumb imageId={row.imageId} size="row" />
+        <Thumb
+          imageId={row.imageId}
+          size="row"
+          /*
+            A lettered square where there is no picture, so the names line up
+            down the column. Reported as soon as the first version shipped
+            without one: a list where some names start further left than
+            others reads as broken rather than as incomplete.
+
+            Not for a paycheque. That row already carries its own green mark
+            and a tinted background, so a letter beside it would be noise
+            competing with a signal.
+          */
+          fallback={isPaycheque ? null : row.name}
+        />
 
         <span className="row__main">
           <span className="row__name">{row.name}</span>

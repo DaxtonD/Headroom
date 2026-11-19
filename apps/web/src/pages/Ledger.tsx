@@ -379,7 +379,7 @@ export function Ledger({
           <ul className="ledger__cards-list">
             {cards.map((card) => (
               <li className="ledger__card" key={card.id}>
-                <Thumb imageId={card.imageId} size="row" />
+                <Thumb imageId={card.imageId} size="row" fallback={card.name} />
                 <span className="ledger__card-name">{card.name}</span>
                 <span className="ledger__card-owed hr-amount">{formatCents(card.cents)}</span>
                 <span className="ledger__card-ahead">
