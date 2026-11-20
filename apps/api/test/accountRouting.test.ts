@@ -290,10 +290,34 @@ describe("changing which account one row came out of", () => {
   });
 });
 
+/**
+ * Let the clock past the instant a balance was typed at.
+ *
+ * A settled row counts toward a typed figure only when it settled strictly
+ * later, and a tie goes to the snapshot - the safe direction, because a
+ * balance read off the bank after the money left already contains it.
+ *
+ * In real time the snapshot below and the row after it are milliseconds apart
+ * and the order is never in doubt. Under `PIN_DATE` it is: `pinclock.ts` fakes
+ * `Date` and advances it in 20ms steps, so both land on the exact same instant
+ * and the row is correctly ignored. The same wait is in
+ * `oneOffAlreadyDone.test.ts` for the same reason; `setTimeout` is not faked,
+ * only `Date` is, so this really does wait and the fake clock really does move
+ * while it does.
+ *
+ * The harness being coarse, not the app being wrong - so the test says what it
+ * depends on rather than the rule being loosened to suit it.
+ */
+const letTheClockMove = (): Promise<void> =>
+  new Promise((resolve) => {
+    setTimeout(resolve, 30);
+  });
+
 describe("turning a row into a payment toward an account", () => {
   beforeEach(async () => {
     await setBalance("240000");
     await setBalance("600000", savingsId);
+    await letTheClockMove();
   });
 
   it("credits savings from then on, which is how a lost row is repaired", async () => {
