@@ -666,6 +666,7 @@ export async function loadOccurrenceDecorations(
       version: true,
       templateId: true,
       template: { select: { imageId: true } },
+      transferToAccount: { select: { imageId: true } },
       verifiedAt: true,
       paidAt: true,
       paidFromAccountId: true,
@@ -682,7 +683,22 @@ export async function loadOccurrenceDecorations(
       {
         version: row.version,
         templateId: row.templateId,
-        imageId: row.template?.imageId ?? null,
+        /*
+         * The template's picture, or the picture of the account the money
+         * lands in.
+         *
+         * A one-off has no template, so a payment toward the Visa showed a
+         * lettered square beside a row whose whole subject is the Visa -
+         * which has a picture, two inches further up the same screen, in
+         * "On cards". Reported from use.
+         *
+         * Only the DESTINATION. A charge paid FROM a card is a purchase, not
+         * the card: it already names the card in a chip, and giving it the
+         * card's logo would say the row IS the card. The template still wins
+         * where there is one, because a picture somebody chose beats one
+         * derived from where the money went.
+         */
+        imageId: row.template?.imageId ?? row.transferToAccount?.imageId ?? null,
         paidFromAccountId: row.paidFromAccountId,
         transferToAccountId: row.transferToAccountId,
         owner: row.owner,
