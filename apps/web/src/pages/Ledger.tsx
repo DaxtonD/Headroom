@@ -507,6 +507,7 @@ export function Ledger({
         <OneOffForm
           paydays={moveTargets}
           accounts={data.accounts}
+          mortgageId={data.mortgageId}
           today={data.today}
           onClose={() => setAddingOneOff(false)}
         />

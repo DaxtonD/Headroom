@@ -491,6 +491,20 @@ model Occurrence {
   paidFromAccountId   String? @db.Uuid
   transferToAccountId String? @db.Uuid
 
+  /// Set and this row IS a lump sum off the mortgage.
+  ///
+  /// The mortgage is not an `Account`, so it cannot be a `transferToAccountId`
+  /// - there is no balance here for the money to arrive in, only a loan to be
+  /// made smaller. This column is what says where it went.
+  ///
+  /// It is also the whole record of the payment. The Savings screen derives
+  /// its lump sums from these rows rather than keeping a second copy in
+  /// `Prepayment`, so editing the amount, moving the date, ticking it paid or
+  /// deleting it on the ledger all reach the payoff projection with nothing to
+  /// keep in step. `Prepayment` goes on holding lump sums that are only
+  /// INTENDED, which move no money and have no row.
+  mortgageId          String? @db.Uuid
+
   verifiedById String?   @db.Uuid
   verifiedAt   DateTime? @db.Timestamptz(6)
 
@@ -536,9 +550,12 @@ model Occurrence {
   anchored   Occurrence[] @relation("anchorChildren")
   paidFromAccount   Account?  @relation("occurrencePaidFrom", fields: [paidFromAccountId], references: [id], onDelete: Restrict)
   transferToAccount Account?  @relation("occurrenceTransferTarget", fields: [transferToAccountId], references: [id], onDelete: Restrict)
+  mortgage          Mortgage? @relation(fields: [mortgageId], references: [id], onDelete: Cascade)
 
   @@unique([templateId, periodKey], name: "template_period_unique")
   @@index([householdId, date])
+  /// The Savings screen reads every lump sum for one mortgage on every load.
+  @@index([mortgageId, date])
   @@index([householdId, clearedAt])
   @@index([anchorOccurrenceId, sortIndex])
   /// Both ends are foreign keys with ON DELETE RESTRICT, so removing an
@@ -678,6 +695,8 @@ model Mortgage {
   household    Household    @relation(fields: [householdId], references: [id], onDelete: Cascade)
   paySchedule  PaySchedule? @relation(fields: [payScheduleId], references: [id], onDelete: Restrict)
   prepayments  Prepayment[]
+  /// Lump sums actually paid: one ledger row each. See `Occurrence.mortgageId`.
+  payments     Occurrence[]
 
   @@index([householdId])
   @@map("mortgage")

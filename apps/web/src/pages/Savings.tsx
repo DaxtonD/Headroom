@@ -776,17 +776,42 @@ function MortgageSection({
                   {lump.paid ? "paid" : "planned"}
                 </span>
                 {lump.note ? <span className="savings__lump-note">{lump.note}</span> : null}
+                {/*
+                  Where the money came from, for the ones that are ledger
+                  rows. This is the whole point of the change: a lump sum
+                  used to be a figure with no account behind it, so nothing
+                  on this screen could say the money had actually gone.
+                */}
+                {lump.fromAccountName !== null ? (
+                  <span className="savings__lump-source">from {lump.fromAccountName}</span>
+                ) : null}
               </div>
               <Amount cents={lump.cents} />
-              <button
-                className="savings__edit"
-                type="button"
-                disabled={!canEdit}
-                onClick={() => onEditLumpSum(lump)}
-                aria-label={`Edit the lump sum from ${formatDayMonthAndYear(lump.paidOn)}`}
-              >
-                Edit
-              </button>
+              {/*
+                A lump sum that IS a ledger row has no copy here to edit: the
+                row is the record, and it is changed where it lives. Offering
+                an Edit that wrote to this screen's own table would create the
+                second copy this design exists to avoid.
+              */}
+              {lump.occurrenceId === null ? (
+                <button
+                  className="savings__edit"
+                  type="button"
+                  disabled={!canEdit}
+                  onClick={() => onEditLumpSum(lump)}
+                  aria-label={`Edit the lump sum from ${formatDayMonthAndYear(lump.paidOn)}`}
+                >
+                  Edit
+                </button>
+              ) : (
+                <Link
+                  className="savings__edit"
+                  to="/"
+                  aria-label={`Change the lump sum from ${formatDayMonthAndYear(lump.paidOn)} on the ledger`}
+                >
+                  On the ledger
+                </Link>
+              )}
             </li>
           ))}
         </ul>
@@ -801,10 +826,24 @@ function MortgageSection({
         </p>
       ) : null}
 
+      {/*
+        Two different things, said plainly, because the difference is the one
+        that was reported: a lump sum you have actually paid has to come out
+        of an account, and only the ledger asks which.
+      */}
+      <p className="savings__note">
+        A lump sum you have <strong>already paid</strong> is added on the ledger, as a one-off -
+        that is where it says which account the money came out of, and it appears here once it
+        is in. Plan one for later here instead.
+      </p>
+
       <div className="savings__actions">
         <button className="hr-button" type="button" disabled={!canEdit} onClick={onAddLumpSum}>
-          Add a lump sum
+          Plan a lump sum
         </button>
+        <Link className="hr-button hr-button--secondary" to="/">
+          Record one paid
+        </Link>
       </div>
 
       <p className="hr-visually-hidden">Figures as at {today}.</p>

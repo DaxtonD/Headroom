@@ -178,7 +178,87 @@ function paymentAnchorOf(row: Mortgage, payAnchor: Date | null): PlainDate {
   return addDays(toPlainDate(payAnchor), row.offsetDays);
 }
 
-function toLumpSum(row: Prepayment): LumpSum {
+/**
+ * One lump sum, from either of the two places one can come from.
+ *
+ * **A ledger row** with `mortgageId` set: money that really left an account.
+ * It is the whole record - no copy is kept here - so editing the amount,
+ * moving the date, ticking it paid or deleting it on the ledger all reach the
+ * payoff projection with nothing to keep in step.
+ *
+ * **A `prepayment` row**: a lump sum that is only INTENDED, which moves no
+ * money and has no ledger row, plus any paid one recorded before the ledger
+ * could carry it.
+ *
+ * Kept as one type because everything downstream - the two projections, the
+ * prepayment allowance, the wire - asks the same four questions of both.
+ */
+interface LumpSumRecord {
+  readonly id: string;
+  readonly paidOn: Date;
+  readonly cents: bigint;
+  readonly note: string | null;
+  readonly paid: boolean;
+  readonly version: number;
+  /** The ledger row this IS, or null for a plan typed on the Savings screen. */
+  readonly occurrenceId: string | null;
+  /** Which account it left, in words. Null when nothing says. */
+  readonly fromAccountName: string | null;
+}
+
+/** A `prepayment` row: an intention, or a payment from before the ledger carried them. */
+function recordFromPrepayment(row: Prepayment): LumpSumRecord {
+  return {
+    id: row.id,
+    paidOn: row.paidOn,
+    cents: row.cents,
+    note: row.note,
+    paid: row.paid,
+    version: row.version,
+    occurrenceId: null,
+    fromAccountName: null,
+  };
+}
+
+/**
+ * A ledger row that is a lump sum.
+ *
+ * `paid` is whether the row has SETTLED, by either route - ticked on the
+ * ledger, or taken into a typed balance by the checklist. Both say the money
+ * has gone, which is the only thing the prepayment allowance cares about, and
+ * reading one of them alone is how a paid lump sum would quietly stop
+ * counting against the year's room.
+ *
+ * The amount is negated: a bill is stored negative and a lump sum is a
+ * positive magnitude everywhere downstream.
+ */
+function recordFromOccurrence(row: {
+  readonly id: string;
+  readonly name: string;
+  readonly cents: bigint;
+  readonly date: Date | null;
+  readonly paidAt: Date | null;
+  readonly clearedAt: Date | null;
+  readonly version: number;
+  readonly createdAt: Date;
+  readonly paidFromAccount: { readonly name: string } | null;
+}): LumpSumRecord {
+  return {
+    id: row.id,
+    // A lump sum is always dated; `createdAt` is a floor that cannot be hit
+    // through any route the app offers, and is here so the type is total.
+    paidOn: row.date ?? row.createdAt,
+    cents: row.cents < 0n ? -row.cents : row.cents,
+    note: row.name,
+    paid: row.paidAt !== null || row.clearedAt !== null,
+    version: row.version,
+    occurrenceId: row.id,
+    // Null means chequing, which is what a null source has always meant.
+    fromAccountName: row.paidFromAccount?.name ?? "Chequing",
+  };
+}
+
+function toLumpSum(row: LumpSumRecord): LumpSum {
   return {
     id: row.id,
     date: toPlainDate(row.paidOn),
@@ -255,7 +335,7 @@ interface MortgagePanelInput {
   readonly payAnchor: Date | null;
   /** Whose payday it follows, or null when it keeps its own dates. */
   readonly followsName: string | null;
-  readonly prepayments: readonly Prepayment[];
+  readonly prepayments: readonly LumpSumRecord[];
   readonly today: PlainDate;
   readonly whatIfCents: Cents | null;
   readonly earmarkCents: Cents | null;
@@ -408,7 +488,7 @@ function serialiseMortgage(row: Mortgage) {
   };
 }
 
-function serialisePrepayment(row: Prepayment) {
+function serialisePrepayment(row: LumpSumRecord) {
   return {
     id: row.id,
     paidOn: toPlainDate(row.paidOn),
@@ -416,6 +496,13 @@ function serialisePrepayment(row: Prepayment) {
     note: row.note,
     paid: row.paid,
     version: row.version,
+    /*
+     * Set when this lump sum IS a ledger row, which is what tells the Savings
+     * screen to send you there to change it rather than offering an edit that
+     * would have to write to two places.
+     */
+    occurrenceId: row.occurrenceId,
+    fromAccountName: row.fromAccountName,
   };
 }
 
@@ -459,6 +546,26 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
         include: {
           paySchedule: { select: { anchorDate: true, user: { select: { name: true } } } },
           prepayments: { where: { deletedAt: null }, orderBy: { paidOn: "asc" } },
+          /*
+           * The lump sums that are ledger rows. Read here rather than copied
+           * into `prepayment` when they are made, so that an edit on the
+           * ledger cannot leave the payoff projection quoting the old figure.
+           */
+          payments: {
+            where: { deletedAt: null },
+            orderBy: { date: "asc" },
+            select: {
+              id: true,
+              name: true,
+              cents: true,
+              date: true,
+              paidAt: true,
+              clearedAt: true,
+              version: true,
+              createdAt: true,
+              paidFromAccount: { select: { name: true } },
+            },
+          },
         },
         // `paySchedule` is null for a mortgage that keeps its own dates.
 
@@ -540,7 +647,10 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
               row: mortgageRow,
               payAnchor: mortgageRow.paySchedule?.anchorDate ?? null,
               followsName: mortgageRow.paySchedule?.user.name ?? null,
-              prepayments: mortgageRow.prepayments,
+              prepayments: [
+                ...mortgageRow.prepayments.map(recordFromPrepayment),
+                ...mortgageRow.payments.map(recordFromOccurrence),
+              ].sort((left, right) => left.paidOn.getTime() - right.paidOn.getTime()),
               today,
               whatIfCents: parsedQuery.data.lumpSumCents ?? null,
               earmarkCents: mortgageEarmark(summary)?.setAsideCents ?? null,
@@ -912,7 +1022,10 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
           by: user.id,
         });
 
-        return { statusCode: 201, body: { prepayment: serialisePrepayment(created) } };
+        return {
+          statusCode: 201,
+          body: { prepayment: serialisePrepayment(recordFromPrepayment(created)) },
+        };
       },
     });
 
@@ -1002,7 +1115,10 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
 
         return {
           statusCode: 200,
-          body: { prepayment: serialisePrepayment(applied.row), merged: applied.merged },
+          body: {
+            prepayment: serialisePrepayment(recordFromPrepayment(applied.row)),
+            merged: applied.merged,
+          },
         };
       },
     });

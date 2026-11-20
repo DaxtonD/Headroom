@@ -127,6 +127,13 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
 
     const autoRows = timeline.rows.filter((row) => row.requiresCoverage);
     const nextAutoIds = autoRows.slice(0, HOME_AUTO_COUNT).map((row) => row.event.id);
+    const mortgage = await app.db.prisma.mortgage.findFirst({
+      where: { householdId: user.householdId, deletedAt: null },
+      orderBy: { createdAt: "asc" },
+      select: { id: true },
+    });
+    const mortgageId = mortgage?.id ?? null;
+
     const decorations = await loadOccurrenceDecorations(app.db.prisma, nextAutoIds);
 
     return reply.send({
@@ -166,6 +173,16 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
        * chequing forecast.
        */
       accounts: context.accounts.map(serialiseAccount),
+
+      /*
+       * Which mortgage a lump sum would pay, or null when there is none.
+       *
+       * Only the id: the ledger's one-off sheet needs to know whether to
+       * offer "Paying the mortgage" at all and what to send, and nothing on
+       * this screen shows anything else about it. The Savings screen remains
+       * the place that reads the terms.
+       */
+      mortgageId,
 
       /*
        * The working behind the three headline figures, for the info button.

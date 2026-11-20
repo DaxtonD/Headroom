@@ -30,6 +30,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| A lump sum off the mortgage, on the ledger | done | | 2026-11-20, reported from use. It could only be recorded on the Savings screen, where it moved no money and never asked which account it came out of. It is a one-off on the ledger now, and that row is the whole record |
 | Five things from a day's use | done | | 2026-11-20. A jump bar on Manage, the budget ring pinned while its list scrolls, a real badge on a payday, `dev` kept level with `main`, and four new sections on the Year screen |
 | The Year screen earns its place | done | | 2026-11-20, asked for from use: "some more genius ideas... really intelligent stuff that adapts to the data". What pays for what, what to put aside, the bills that skip months, and where the balance ends each month |
 | The budget's pie chart, and a drill-down | done | | 2026-11-19, asked for from use. A ring per section, tappable: a wedge puts that expense's real figures in the middle, a folded wedge opens into a ring of its own. Reverses a recorded decision - see below |
@@ -109,6 +110,82 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## A lump sum off the mortgage, on the ledger (2026-11-20, reported from use)
+
+> "How do I make a lump sum payment to the mortgage? It's not accessible from the ledger screen
+> (one-off). The only way to do it is from the savings screen (Add a lump sum) but it doesn't
+> specify where the money is coming out of."
+
+### It did not specify because none did
+
+A `prepayment` row fed two things - the payoff projection and the calendar-year prepayment
+allowance - and moved no balance anywhere. There was no account on it because nothing it did
+needed one.
+
+So recording a real lump sum took **two unrelated entries**: the lump sum on Savings, and a
+one-off "Money going out" on the ledger with the right source. Nothing connected them and
+nothing noticed if you did one and not the other. Doing only the first is the bad one: the
+Savings screen would go on saying the mortgage was years shorter while chequing had never
+dropped, and neither screen would look wrong.
+
+### The mortgage is not an account, and that is the design
+
+A lump sum cannot be an ordinary transfer. A transfer is money leaving one balance and arriving
+in another; here there is no balance for it to arrive in, only a loan to be made smaller. Making
+the mortgage an `Account` would have given `accountDelta` a fourth case to handle and the
+mortgage two sources of truth for its balance - its own amortisation, and a typed figure - which
+is a bigger change than this report deserved.
+
+So a lump sum is an **ordinary bill carrying `mortgageId`**. It leaves a real account exactly
+like any other one-off, with the source the one-off sheet already asks for, and the column says
+where it went.
+
+### One record, derived twice
+
+The row is the whole record. The Savings screen **derives** its paid lump sums from these rows
+rather than keeping a copy, which is the project's own rule - store facts, derive every total -
+and here it is load-bearing rather than tidy. With a copy, editing the amount on the ledger would
+move the balance and leave the payoff date quoting the old figure, and there would be nothing on
+either screen to see. There are tests for each of the four ways that could have gone wrong: the
+amount edited, the date moved, the tick going on, and the row deleted.
+
+`prepayment` keeps its old meaning and every existing row is untouched: a lump sum that is only
+**intended**. That is a fact of a different kind - it moves no money and has no ledger row - and
+the app already separated the two deliberately, because only a paid one counts against the year's
+allowance. The Savings screen's two buttons now say which is which: **Plan a lump sum** stays
+there, **Record one paid** goes to the ledger.
+
+A lump sum that came from the ledger has no copy on the Savings screen to edit, so that row shows
+where the money came from and a link across instead of an Edit button. Offering an edit that had
+to write to two places is the drift this removes.
+
+### What was decided without asking
+
+- **Only a paid lump sum appears on the ledger.** Confirmed with the owner. An intention is not
+  money leaving an account; it goes on the ledger the day it is recorded as paid.
+- **The one-off sheet is the entry point.** Also confirmed. The alternative was adding a source
+  account to the Savings form; the ledger is where money moving is already recorded, and it is
+  the screen that is open several times a day.
+- **`ON DELETE CASCADE`** on the new reference, unlike the account references beside it. Deleting
+  a mortgage already takes its prepayments with it, and a lump sum off a mortgage that no longer
+  exists is not a row anybody could act on.
+- **A lump sum recorded as money coming in is refused**, as is one that also names a destination
+  account. Both would be quiet wrong answers rather than crashes: the first would pay the
+  mortgage down with money nobody spent.
+
+### Verified
+
+1560 tests green - 411 engine, 581 web, 568 API, up from 1535. 25 new, 16 of them against a real
+Postgres: that the balance falls AND the payoff date moves from the single row, that the
+allowance counts a paid one and not an unticked one, that an intention still moves nothing, and
+that the two kinds sit in one list in date order.
+
+### Still to do
+
+- Nothing for this item. Two lump sums for the same payment - one typed on Savings, one on the
+  ledger - would still be counted twice, exactly as two of anything would be; nothing new is
+  possible here that was not possible before.
 
 ## Five things from a day's use (2026-11-20)
 

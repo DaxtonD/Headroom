@@ -71,6 +71,17 @@ export interface LumpSum {
   /** False for one that is intended but has not been paid. */
   readonly paid: boolean;
   readonly version: number;
+  /**
+   * Set when this lump sum IS a row on the ledger - money that really left an
+   * account - rather than an intention typed on this screen.
+   *
+   * There is no second copy of it here, so it cannot be edited from this
+   * screen: the ledger row is the record, and changing it there is what
+   * reaches the payoff projection. The list says so and sends you over.
+   */
+  readonly occurrenceId: string | null;
+  /** Which account it left, in words, for the ones that are ledger rows. */
+  readonly fromAccountName: string | null;
 }
 
 export interface PrepaymentRoom {

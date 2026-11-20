@@ -58,11 +58,29 @@ import {
  * It is the flow the card warning points at: "nothing is scheduled to pay the
  * Visa" is only fair if there is somewhere to say that there is.
  */
-type Kind = "bill" | "transfer" | "deposit" | "card";
+/*
+ * `mortgage` is this form's own kind too, and for the opposite reason to
+ * `card`.
+ *
+ * Paying a card is a transfer underneath: money leaves one account and
+ * arrives in another. A lump sum off the mortgage is NOT, because the
+ * mortgage is not an account - there is no balance for the money to arrive
+ * in, only a loan to be made smaller. So it goes out as an ordinary bill
+ * carrying `mortgageId`, and the Savings screen reads that row as the lump
+ * sum rather than keeping a second copy of it.
+ *
+ * Reported on 2026-11-20: "How do I make a lump sum payment to the mortgage?
+ * It's not accessible from the ledger screen... the only way is from the
+ * savings screen but it doesn't specify where the money is coming out of."
+ * It did not specify because, as built, none did - that record moved no
+ * balance anywhere.
+ */
+type Kind = "bill" | "transfer" | "deposit" | "card" | "mortgage";
 
 const KINDS: readonly { readonly kind: Kind; readonly label: string }[] = [
   { kind: "bill", label: "Money going out" },
   { kind: "card", label: "Paying a credit card" },
+  { kind: "mortgage", label: "Lump sum off the mortgage" },
   { kind: "transfer", label: "Into savings" },
   { kind: "deposit", label: "Money coming in" },
 ];
@@ -70,6 +88,7 @@ const KINDS: readonly { readonly kind: Kind; readonly label: string }[] = [
 export function OneOffForm({
   paydays,
   accounts = [],
+  mortgageId = null,
   today,
   onClose,
 }: {
@@ -77,6 +96,13 @@ export function OneOffForm({
   paydays: readonly MoveTarget[];
   /** The household's accounts. Empty means the old single-account form. */
   accounts?: readonly Account[];
+  /**
+   * The mortgage a lump sum would pay, or null when there is none.
+   *
+   * Null hides the choice entirely, on the same rule as the cards and the
+   * savings accounts: a choice with no valid answer is worse than no choice.
+   */
+  mortgageId?: string | null;
   /**
    * Today, as the server reckons it (`America/Regina`).
    *
@@ -123,6 +149,7 @@ export function OneOffForm({
   const kinds = KINDS.filter((option) => {
     if (option.kind === "card") return cards.length > 0;
     if (option.kind === "transfer") return savingsAccounts.length > 0;
+    if (option.kind === "mortgage") return mortgageId !== null;
     return true;
   });
 
@@ -162,6 +189,11 @@ export function OneOffForm({
    */
   const destinationId =
     kind === "card" ? cardId : kind === "transfer" ? savingsId : CHEQUING;
+  /*
+   * `CHEQUING` here means "no destination", which is right: a lump sum leaves
+   * an account and does not arrive in one. The source list is therefore the
+   * full set, because there is nothing to strike off it.
+   */
 
   /** Chequing is the empty option, so it is not in this list. */
   const payFrom = sourceOptions(accounts, destinationId);
@@ -240,7 +272,9 @@ export function OneOffForm({
         // Always a positive magnitude; the server signs it from the kind.
         cents: (cents < 0n ? -cents : cents).toString(),
         // This form's `card` is the API's `transfer`, with a destination.
-        kind: kind === "card" ? "transfer" : kind,
+        // Its `mortgage` is an ordinary bill that names the mortgage it pays.
+        kind: kind === "card" ? "transfer" : kind === "mortgage" ? "bill" : kind,
+        ...(kind === "mortgage" && mortgageId !== null ? { mortgageId } : {}),
         // Both kinds that move money send where it lands. Paying a card did
         // this already; "Into savings" did not, and that was the bug.
         ...(destinationId === CHEQUING ? {} : { transferToAccountId: destinationId }),

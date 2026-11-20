@@ -119,6 +119,16 @@ const createBody = z
     sortIndex: z.number().int().min(0).max(100_000).optional(),
     paidFromAccountId: z.string().uuid().nullable().optional(),
     transferToAccountId: z.string().uuid().nullable().optional(),
+    /**
+     * This one-off IS a lump sum off the mortgage.
+     *
+     * Not a `transferToAccountId`, because the mortgage is not an account:
+     * there is no balance for the money to arrive in, only a loan to be made
+     * smaller. The row still leaves a real account, so it moves the ledger
+     * exactly like any other bill - and the Savings screen reads it as the
+     * lump sum, rather than keeping a second copy of it that could drift.
+     */
+    mortgageId: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -146,6 +156,7 @@ function serialiseOccurrence(row: Occurrence) {
     ownerUserId: row.ownerUserId,
     paidFromAccountId: row.paidFromAccountId,
     transferToAccountId: row.transferToAccountId,
+    mortgageId: row.mortgageId,
     version: row.version,
   };
 }
@@ -172,6 +183,10 @@ function snapshotOccurrence(row: Occurrence): Record<string, unknown> {
     ownerUserId: row.ownerUserId,
     paidFromAccountId: row.paidFromAccountId,
     transferToAccountId: row.transferToAccountId,
+    // In the audit trail because it is the whole difference between a bill
+    // and a lump sum off the mortgage, and because the Savings screen's
+    // payoff date moves when it changes.
+    mortgageId: row.mortgageId,
   };
 }
 
@@ -376,6 +391,39 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
           kind: input.kind,
         });
 
+        /*
+         * A lump sum is money leaving an account toward a mortgage this
+         * household actually has. Both halves are checked here rather than
+         * left to the foreign key: a bad id would otherwise come back as a
+         * 500, and a lump sum recorded as money ARRIVING would make the
+         * payoff projection pay the mortgage down twice.
+         */
+        if (input.mortgageId) {
+          const mortgage = await tx.mortgage.findFirst({
+            where: { id: input.mortgageId, householdId: user.householdId, deletedAt: null },
+            select: { id: true },
+          });
+          if (!mortgage) {
+            throw new HttpError(400, "invalid_request", "That mortgage is not one we can pay.");
+          }
+
+          if (input.kind !== "bill") {
+            throw new HttpError(
+              400,
+              "invalid_request",
+              "A lump sum off the mortgage is money going out.",
+            );
+          }
+
+          if (input.transferToAccountId) {
+            throw new HttpError(
+              400,
+              "invalid_request",
+              "A lump sum goes to the mortgage, which is not an account, so it cannot also go into one.",
+            );
+          }
+        }
+
         if (input.anchorOccurrenceId) {
           const anchor = await tx.occurrence.findFirst({
             where: {
@@ -411,6 +459,7 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
             ownerUserId: input.ownerUserId ?? null,
             paidFromAccountId: input.paidFromAccountId ?? null,
             transferToAccountId: input.transferToAccountId ?? null,
+            mortgageId: input.mortgageId ?? null,
             /*
              * Already done, so the money has moved and the balance at the top
              * has to move with it.

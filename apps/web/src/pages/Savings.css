@@ -93,6 +93,20 @@
   cursor: pointer;
 }
 
+/*
+ * Worn by a link as well as a button.
+ *
+ * A lump sum that is a ledger row has no copy on this screen to edit, so the
+ * control beside it navigates to the ledger instead of opening a sheet. An
+ * anchor is an inline box and would ignore `min-height` - which is the 44px
+ * target - so both of those are stated here rather than assumed.
+ */
+a.savings__edit {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
 .savings__edit:hover:not(:disabled) {
   background: var(--hr-green-tint-soft);
 }
@@ -497,6 +511,19 @@
 .savings__lump-note {
   font-size: 0.8125rem;
   color: var(--hr-text-muted);
+}
+
+/*
+ * Which account a lump sum came out of.
+ *
+ * Only the ones that are ledger rows have one, which is the visible half of
+ * the change made on 2026-11-20: before it, a lump sum was a figure with no
+ * account behind it and nothing here could say the money had actually gone.
+ */
+.savings__lump-source {
+  font-size: 0.8125rem;
+  color: var(--hr-text-secondary);
+  font-weight: 600;
 }
 
 /* A paid lump sum and an intended one are different facts; they look it. */

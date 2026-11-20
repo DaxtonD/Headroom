@@ -82,6 +82,8 @@ interface DashboardWire {
   };
   readonly estimatesCount: number;
   readonly accounts: readonly AccountWire[];
+  /** The mortgage a lump sum would pay, or null when there is none. */
+  readonly mortgageId: string | null;
   readonly breakdown: BreakdownWire;
   readonly nextAutoWithdrawals: readonly {
     readonly id: string;
@@ -204,6 +206,8 @@ export interface Dashboard {
   readonly coverage: Coverage;
   readonly estimatesCount: number;
   readonly accounts: readonly Account[];
+  /** The mortgage a lump sum would pay, or null when there is none. */
+  readonly mortgageId: string | null;
   readonly breakdown: Breakdown;
   readonly nextAutoWithdrawals: readonly {
     readonly id: string;
@@ -654,6 +658,15 @@ export function useCreateOneOff() {
       paidFromAccountId?: string | null;
       /** Set, and this is a payment toward that account rather than a cost. */
       transferToAccountId?: string | null;
+      /**
+       * Set, and this row IS a lump sum off that mortgage.
+       *
+       * Not a `transferToAccountId`: the mortgage is not an account, so there
+       * is no balance for the money to arrive in. The row leaves a real
+       * account like any bill, and the Savings screen reads it as the lump
+       * sum rather than keeping a second copy that could drift from it.
+       */
+      mortgageId?: string;
       idempotencyKey?: string;
     }) => {
       const { idempotencyKey, ...body } = input;
