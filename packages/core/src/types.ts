@@ -198,6 +198,27 @@ export interface PayPeriod {
   readonly end: PlainDate;
   /** True for the stub period between today and the first upcoming payday. */
   readonly isCurrentPartial: boolean;
+  /**
+   * True when the horizon cut this window short.
+   *
+   * The windows are whole fortnights and the horizon is a count of
+   * paycheques, so with two earners whose paydays interleave the horizon
+   * usually lands in the MIDDLE of a fortnight. The window used to be
+   * reported at its full length anyway, which overstated it twice over: the
+   * ledger fetches no row past the horizon, so outflows stopped there, while
+   * the projected paydays were counted to the end of the fortnight. Income
+   * through the 23rd against bills through the 16th, and a left-over figure
+   * inflated on both sides.
+   *
+   * Reported 2026-11-19: a yearly subscription renewing on the 18th, a window
+   * on screen reading 10-23, and no row for it. A monthly expense on the 18th
+   * was dropped the same way, so this was never about the schedule type.
+   *
+   * The window is now reported as far as the ledger actually reaches, and
+   * this says so, so a short last period reads as a boundary rather than as
+   * missing data.
+   */
+  readonly endsAtHorizon: boolean;
   /** Everything arriving: cheques, deposits, one-off income. */
   readonly inCents: Cents;
   /** Automatic withdrawals, as a positive magnitude. */

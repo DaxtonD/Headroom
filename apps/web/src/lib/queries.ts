@@ -305,6 +305,15 @@ export interface PayPeriod {
   readonly start: string;
   readonly end: string;
   readonly isCurrentPartial: boolean;
+  /**
+   * The horizon cut this window short, so it is not a whole fortnight.
+   *
+   * Worth saying on screen. A period reading 10-16 December where every other
+   * one is fourteen days looks like missing data, and the household reported
+   * exactly that confusion from the other direction: a window reading 10-23
+   * with a bill on the 18th nowhere on it.
+   */
+  readonly endsAtHorizon: boolean;
   readonly inCents: Cents;
   readonly autoCents: Cents;
   readonly flexibleCents: Cents;
@@ -433,6 +442,7 @@ interface PayPeriodWire {
   readonly start: string;
   readonly end: string;
   readonly isCurrentPartial: boolean;
+  readonly endsAtHorizon: boolean;
   readonly inCents: string;
   readonly autoCents: string;
   readonly flexibleCents: string;
@@ -472,6 +482,7 @@ export function usePayPeriods() {
           start: period.start,
           end: period.end,
           isCurrentPartial: period.isCurrentPartial,
+          endsAtHorizon: period.endsAtHorizon,
           inCents: toCents(period.inCents),
           autoCents: toCents(period.autoCents),
           flexibleCents: toCents(period.flexibleCents),

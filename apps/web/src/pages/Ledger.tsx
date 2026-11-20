@@ -597,6 +597,22 @@ function PeriodGroup({
       ) : null}
 
       {/*
+        A short last period is a boundary, not missing data - so it says which
+        one. Headroom looks a set number of paycheques ahead, and with two
+        people being paid on alternating weeks that count usually lands in the
+        middle of a fortnight rather than at the end of one. This period is
+        reported as far as the ledger actually reaches: anything dated after it
+        is real and is simply not looked at yet.
+      */}
+      {period.endsAtHorizon ? (
+        <p className="ledger__period-note">
+          This is as far ahead as Headroom is set to look, so the rest of the
+          fortnight is not counted here yet. Manage can raise how many
+          paycheques ahead it goes.
+        </p>
+      ) : null}
+
+      {/*
         The same row component the Upcoming screen used, rather than a second
         one written for this screen. It already carries the running balance,
         the verification badge, the amount editor, verify, mark-as-paid, the

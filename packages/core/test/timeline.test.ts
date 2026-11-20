@@ -6,6 +6,7 @@
  * Every amount here is invented.
  */
 import { describe, expect, it } from "vitest";
+import { compareDates } from "../src/dates.js";
 import { computeHorizonEnd, computePayPeriods, payPeriodWindows } from "../src/payPeriods.js";
 import { accountDelta, computeTimeline, effectiveBalance, orderTimeline,
   summariseTimeline,
@@ -379,16 +380,96 @@ describe("pay period windows", () => {
   it("opens with a partial window when today is not a payday", () => {
     const windows = payPeriodWindows("2026-11-07", JORDAN, 3);
 
-    expect(windows[0]).toEqual({ start: "2026-11-07", end: "2026-11-11", isCurrentPartial: true });
-    expect(windows[1]).toEqual({ start: "2026-11-12", end: "2026-11-25", isCurrentPartial: false });
-    expect(windows[2]).toEqual({ start: "2026-11-26", end: "2026-12-09", isCurrentPartial: false });
+    expect(windows[0]).toEqual({ start: "2026-11-07", end: "2026-11-11", isCurrentPartial: true, endsAtHorizon: false });
+    expect(windows[1]).toEqual({ start: "2026-11-12", end: "2026-11-25", isCurrentPartial: false, endsAtHorizon: false });
+    expect(windows[2]).toEqual({ start: "2026-11-26", end: "2026-12-09", isCurrentPartial: false, endsAtHorizon: false });
   });
 
   it("has no partial window when today IS a payday", () => {
     const windows = payPeriodWindows("2026-11-12", JORDAN, 2);
 
-    expect(windows[0]).toEqual({ start: "2026-11-12", end: "2026-11-25", isCurrentPartial: false });
-    expect(windows[1]).toEqual({ start: "2026-11-26", end: "2026-12-09", isCurrentPartial: false });
+    expect(windows[0]).toEqual({ start: "2026-11-12", end: "2026-11-25", isCurrentPartial: false, endsAtHorizon: false });
+    expect(windows[1]).toEqual({ start: "2026-11-26", end: "2026-12-09", isCurrentPartial: false, endsAtHorizon: false });
+  });
+
+  /**
+   * Reported 2026-11-19: a window on screen reading 10-23 December, and a
+   * subscription renewing on the 18th that was nowhere on it.
+   *
+   * The windows are whole fortnights; the horizon is a count of paycheques.
+   * With two earners whose paydays interleave, the horizon lands in the middle
+   * of a fortnight - here the 16th, inside a window running to the 23rd. The
+   * caller fetches no row past the horizon, so the window was structurally
+   * unable to show the last week of its own bills while still counting the pay
+   * that arrives in it.
+   */
+  describe("the horizon lands inside a window", () => {
+    it("reports the window only as far as the ledger reaches, and says so", () => {
+      const windows = payPeriodWindows("2026-11-19", JORDAN, 3, "2026-12-16");
+
+      expect(windows[2]).toEqual({
+        start: "2026-12-10",
+        end: "2026-12-16",
+        isCurrentPartial: false,
+        endsAtHorizon: true,
+      });
+    });
+
+    it("leaves every earlier window alone", () => {
+      const windows = payPeriodWindows("2026-11-19", JORDAN, 3, "2026-12-16");
+
+      expect(windows[0]).toEqual({
+        start: "2026-11-19",
+        end: "2026-11-25",
+        isCurrentPartial: true,
+        endsAtHorizon: false,
+      });
+      expect(windows[1]).toEqual({
+        start: "2026-11-26",
+        end: "2026-12-09",
+        isCurrentPartial: false,
+        endsAtHorizon: false,
+      });
+    });
+
+    /*
+     * The case that hid this for so long. An odd paycheque count lands on the
+     * anchor person's own payday, so the horizon and the fortnight agree
+     * exactly and there is nothing to clip. Five cheques instead of four is
+     * the difference between the two.
+     */
+    it("does not clip a horizon that lands exactly on a window boundary", () => {
+      const windows = payPeriodWindows("2026-11-19", JORDAN, 3, "2026-12-23");
+
+      expect(windows[2]).toEqual({
+        start: "2026-12-10",
+        end: "2026-12-23",
+        isCurrentPartial: false,
+        endsAtHorizon: false,
+      });
+    });
+
+    it("clips nothing when no horizon is given", () => {
+      const windows = payPeriodWindows("2026-11-19", JORDAN, 3);
+
+      expect(windows[2]?.end).toBe("2026-12-23");
+      expect(windows[2]?.endsAtHorizon).toBe(false);
+    });
+
+    /*
+     * A window that starts beyond the horizon exists because `periodCount`
+     * asked for a minimum number of them, which is a different question.
+     * Clipping it would produce a window ending before it starts.
+     */
+    it("never produces a window that ends before it starts", () => {
+      const windows = payPeriodWindows("2026-11-19", JORDAN, 3, "2026-11-20");
+
+      for (const window of windows) {
+        expect(compareDates(window.start, window.end), JSON.stringify(window)).toBeLessThanOrEqual(
+          0,
+        );
+      }
+    });
   });
 
   it("keeps every full window exactly fourteen days", () => {
@@ -523,6 +604,41 @@ describe("a settled row", () => {
 });
 
 describe("pay periods", () => {
+  /**
+   * The half of this that was a wrong FIGURE, not a wrong label.
+   *
+   * Window membership and the projected paydays are both decided by
+   * `window.end`. Reported at its full fortnight, the last window counted
+   * Alex's cheque on the 17th of December while the caller had fetched no row
+   * dated after the 16th - income through the 23rd against bills through the
+   * 16th, so the left-over figure was inflated from both directions.
+   *
+   * The two assertions here are the same setup with and without the horizon,
+   * which is the clearest way to state what changed.
+   */
+  it("stops counting pay that arrives after the horizon it was cut at", () => {
+    const timeline = computeTimeline({ events: [], startBalanceCents: 0n });
+    const options = {
+      timeline,
+      paySchedules: [JORDAN, ALEX],
+      today: "2026-11-19",
+      periodCount: 3,
+      anchorScheduleId: "jordan",
+    } as const;
+
+    // Unclipped, the window runs to the 23rd and takes in Jordan's cheque on
+    // the 10th AND Alex's on the 17th.
+    const unclipped = computePayPeriods(options);
+    expect(unclipped[2]?.end).toBe("2026-12-23");
+    expect(unclipped[2]?.inCents).toBe(380_000n);
+
+    // Cut at the 16th, it takes in only Jordan's.
+    const clipped = computePayPeriods({ ...options, coverThrough: "2026-12-16" });
+    expect(clipped[2]?.end).toBe("2026-12-16");
+    expect(clipped[2]?.inCents).toBe(200_000n);
+    expect(clipped[2]?.endsAtHorizon).toBe(true);
+  });
+
   it("projects a cheque that is due in the window but not placed yet", () => {
     const timeline = computeTimeline({
       events: [paycheque("pay_jordan", "2026-11-26", 200_000n, "jordan")],

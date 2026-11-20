@@ -77,6 +77,7 @@ interface WindowSpec {
   readonly start: PlainDate;
   readonly end: PlainDate;
   readonly isCurrentPartial: boolean;
+  readonly endsAtHorizon: boolean;
 }
 
 /**
@@ -104,7 +105,12 @@ export function payPeriodWindows(
   const windows: WindowSpec[] = [];
 
   if (compareDates(nextPayday, today) > 0) {
-    windows.push({ start: today, end: addDays(nextPayday, -1), isCurrentPartial: true });
+    windows.push({
+      start: today,
+      end: addDays(nextPayday, -1),
+      isCurrentPartial: true,
+      endsAtHorizon: false,
+    });
   }
 
   const covers = (): boolean => {
@@ -117,8 +123,39 @@ export function payPeriodWindows(
   // A ceiling as well, so a horizon set absurdly far out cannot run away.
   const MAX_WINDOWS = 60;
   while ((windows.length < periodCount || !covers()) && windows.length < MAX_WINDOWS) {
-    windows.push({ start, end: addDays(start, PERIOD_DAYS - 1), isCurrentPartial: false });
+    windows.push({
+      start,
+      end: addDays(start, PERIOD_DAYS - 1),
+      isCurrentPartial: false,
+      endsAtHorizon: false,
+    });
     start = addDays(start, PERIOD_DAYS);
+  }
+
+  /*
+   * The last window must not claim days the ledger cannot fill.
+   *
+   * The loop above adds WHOLE fortnights until one reaches `coverThrough`, so
+   * the final one overshoots it by up to thirteen days. That was not only a
+   * wrong label. Row membership and the projected paydays below are both
+   * decided by `window.end`, and the caller fetches no row dated past the
+   * horizon - so the window counted up to a week of pay whose bills it was
+   * structurally unable to show, and reported a left-over figure inflated on
+   * both sides.
+   *
+   * Only when `coverThrough` falls INSIDE the last window. A window that
+   * starts beyond it exists because `periodCount` asked for a minimum number
+   * of them, which is a separate question from this one, and clipping that
+   * would produce a window ending before it starts.
+   */
+  const last = windows[windows.length - 1];
+  if (
+    coverThrough !== undefined &&
+    last !== undefined &&
+    compareDates(last.end, coverThrough) > 0 &&
+    compareDates(last.start, coverThrough) <= 0
+  ) {
+    windows[windows.length - 1] = { ...last, end: coverThrough, endsAtHorizon: true };
   }
 
   return windows;
@@ -280,6 +317,7 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       start: window.start,
       end: window.end,
       isCurrentPartial: window.isCurrentPartial,
+      endsAtHorizon: window.endsAtHorizon,
       inCents,
       autoCents,
       flexibleCents,

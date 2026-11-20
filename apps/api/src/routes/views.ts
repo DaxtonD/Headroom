@@ -276,6 +276,7 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
           start: period.start,
           end: period.end,
           isCurrentPartial: period.isCurrentPartial,
+          endsAtHorizon: period.endsAtHorizon,
           inCents: period.inCents,
           autoCents: period.autoCents,
           flexibleCents: period.flexibleCents,
