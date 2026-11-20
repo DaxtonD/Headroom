@@ -16,6 +16,14 @@ import { HttpError } from "./http.js";
 export interface AccountRouting {
   readonly paidFromAccountId: string | null;
   readonly transferToAccountId: string | null;
+  /**
+   * What the row claims to be, when the caller knows.
+   *
+   * Only the create paths pass it, so that a transfer cannot be created with
+   * nowhere to land. A PATCH leaves it out on purpose - see the note on
+   * `requireValidRouting`.
+   */
+  readonly kind?: string;
 }
 
 /** Just enough of a Prisma client or transaction to look accounts up. */
@@ -54,16 +62,46 @@ export function routingAfter(
 /**
  * Refuse routing that does not describe a real move within this household.
  *
- * Two ways it can fail, and both are a 400 rather than a 404: the client sent
+ * Three ways it can fail, and all are a 400 rather than a 404: the client sent
  * something that cannot be honoured, and saying which account is missing would
  * confirm the existence of rows in another household.
+ *
+ * ## Why a transfer must name where it lands
+ *
+ * Added 2026-11-19, after the household reported that a one-off payment into
+ * savings did not increase savings. The sheet offered "Into savings", sent
+ * `kind: "transfer"` and sent no destination - so the row was a transfer with
+ * nowhere to go. `accountDelta` is right to read that as money spent rather
+ * than money moved, so chequing fell by the amount and nothing received it.
+ * The money was simply gone from every figure here.
+ *
+ * The form was fixed, and that is not enough. This is the integrity layer, and
+ * the engine already refuses a row with no SOURCE for exactly this reason; a
+ * transfer with no destination is the same mistake with the ends swapped.
+ *
+ * `kind` is optional and only the CREATE paths pass it, deliberately. A PATCH
+ * must still go through on a row that is already in this state, because that
+ * is how the ledger's own picker repairs the rows saved before the fix - a
+ * refusal there would lock the damage in.
+ *
+ * There is no honest transfer without a destination. Money leaving for
+ * somewhere Headroom does not track is a bill, which is what "Money going out"
+ * on the sheet is for.
  */
 export async function requireValidRouting(
   tx: AccountReader,
   householdId: string,
   routing: AccountRouting,
 ): Promise<void> {
-  const { paidFromAccountId, transferToAccountId } = routing;
+  const { paidFromAccountId, transferToAccountId, kind } = routing;
+
+  if (kind === "transfer" && transferToAccountId === null) {
+    throw new HttpError(
+      400,
+      "invalid_request",
+      "A transfer has to say which account it goes into, or the money leaves and arrives nowhere.",
+    );
+  }
 
   /*
    * Money that leaves an account and arrives in the same one has not moved,

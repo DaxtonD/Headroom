@@ -371,6 +371,9 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
         await requireValidRouting(tx, user.householdId, {
           paidFromAccountId: input.paidFromAccountId ?? null,
           transferToAccountId: input.transferToAccountId ?? null,
+          // Only on create. A transfer with nowhere to land is refused here
+          // rather than recorded and silently losing the money.
+          kind: input.kind,
         });
 
         if (input.anchorOccurrenceId) {

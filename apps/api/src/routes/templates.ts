@@ -206,6 +206,9 @@ export async function registerTemplateRoutes(app: FastifyInstance): Promise<void
         await requireValidRouting(tx, user.householdId, {
           paidFromAccountId: input.paidFromAccountId ?? null,
           transferToAccountId: input.transferToAccountId ?? null,
+          // Only on create. A transfer with nowhere to land is refused here
+          // rather than recorded and silently losing the money.
+          kind: input.kind,
         });
         await requireOwnImage(tx, user.householdId, input.imageId);
 
