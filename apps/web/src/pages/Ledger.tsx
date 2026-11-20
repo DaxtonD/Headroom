@@ -382,11 +382,19 @@ export function Ledger({
               <li className="ledger__card" key={card.id}>
                 <Thumb imageId={card.imageId} size="row" fallback={card.name} />
                 <span className="ledger__card-name">{card.name}</span>
-                <span className="ledger__card-owed hr-amount">{formatCents(card.cents)}</span>
-                <span className="ledger__card-ahead">
-                  {card.horizonCents === card.cents
-                    ? "owed"
-                    : `owed, ${formatCents(card.horizonCents)} by ${formatDateShort(data.horizonEnd)}`}
+                {/*
+                  The amount and its tail are one column, so the amount lands
+                  on the same edge on every card. Side by side, a longer tail
+                  pushed the amount further left and the figures stopped
+                  lining up with each other - which is what was reported.
+                */}
+                <span className="ledger__card-figures">
+                  <span className="ledger__card-owed hr-amount">{formatCents(card.cents)}</span>
+                  <span className="ledger__card-ahead">
+                    {card.horizonCents === card.cents
+                      ? "owed"
+                      : `owed, ${formatCents(card.horizonCents)} by ${formatDateShort(data.horizonEnd)}`}
+                  </span>
                 </span>
               </li>
             ))}

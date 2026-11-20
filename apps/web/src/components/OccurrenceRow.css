@@ -28,7 +28,12 @@
   width: 100%;
   /* Comfortably over the 44px minimum. */
   min-height: 64px;
-  padding: var(--hr-space-3) var(--hr-space-4);
+  /*
+   * A narrower side inset than the card's old one, because the card it sits
+   * in now bleeds to the edge of the phone. The width this frees goes to the
+   * name and the chips, which are what ran out of room.
+   */
+  padding: var(--hr-space-3);
   border: none;
   background: none;
   text-align: left;
@@ -91,10 +96,24 @@
   overflow: hidden;
 }
 
+/*
+ * Two fixed lines, not one wrapping flow.
+ *
+ * The first carries what happened and when, which every row has. The second
+ * carries what kind of row it is and which account it touches, which only
+ * some rows have. Keeping them apart is what stops a chip moving between
+ * rows: One-off is always the first thing on the second line, whatever the
+ * length of the date above it.
+ */
 .row__chips {
   display: flex;
   flex-wrap: wrap;
   gap: var(--hr-space-1);
+}
+
+/* A hair of air, so the two lines read as two and not as a wrap. */
+.row__chips--about {
+  margin-top: 2px;
 }
 
 .row__owner {
@@ -122,7 +141,8 @@
 /* ---- The expanded panel ---- */
 
 .row__panel {
-  padding: 0 var(--hr-space-4) var(--hr-space-4);
+  /* Lines up with the summary above it, which sets the inset. */
+  padding: 0 var(--hr-space-3) var(--hr-space-4);
   display: flex;
   flex-direction: column;
   gap: var(--hr-space-3);
@@ -230,6 +250,15 @@
 }
 
 @media (min-width: 640px) {
+  /* The card has its gutter back, so the row takes its wider inset back too. */
+  .row__summary {
+    padding: var(--hr-space-3) var(--hr-space-4);
+  }
+
+  .row__panel {
+    padding: 0 var(--hr-space-4) var(--hr-space-4);
+  }
+
   .row__controls {
     gap: var(--hr-space-3);
   }

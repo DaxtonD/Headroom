@@ -294,15 +294,38 @@ export function OccurrenceRow({
                 {row.date ? `Flexible · ${formatDateShort(row.date)}` : "Flexible"}
               </Chip>
             )}
-            {row.isOneOff ? <Chip tone="oneoff">One-off</Chip> : null}
-            {/*
-              Which card it went on, and which card a payment is for. Without
-              this a charge is a row with an amount and no running balance,
-              and the only honest reading of that is "something is broken".
-            */}
-            {chargedTo ? <Chip tone="neutral">{chargedTo}</Chip> : null}
-            {paidToward ? <Chip tone="flexible">Pays {paidToward}</Chip> : null}
           </span>
+          {/*
+            A second, fixed line rather than more chips in the one above.
+            *
+            Reported from use: "the chips aren't coherent - One-off appears in
+            different spots." They all shared one wrapping flow, so where a
+            chip landed depended on how long the chips before it happened to
+            be: "Flexible - Mon, Nov 16" pushed One-off onto a second line
+            while a bare "Flexible" left it on the first. The same chip, in a
+            different place on every row, for no reason the reader can see.
+
+            Split in two, each line always carries the same kind of thing.
+            Above: what happened to this row and when - every row has those.
+            Here: what KIND of row it is and which account it touches, which
+            only some rows have, always starting at the same left edge when
+            they do. Widening the row was not enough on its own; three chips
+            still do not fit a phone, and this does not depend on whether
+            they do.
+          */}
+          {row.isOneOff || chargedTo || paidToward ? (
+            <span className="row__chips row__chips--about">
+              {row.isOneOff ? <Chip tone="oneoff">One-off</Chip> : null}
+              {/*
+                Which card it went on, and which card a payment is for.
+                Without this a charge is a row with an amount and no running
+                balance, and the only honest reading of that is "something is
+                broken".
+              */}
+              {chargedTo ? <Chip tone="neutral">{chargedTo}</Chip> : null}
+              {paidToward ? <Chip tone="flexible">Pays {paidToward}</Chip> : null}
+            </span>
+          ) : null}
           {!isPaycheque ? (
             <span className="row__owner">
               {row.settled

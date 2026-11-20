@@ -321,10 +321,29 @@
   gap: var(--hr-space-4);
 }
 
+/*
+ * Edge to edge on a phone.
+ *
+ * Reported from use: "a lot of wasted space on the left and right edges...
+ * everything looks crammed together." Both halves of that are one problem.
+ * `.shell-main` keeps a 16px gutter for every page, this card added 16px of
+ * its own, and the row inside added another - so a row's content began 48px
+ * in from each edge, leaving a name, up to four chips and two figures to
+ * share what was left of a 360px phone.
+ *
+ * The card now bleeds back through the shell's gutter and carries a smaller
+ * inset, which hands roughly 48px of width back to the content that needed
+ * it. Nothing is removed: the space goes from the margins to the text.
+ *
+ * It keeps its gutter, its corners and its side borders from 640px up, where
+ * the main column is centred in a wider window and a full-bleed card would
+ * read as a mistake rather than as a design.
+ */
 .ledger__period {
-  padding: var(--hr-space-4) var(--hr-space-4) var(--hr-space-3);
-  border-radius: var(--hr-radius-card);
-  border: 1px solid var(--hr-card-border);
+  margin-inline: calc(var(--hr-space-4) * -1);
+  padding: var(--hr-space-4) var(--hr-space-3) var(--hr-space-3);
+  border-block: 1px solid var(--hr-card-border);
+  border-inline: none;
   background: var(--hr-card);
   box-shadow: var(--hr-shadow-card);
 }
@@ -505,7 +524,10 @@
 
 @media (min-width: 640px) {
   .ledger__period {
+    margin-inline: 0;
     padding: var(--hr-space-5);
+    border: 1px solid var(--hr-card-border);
+    border-radius: var(--hr-radius-card);
   }
 }
 
@@ -522,10 +544,26 @@
  * in the alert pair the rest of the app already uses for "look at this".
  */
 .ledger__cards {
-  padding: var(--hr-space-4) var(--hr-space-5);
-  border-radius: var(--hr-radius-card);
+  /* Bled to the edges with the period cards below it, for the same reason. */
+  margin-inline: calc(var(--hr-space-4) * -1);
+  padding: var(--hr-space-4) var(--hr-space-3);
   background: var(--hr-card);
   box-shadow: var(--hr-shadow-card);
+}
+
+/*
+ * After the rule it overrides, not before it.
+ *
+ * A media query adds no specificity, so source order decides. Written above
+ * `.ledger__cards` this block lost to it and did nothing, which would have
+ * left the card bleeding 16px off each side of a centred 640px column.
+ */
+@media (min-width: 640px) {
+  .ledger__cards {
+    margin-inline: 0;
+    padding: var(--hr-space-4) var(--hr-space-5);
+    border-radius: var(--hr-radius-card);
+  }
 }
 
 .ledger__cards-label {
@@ -563,11 +601,31 @@
 .ledger__card-name {
   flex: 1;
   min-width: 0;
-}
-
-.ledger__card-name {
   color: var(--hr-ink);
   font-weight: 600;
+}
+
+/*
+ * The amount and its forecast, stacked against the right-hand edge.
+ *
+ * This is what the comment above always said the layout was, and it stopped
+ * being true when the row became a flex row: `.ledger__card-ahead` kept a
+ * `grid-column: 2` that no longer applied to anything, so the tail - "owed"
+ * on one card, "owed, $x by Wed, Dec 23" on another - sat BESIDE the amount
+ * as another flex item and shoved it a different distance on every row.
+ * Reported from use: the figures did not line up with each other.
+ *
+ * Stacked, every amount ends on the same edge whatever its tail says, and
+ * that edge is the running-balance column the rest of the screen is read
+ * down. Deliberately the same shape as `.row__figures` on the ledger rows.
+ */
+.ledger__card-figures {
+  display: flex;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 0;
 }
 
 .ledger__card-owed {
@@ -578,7 +636,6 @@
 }
 
 .ledger__card-ahead {
-  grid-column: 2;
   color: var(--hr-text-secondary);
   font-size: 0.8125rem;
   text-align: right;
