@@ -30,6 +30,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| The ledger at the width of the phone | done | | 2026-11-19, three things reported from use. The ledger bleeds to the edges, chips sit in fixed places, the card figures line up, and a one-off that pays an account wears that account's picture |
 | A pay period the horizon cuts short | done | | 2026-11-19, reported from use. The ledger drew a window thirteen days longer than it could fill, counting pay it had no bills for. It is now reported as far as the ledger reaches, and says so |
 | An expense that comes out once a year | done | | 2026-11-19, asked for from use. "Every year, on a date" on the expense form, for annual insurance and the yearly subscriptions. The whole amount lands on the ledger on its real date; the Budget page counts a twelfth of it a month, which it has always known how to do |
 | Which account a row moves between | done | | 2026-11-19, reported from use. The ledger row can say which account this one came out of and whether it pays into another; the one-off sheet sends a destination for savings as well as for a card; a scheduled expense can be a transfer at all. A transfer with nowhere to land is now refused by the API |
@@ -105,6 +106,81 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## The ledger at the width of the phone (2026-11-19, three things from use)
+
+Three reports in one message, from screenshots of the real ledger.
+
+### 1. "A lot of wasted space on the left and right edges... everything looks crammed together"
+
+Both halves of that sentence were one problem. Three insets stacked up before any content began:
+`.shell-main` keeps a 16px gutter for every page, the period card added 16px of its own, and the
+row inside added another. A row's content started **48px in from each edge**, so on a 360px phone
+the name, the chips and the two figures were fighting over about 260px - while 96px sat empty in
+the margins.
+
+The period card and the cards strip now bleed back through the shell's gutter and carry a smaller
+inset, and the row matches. Roughly 48px moves from the margins into the text. The bleed is
+cancelled from 640px up, where the main column is a centred 640px rather than the whole viewport
+and a full-bleed card would hang off both sides of it.
+
+**A test caught a real mistake here**, which is the reason it exists: the override that takes the
+bleed back was written *above* the rule it overrides. A media query carries no extra specificity,
+so source order decides - the override lost, silently, and would have overhung on anything wider
+than a phone. The test now asserts the override comes after the rule, not merely that it exists.
+
+### 2. "The chips aren't coherent - One-off appears in different spots"
+
+Every chip shared one wrapping flex line, so where any of them landed depended on how long the
+ones before it happened to be. "Flexible - Mon, Nov 16" pushed One-off to a second line; a bare
+"Flexible" left it on the first. The same chip in a different place on every row, for no reason
+a reader can see.
+
+**Widening the row was not enough on its own**, and it is worth saying why rather than shipping it
+and hoping. A status chip, a dated flexible chip and One-off come to roughly 260px; the row's
+middle column has about 207px even after the ledger went edge to edge. They were always going to
+wrap.
+
+So the chips are now two lines with fixed membership rather than one flow that wraps wherever it
+runs out:
+
+- **what happened and when** - the Paid/Received chip and the timing chip, which every row has;
+- **what kind of row it is and which account it touches** - One-off, the card it was charged to,
+  the card it pays. Only some rows have these, and when they do they always start at the same
+  left edge, with One-off first.
+
+The second line is rendered only when it has something on it, or every other row would gain a
+blank one.
+
+### 3. The card figures did not line up with each other
+
+`.ledger__card-ahead` still carried `grid-column: 2` from a layout this row has not had for some
+time. It applied to nothing, and it hid the fact that the tail - "owed" on one card, "owed, $x by
+Wed, Dec 23" on another - had become an ordinary flex sibling of the amount. A longer tail pushed
+the amount further left, on that row alone.
+
+The amount and its tail are one right-aligned column now, which is what the comment above the rule
+always claimed the layout was: "name left, amount right, and the forecast under the amount."
+Deliberately the same shape as `.row__figures` on the ledger rows, so the two read down the same
+edge. The duplicated `.ledger__card-name` rule went with it.
+
+### 4. A one-off paying the Visa did not show the Visa's picture
+
+A row's picture came from `template.imageId`, and a one-off has no template. So a payment toward
+the Visa wore a lettered square while the Visa's own picture sat two inches up the same screen, in
+"On cards".
+
+A row with no template of its own now takes the picture of the account the money **lands in** -
+which covers a card payment and a transfer into savings alike. Not the account it comes **from**:
+a charge paid from a card is a purchase rather than the card, it already names the card in a chip,
+and wearing the card's logo would say the row *is* the card, making a Visa payment and a coffee
+bought on the Visa look the same at a glance. A template's own picture still wins where there is
+one, because a picture somebody chose beats one worked out from where the money went.
+
+### Verified
+
+1377 tests green - 383 engine, 461 web, 533 API, up from 1355. The picture rule is tested against
+real Postgres in all five of its cases, including the two it deliberately does not apply to.
 
 ## A pay period the horizon cuts short (2026-11-19, reported from use)
 
