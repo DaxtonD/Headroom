@@ -30,6 +30,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| A pay period the horizon cuts short | done | | 2026-11-19, reported from use. The ledger drew a window thirteen days longer than it could fill, counting pay it had no bills for. It is now reported as far as the ledger reaches, and says so |
 | An expense that comes out once a year | done | | 2026-11-19, asked for from use. "Every year, on a date" on the expense form, for annual insurance and the yearly subscriptions. The whole amount lands on the ledger on its real date; the Budget page counts a twelfth of it a month, which it has always known how to do |
 | Which account a row moves between | done | | 2026-11-19, reported from use. The ledger row can say which account this one came out of and whether it pays into another; the one-off sheet sends a destination for savings as well as for a card; a scheduled expense can be a transfer at all. A transfer with nowhere to land is now refused by the API |
 | A picture beside a name | done | | 2026-11-19, at the owner's request. Expenses, accounts and budget-only categories; crop and zoom on the phone; bytes in Postgres so they are inside the existing backup. Cannot affect a figure - the engine does not know the table exists |
@@ -104,6 +105,87 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## A pay period the horizon cuts short (2026-11-19, reported from use)
+
+> "I just added a yearly subscription. It renews Dec 18. The horizon on the ledger reaches this
+> far (Dec 10-23) but this expense isn't showing there."
+
+### It was not the yearly schedule
+
+The occurrence generated correctly, on the right date, with the right period key. A **monthly**
+expense on the 18th was dropped identically - there is a test saying so, kept precisely so nobody
+has to work that out again from the shape of the bug.
+
+Two definitions of "how far ahead" meet on the ledger and disagree:
+
+- **The windows** are whole fortnights, anchored on one person's paydays (HANDOFF section 5
+  rule 1).
+- **The horizon** is "the day before the Nth upcoming paycheque, counting every person's"
+  (section 6.3). With two earners paid on alternating weeks that is a cheque most weeks, so four
+  paycheques is about four *weeks* - and it lands in the **middle** of a fortnight.
+
+Rows are fetched to the horizon. So the last window claimed up to thirteen days it could not
+populate.
+
+### It was not only a wrong label
+
+Window membership and the projected paydays are **both** decided by `window.end`. Reported at its
+full fortnight, the last window counted a cheque arriving in the clipped-off week while the
+caller had fetched no row dated after the horizon. **Income through the 23rd against bills
+through the 16th**, so that period's left-over figure was inflated from both directions. The
+engine test states it as the same setup with and without the horizon: one window's income goes
+from two cheques to one.
+
+### What changed, and what deliberately did not
+
+`payPeriodWindows` now clips the last window to `coverThrough` when the horizon falls inside it,
+and flags it `endsAtHorizon`. The ledger renders a note naming the lever, because a period reading
+10-16 where every other one is fourteen days looks like missing data unless it explains itself.
+
+**Only when the horizon falls strictly inside the last window.** A window that starts beyond it
+exists because `periodCount` asked for a minimum number of them, which is a separate question -
+and clipping that one would produce a window ending before it starts. There is a test for that.
+
+The option **not** taken was extending the horizon to complete the fortnight. It is what the
+household first wanted - the bill would simply appear - but `horizonEnd` also feeds
+`leftThisCycleCents`, the lowest point and safe to spend. Redefining the number they read several
+times a day in order to fix a layout bug is the tail wagging the dog, and they would have had no
+way to judge whether the new number was right. The owner was asked and deferred to judgement;
+this is the judgement and the reason for it.
+
+### What moved and what did not
+
+**Unchanged:** every expected value in the seed, `computeHorizonEnd` itself, safe to spend, the
+lowest point, left this cycle, the horizon date, and every window except the one it cuts.
+
+**Changed, on purpose:** that last window's `end`, and - when a payday fell in the clipped-off
+days - its `inCents` and `leftCents` drop with it. That is an overstatement being corrected, not
+a new figure.
+
+Worth being exact about one thing: `golden.test.ts` calls `computePayPeriods` **without**
+`coverThrough`, so the clip never fires there. Golden passing proves the spreadsheet reproduction
+is untouched; it does not prove the live ledger's last period is unchanged, and it is not.
+
+### The remedy is a setting that already exists
+
+Raising `horizonPaychequeCount` from 4 to 5 both reveals the expense and - with paydays
+alternating weekly - lands the horizon exactly on a fortnight boundary, so nothing is cut short
+at all. That is why an odd count hid this for so long. The API test asserts that remedy, because
+it is the answer given to the household.
+
+### Verified
+
+1355 tests green - 383 engine, 444 web, 528 API, up from 1340. The new API test holds the
+invariant against real Postgres - **no window may end after the horizon** - stated against the
+horizon rather than a date, so it holds whatever today is.
+
+### Still to do
+
+- `periodCount` can still pad windows out past the horizon when the horizon is very short (a
+  one-paycheque setting), leaving later windows that are entirely beyond the row cutoff. Not
+  reachable from any setting the household uses, left alone deliberately, and noted here rather
+  than fixed blind.
 
 ## An expense that comes out once a year (2026-11-19, asked for from use)
 
