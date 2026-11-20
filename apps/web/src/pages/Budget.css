@@ -170,12 +170,7 @@
 }
 
 .budget__line {
-  display: grid;
-  /* Name and amount on one row, the share bar beneath on a phone. */
-  grid-template-columns: 1fr auto;
-  gap: 2px var(--hr-space-3);
-  align-items: baseline;
-  padding: var(--hr-space-3) 0;
+  /* The grid moved onto the button inside, which is the whole row. */
   border-top: 1px solid var(--hr-row-divider);
 }
 
@@ -275,4 +270,53 @@
   font-weight: 400;
   color: var(--hr-text-muted);
   white-space: normal;
+}
+
+/* ---- The ring's legend: each line is a button wearing its wedge's colour ----
+ *
+ * The grid that used to be on the row itself is on the button now, so the
+ * whole row is the target rather than the text inside it. The row keeps the
+ * divider, because a border on a button would read as a box.
+ */
+.budget__line-button {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--hr-space-3);
+  align-items: baseline;
+  width: 100%;
+  /* Comfortably over the 44px minimum, which a wedge can never be. */
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-3) var(--hr-space-2);
+  /* Cancels the padding, so the text still lines up with the heading above. */
+  margin-inline: calc(var(--hr-space-2) * -1);
+  border: none;
+  border-radius: var(--hr-radius-input);
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.budget__line-button--chosen {
+  background: var(--hr-green-tint-soft);
+}
+
+@media (hover: hover) {
+  .budget__line-button:hover {
+    background: var(--hr-green-tint-soft);
+  }
+}
+
+/*
+ * The legend mark. Square rather than round so it reads as the same fill as
+ * the wedge, and small enough that the picture beside it stays the thing the
+ * eye lands on.
+ */
+.budget__line-swatch {
+  display: inline-block;
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
 }

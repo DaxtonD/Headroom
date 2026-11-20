@@ -1,0 +1,124 @@
+/*
+ * The budget ring.
+ *
+ * The wedges are the only coloured things on the page, so everything around
+ * them stays in the ink tokens: a figure never wears its series colour, which
+ * is what keeps the middle readable whatever wedge is chosen.
+ */
+
+.donut {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--hr-space-3);
+  margin-top: var(--hr-space-3);
+}
+
+.donut__plot {
+  position: relative;
+  width: 100%;
+  /* Big enough to aim at on a phone, never wider than the card. */
+  max-width: 320px;
+  aspect-ratio: 1;
+}
+
+.donut__svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  /* Room for the chosen wedge to lift without clipping. */
+  overflow: visible;
+}
+
+.donut__wedge {
+  /*
+   * Transformed about the middle of the box, so the lift runs along the
+   * wedge's own bisector rather than from the corner of the viewport.
+   */
+  transform-box: view-box;
+  transform-origin: center;
+  transition: transform 180ms ease-out;
+}
+
+.donut__slice {
+  /*
+   * A 2px gap in the surface colour between fills, so two wedges of similar
+   * hue still read as two. The stroke is the card rather than a line colour:
+   * it is a gap, not a border.
+   */
+  stroke: var(--hr-card);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  cursor: pointer;
+  transition: opacity 180ms ease-out;
+}
+
+/*
+ * Pointer only. The real control for a wedge is its row in the list below,
+ * which is a full-width button; a 1.6% wedge is five pixels of arc and can
+ * never be a 44px target. See the note at the top of BudgetDonut.tsx.
+ */
+@media (hover: hover) {
+  .donut__slice:hover {
+    opacity: 0.86;
+  }
+}
+
+.donut__slice--chosen {
+  stroke: var(--hr-ink);
+  stroke-width: 1.5;
+}
+
+.donut__centre {
+  position: absolute;
+  /*
+   * Inside the hole, which is 50 of a 200 box across its radius - so the text
+   * box is half the plot wide and centred on it.
+   */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  width: 44%;
+  text-align: center;
+  pointer-events: none;
+}
+
+.donut__centre-amount {
+  color: var(--hr-ink);
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+
+.donut__centre-name {
+  color: var(--hr-text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.2;
+  /* A long name wraps rather than spilling out of the hole. */
+  overflow-wrap: anywhere;
+}
+
+.donut__centre-note {
+  color: var(--hr-text-muted);
+  font-size: 0.75rem;
+}
+
+.donut__back {
+  align-self: stretch;
+}
+
+/*
+ * The morph is driven in JavaScript and already checks this, so what is left
+ * here is the lift and the hover fade.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .donut__wedge,
+  .donut__slice {
+    transition: none;
+  }
+}

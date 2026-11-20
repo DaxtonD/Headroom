@@ -141,6 +141,31 @@
   --hr-shadow-hero: 0 2px 8px rgb(18 59 51 / 0.18);
 
   /* Native scrollbars, date pickers and autofill follow this. */
+
+  /* ---- Chart series: the budget donut ----
+   *
+   * Eight hues in a fixed order, assigned by rank and never cycled. A ninth
+   * would be invented rather than chosen, so a ring with more lines than this
+   * folds its tail into one "everything else" wedge instead.
+   *
+   * Both columns are selected, not flipped: the dark steps were picked for a
+   * dark surface and checked against it. The set passes the lightness band,
+   * the chroma floor, adjacent-pair colour-blind separation and the
+   * normal-vision floor on all four of this app's card colours.
+   *
+   * On the light surfaces several of them sit under 3:1 against the card,
+   * which is allowed only with relief: the figures are printed in the list
+   * under every chart, so no share is ever carried by colour alone. Do not
+   * use these for text - they are fills, and text wears the ink tokens.
+   */
+  --hr-series-1: #2a78d6; /* blue */
+  --hr-series-2: #eb6834; /* orange */
+  --hr-series-3: #1baf7a; /* aqua */
+  --hr-series-4: #eda100; /* yellow */
+  --hr-series-5: #e87ba4; /* magenta */
+  --hr-series-6: #008300; /* green */
+  --hr-series-7: #6250d6; /* violet */
+  --hr-series-8: #e34948; /* red */
   color-scheme: light;
 }
 
@@ -192,6 +217,16 @@
   --hr-shadow-card: 0 1px 2px rgb(43 35 23 / 0.05), 0 1px 3px rgb(43 35 23 / 0.07);
   --hr-shadow-hero: 0 2px 8px rgb(56 64 42 / 0.2);
 
+
+  /* ---- Chart series: see Daylight for why these are the eight ---- */
+  --hr-series-1: #2a78d6; /* blue */
+  --hr-series-2: #eb6834; /* orange */
+  --hr-series-3: #1baf7a; /* aqua */
+  --hr-series-4: #eda100; /* yellow */
+  --hr-series-5: #e87ba4; /* magenta */
+  --hr-series-6: #008300; /* green */
+  --hr-series-7: #6250d6; /* violet */
+  --hr-series-8: #e34948; /* red */
   color-scheme: light;
 }
 
@@ -244,6 +279,16 @@
   --hr-shadow-card: none;
   --hr-shadow-hero: none;
 
+
+  /* ---- Chart series: see Daylight for why these are the eight ---- */
+  --hr-series-1: #2a78d6; /* blue */
+  --hr-series-2: #eb6834; /* orange */
+  --hr-series-3: #1baf7a; /* aqua */
+  --hr-series-4: #eda100; /* yellow */
+  --hr-series-5: #e87ba4; /* magenta */
+  --hr-series-6: #008300; /* green */
+  --hr-series-7: #6250d6; /* violet */
+  --hr-series-8: #e34948; /* red */
   color-scheme: light;
 }
 
@@ -300,6 +345,16 @@
   --hr-shadow-card: 0 1px 2px rgb(0 0 0 / 0.4);
   --hr-shadow-hero: 0 2px 10px rgb(0 0 0 / 0.5);
 
+
+  /* ---- Chart series: see Daylight for why these are the eight ---- */
+  --hr-series-1: #3987e5; /* blue */
+  --hr-series-2: #d95926; /* orange */
+  --hr-series-3: #199e70; /* aqua */
+  --hr-series-4: #c98500; /* yellow */
+  --hr-series-5: #d55181; /* magenta */
+  --hr-series-6: #008300; /* green */
+  --hr-series-7: #9085e9; /* violet */
+  --hr-series-8: #e66767; /* red */
   color-scheme: dark;
 }
 
@@ -351,5 +406,15 @@
   --hr-shadow-card: 0 1px 2px rgb(0 0 0 / 0.35);
   --hr-shadow-hero: 0 2px 10px rgb(0 0 0 / 0.45);
 
+
+  /* ---- Chart series: see Daylight for why these are the eight ---- */
+  --hr-series-1: #3987e5; /* blue */
+  --hr-series-2: #d95926; /* orange */
+  --hr-series-3: #199e70; /* aqua */
+  --hr-series-4: #c98500; /* yellow */
+  --hr-series-5: #d55181; /* magenta */
+  --hr-series-6: #008300; /* green */
+  --hr-series-7: #9085e9; /* violet */
+  --hr-series-8: #e66767; /* red */
   color-scheme: dark;
 }
