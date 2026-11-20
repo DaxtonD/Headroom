@@ -30,6 +30,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| Which account a row moves between | done | | 2026-11-19, reported from use. The ledger row can say which account this one came out of and whether it pays into another; the one-off sheet sends a destination for savings as well as for a card; a scheduled expense can be a transfer at all. A transfer with nowhere to land is now refused by the API |
 | A picture beside a name | done | | 2026-11-19, at the owner's request. Expenses, accounts and budget-only categories; crop and zoom on the phone; bytes in Postgres so they are inside the existing backup. Cannot affect a figure - the engine does not know the table exists |
 
 ## Last session
@@ -102,6 +103,85 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## Which account a row actually moves between (2026-11-19, reported from use)
+
+Two reports, and the second was money going missing.
+
+> "I'm just trying to make sure that when an expense is paid (from the ledger screen) there is a
+> choice of which account to take the money from. The water bill is an expense in the manage
+> screen which shows which account it's planned to come out of. Opening it on the ledger doesn't
+> allow the choice of changing the account. I think it should. Also, making a one-off payment to
+> savings doesn't increase the savings amount."
+
+### Neither was an engine fault, and that is the point
+
+Both ends of a move - `paidFromAccountId` and `transferToAccountId` - have been in the schema, in
+`accountDelta`, and in the occurrence and template routes since the cards work on 2026-11-18. The
+occurrence PATCH route has accepted both all along, and its own comment names this feature:
+"moving one month's bill onto a card, or off one, is a decision about that month."
+
+No screen set either one, except the one-off sheet, and only for a card. So three holes, all the
+same shape:
+
+1. **The ledger row offered no picker.** It could edit the amount, verify, the tick, the date and
+   which payday it hangs off, and nothing about accounts. The API was ready; the UI was not.
+
+2. **"Into savings" sent no destination.** The sheet sent `kind: "transfer"` and nothing else, so
+   the row was a transfer with nowhere to go. `accountDelta` reads that correctly as money spent
+   rather than money moved, so chequing fell by the amount and nothing received it. The money was
+   gone from every figure in the app.
+
+   It read as working because the card flow beside it does work. That one was built later, with a
+   destination, when there was somewhere to send it; "Into savings" is older and predates there
+   being anywhere for it to go.
+
+3. **No screen could set a destination on a template either.** Found while reading the code for
+   the first two. A planned monthly savings payment could be entered in Manage, appear on the
+   ledger and be ticked - and savings would not move, for the same reason. **This corrects
+   something said to the owner in the same conversation**: that a planned savings payment already
+   worked. The data model supported it; nothing in the UI reached it.
+
+### What changed
+
+- **The ledger row** asks which account it came out of, and whether it is a payment into another.
+  Per-occurrence, which is the grain the question has: the template in Manage stays where a
+  permanent change belongs. Agreed with the owner, who ruled out an "and for future months" option
+  for exactly that reason. It is also the repair path for rows already saved with nowhere to go.
+- **The one-off sheet** sends a destination for both kinds that move money, refuses to save a
+  transfer without one, and hides "Into savings" from a household with no savings account - the
+  guard the cards had from the start and savings never did.
+- **The expense form** can make a scheduled transfer. Offered for savings and the cards alike,
+  since they are one thing here. A payment toward a card drops its budget section and says so,
+  because the charges already carry theirs and counting both budgets the same money twice.
+- **The API refuses a transfer with nowhere to land**, on create. The form was fixed and that is
+  not enough: the engine already refuses a row with no *source*, and a missing destination is the
+  same mistake with the ends swapped. On create only, deliberately - a PATCH has to go through on
+  a row already in that state, or the damage is locked in and the row cannot be repaired.
+
+### The rules live in one module
+
+`apps/web/src/lib/routing.ts`, tested against values. The bug was not wrong logic; it was logic
+written three times with one copy incomplete - so the mirror of `accountDelta` being the only
+place that decides a sign is one place that decides an account. A test asserts the three screens
+ask it rather than answering for themselves.
+
+One rule in it is worth knowing: **chequing is never offered as a destination.** A null source
+already means chequing, so chequing as a destination is money moving from an account into itself.
+It nets to zero, and `requireValidRouting` cannot catch it, because it compares a null against an
+id and they are not equal. Not offering it is what keeps that unreachable from the UI; the
+server-side hole is still there for a hand-made request.
+
+### Figures
+
+1313 tests green - 367 engine, 429 web, 517 API. Five source greps in `card-accounts.test.ts`
+were pinned to expressions that moved into the new module; each was re-pointed rather than
+relaxed.
+
+### Still to do
+
+- Nothing for this item. The one thing not built is converting a budget-only category into an
+  expense, which came up in the same conversation and the owner has not asked for.
 
 ## A picture beside a name (2026-11-19, at the owner's request)
 
