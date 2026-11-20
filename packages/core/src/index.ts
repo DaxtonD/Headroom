@@ -22,6 +22,7 @@ export * from "./netWorth.js";
 export * from "./recurrence.js";
 export * from "./monthlyEquivalent.js";
 export * from "./chequeCalendar.js";
+export * from "./yearAhead.js";
 export * from "./mortgage.js";
 export * from "./savings.js";
 export * from "./activity.js";

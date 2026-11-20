@@ -110,6 +110,157 @@
   line-height: 1.45;
 }
 
+/* ---- What pays for what ---- */
+
+.year__section-note {
+  margin: calc(-1 * var(--hr-space-2)) 0 var(--hr-space-3);
+  font-size: 0.8125rem;
+  color: var(--hr-text-muted);
+  line-height: 1.45;
+}
+
+.year__pairs,
+.year__lumps,
+.year__month-lumps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.year__pairs {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-2);
+}
+
+/*
+ * The same left bar as a highlight, in the neutral colour: a pairing is not
+ * good news or bad news by itself, it is the arithmetic between the two.
+ */
+.year__pair {
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-card);
+  border-left: 4px solid var(--hr-card-border);
+  background: var(--hr-neutral-bg);
+}
+
+/*
+ * The squeeze arrives before the cheque that covers it. Warning rather than
+ * negative: nothing is wrong with the year, the money simply has to be found
+ * early - and the sentence underneath says which month, so this is never
+ * carried by the colour alone.
+ */
+.year__pair--early {
+  border-left-color: var(--hr-warning-fg);
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+}
+
+.year__pair-line {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.year__pair-amount {
+  flex: 0 0 auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.year__pair-warn {
+  margin-top: 2px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.year__pair-note,
+.year__pair-spare,
+.year__pair-short {
+  margin-top: var(--hr-space-3);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--hr-text-secondary);
+}
+
+.year__pair-spare {
+  color: var(--hr-positive);
+}
+
+.year__pair-short {
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-card);
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+}
+
+/* ---- What to put aside ---- */
+
+/*
+ * The one figure on this screen big enough to be read from across the room,
+ * because it is the only one that is an instruction rather than a report.
+ */
+.year__aside-figure {
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--hr-ink);
+}
+
+.year__aside-why {
+  margin-top: var(--hr-space-1);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  color: var(--hr-text-secondary);
+}
+
+.year__aside-note {
+  margin-top: var(--hr-space-2);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--hr-text-muted);
+}
+
+.year__lumps {
+  margin-top: var(--hr-space-3);
+}
+
+.year__lump {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  padding: var(--hr-space-3) 0;
+  border-top: 1px solid var(--hr-row-divider);
+}
+
+.year__lump-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.year__lump-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+}
+
+.year__lump-when {
+  font-size: 0.8125rem;
+  color: var(--hr-text-muted);
+}
+
+.year__lump-amount {
+  flex: 0 0 auto;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
 /* ---- Month by month ---- */
 
 .year__month {
@@ -187,6 +338,76 @@
 
 .year__month--squeeze .year__month-effect {
   color: var(--hr-negative);
+}
+
+/* ---- Where the balance ends up ---- */
+
+.year__lowest {
+  padding: var(--hr-space-3) var(--hr-space-4);
+  margin-bottom: var(--hr-space-3);
+  border-radius: var(--hr-radius-card);
+  background: var(--hr-neutral-bg);
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/*
+ * The account goes under at some point in the year. Warning and not just a
+ * red figure: the sentence names the month, so nobody has to read a colour
+ * to find out which one.
+ */
+.year__lowest--under {
+  background: var(--hr-warning-bg);
+  color: var(--hr-warning-fg);
+  font-weight: 600;
+}
+
+.year__projection-note {
+  margin-bottom: var(--hr-space-3);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  color: var(--hr-text-muted);
+}
+
+.year__month-lumps {
+  margin-top: var(--hr-space-1);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.year__month-lump {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  font-size: 0.8125rem;
+  color: var(--hr-text-secondary);
+}
+
+.year__month-lump-name {
+  font-weight: 600;
+}
+
+.year__month-lump-amount {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.year__month-balance {
+  margin-top: var(--hr-space-1);
+  font-size: 0.8125rem;
+  color: var(--hr-text-muted);
+}
+
+.year__month-balance--lowest {
+  color: var(--hr-text-secondary);
+  font-weight: 600;
+}
+
+.year__month-balance--under {
+  color: var(--hr-negative);
+  font-weight: 600;
 }
 
 .year__error {

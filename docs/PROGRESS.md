@@ -30,6 +30,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| Five things from a day's use | done | | 2026-11-20. A jump bar on Manage, the budget ring pinned while its list scrolls, a real badge on a payday, `dev` kept level with `main`, and four new sections on the Year screen |
+| The Year screen earns its place | done | | 2026-11-20, asked for from use: "some more genius ideas... really intelligent stuff that adapts to the data". What pays for what, what to put aside, the bills that skip months, and where the balance ends each month |
 | The budget's pie chart, and a drill-down | done | | 2026-11-19, asked for from use. A ring per section, tappable: a wedge puts that expense's real figures in the middle, a folded wedge opens into a ring of its own. Reverses a recorded decision - see below |
 | The ledger at the width of the phone | done | | 2026-11-19, three things reported from use. The ledger bleeds to the edges, chips sit in fixed places, the card figures line up, and a one-off that pays an account wears that account's picture |
 | A pay period the horizon cuts short | done | | 2026-11-19, reported from use. The ledger drew a window thirteen days longer than it could fill, counting pay it had no bills for. It is now reported as far as the ledger reaches, and says so |
@@ -107,6 +109,224 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## Five things from a day's use (2026-11-20)
+
+Four small, one large. The large one is its own entry below.
+
+### A payday had a badge nobody could see
+
+> "Pay days on the ledger do not show a badge. They just show a +."
+
+The badge was there the whole time. It was a 32px circle filled with
+`--hr-green-tint`, drawn on a payday row whose background is `--hr-payday-row`
+- a few percent apart in every light theme, and on an EXPANDED payday row the
+*same token*. So it had no edge, no fill anyone could see, and nothing could be
+read off it: not whether the money had landed, not who had said so, while the
+bill directly above it carried a filled badge with an initial on it.
+
+It is an ordinary `.badge` now, carrying a "+" so money in still reads as money
+in at a glance. Filled once the money is in the account, with the initial of
+whoever marked it; a **solid 2px ring** until then, never a tint - a fill is
+what made the old one invisible, and the surface it sits on is itself a tint.
+`payday-badge.test.ts` asserts the ring is a border and has no `background` at
+all, because that is the exact mistake to make twice.
+
+### The budget ring scrolled away as soon as you used it
+
+> "I didn't realize that tapping on an item filters the pie chart. Very nice.
+> The only issue is that the pie chart scrolls out of view when making
+> selections."
+
+The ring and the list under it are one control - tapping a line puts that
+line's figures in the middle of the ring - so a list longer than about five
+lines meant the answer had scrolled off by the time the question was asked.
+
+It is pinned now, and deliberately pinned **inside its own section** rather
+than to the viewport: the ring belongs to its section, so it should arrive when
+that section does and leave when the next one starts. A chart fixed to the
+screen would still be hanging there over the wrong figures. The offset is
+`--hr-header-h`, the header's real measured height, for the reason
+`pinnedHeader.ts` gives at length.
+
+The plot also gained a cap: `clamp(220px, 42vh, 320px)`. It is square, so a
+width cap is a height cap, and an uncapped 320px ring pinned to the top of a
+phone in landscape leaves no list underneath it - which is the thing the dock
+exists to keep reachable. The 220px floor is load-bearing rather than
+cosmetic: the hole is half the ring across and the figures are drawn inside
+it, so below about that an amount stops fitting in its own hole.
+
+### Eleven sections on Manage, and no way past them
+
+> "On the manage screen, make tabs for each section... It doesn't need to be
+> tabs, just a really easy way to navigate to them."
+
+Offered three and the owner chose the jump bar: a pinned strip of chips, one
+per section, which scrolls the page to that section and lights the one you are
+looking at.
+
+**Not tabs, and the owner picked the same way.** Manage is where you go to
+change one thing, and the things are related - an expense paid from a card, the
+card it is paid from, the payday the whole lot hangs off. Tabs put each of
+those behind its own tap and make it impossible to see two at once. The bar
+leaves the page exactly as it was, one scroll with nothing hidden, and only
+adds a way to skip.
+
+The highlight is an `IntersectionObserver` over a band at the top of the
+content area, not a scroll handler - same argument as `pinnedHeader.ts`, a
+scroll handler runs on every frame of every flick on the main thread. This one
+is far more forgiving than the ledger's pinned bar, though, so it has no
+equivalent of that file's careful predicate: the band always holds something,
+so nothing can get stuck, and a few pixels of error costs a few pixels of
+scroll in where the highlight changes.
+
+Two pure functions came out of it and are tested with real numbers:
+`chooseActive`, which takes the upper of two sections straddling the band and
+keeps the last answer when the band is empty, and `scrollLeftFor`, which keeps
+the lit chip on screen. Writing the second one's tests found a real gap - a
+chip wider than the strip was scrolled until only its last few letters were
+left - so it is clamped to never scroll past the chip's own start.
+
+### `dev` follows `main` now
+
+> "New rule: when developing on main/production, let's keep dev up to date with
+> it."
+
+Recorded in `CLAUDE.md` under Git, because it has to survive a new session.
+`dev` was ten commits behind; it is level now, locally and on the remote. It is
+always a fast-forward, since `dev` is only ever used to try something out and
+is merged back before the next push - if it ever is not one, that is a stop and
+ask rather than something to reconcile. **This is the one push that does not
+need asking for each time.** Everything else still does.
+
+### Verified
+
+1535 tests green - 411 engine, 572 web, 552 API, up from 1429.
+
+### Still to do
+
+- Nothing for these four.
+
+## The Year screen earns its place (2026-11-20, asked for from use)
+
+> "On the Year screen, [one of the household] absolutely loves the extra information you put
+> there. Can you think of some more genius ideas to put there? I'm talking
+> really intelligent stuff that adapts to the data given to the app."
+
+Proposed four and the owner took all four. Each is in `packages/core/src/yearAhead.ts`,
+pure, with 28 tests against values.
+
+### 1. What pays for what
+
+The screen listed the good months and the bad months side by side and left
+them to be matched up by eye. They are matched now, **earliest cheque first**,
+which is both the obvious reading and the right one: money already in the
+account is what covers the next bill. One windfall can be split across several
+squeezes and one squeeze can draw on several windfalls, so it emits a pairing
+per draw rather than per month, and reports what is left over (that is the part
+that can go to savings) and what nothing in the window answers at all.
+
+**The part worth building it for** is the pairing where the squeeze lands
+BEFORE the cheque that covers it. That is the one a list of good and bad months
+can never show you: the arithmetic over the year works out, and the household
+is still short in March. It gets a warning tint and, because a tint is not a
+message, a sentence naming the month.
+
+### 2. What to put aside, and why it is not a twelfth
+
+Two figures are computed and only one is the headline.
+
+The even share - the total divided by the months - is what anybody would work
+out, and it is right only if the bills happen to fall evenly through the year.
+They do not. A policy renewing in March needs its money by March, and a twelfth
+a month does not have it; dividing by twelve would tell the household they were
+covered while they were short by eleven twelfths of it.
+
+So the headline is `levelCents`: the smallest level monthly amount that is
+never short on any date a bill actually falls, which is the maximum over each
+month of what has come due by then divided by the months saved so far. The even
+share appears underneath it only when the two disagree, where it explains the
+gap, and the month that forces the figure up is named.
+
+The first month counts as one month of saving - that is, a deposit made now
+rather than at the end of it. Counting it as zero makes the figure infinite
+whenever a bill falls in the next three weeks, which is a true statement and a
+useless one.
+
+### 3. The bills that skip months
+
+Only `yearly` and `quarterly`: a cadence that does not land in every month, and
+skipping a month is the whole reason a bill gets forgotten. Biweekly is
+deliberately out even though it lands three times in some months - that is the
+cheque calendar's question, and answering it twice in two shapes is how two
+screens start disagreeing.
+
+**Today this means yearly bills only**, because no schedule produces a
+quarterly cadence yet (`Cadence.quarterly` has existed since the first commit
+with nothing able to create one - it is in the open questions below). The
+quarterly path is written and tested; it simply has nothing to catch.
+
+### 4. Where the balance ends each month
+
+The only thing on this screen that is a guess, and it says so on the page.
+
+Up to the ledger's own horizon the monthly figures are carried by the ledger's
+OWN rows, through `loadTimelineContext`. That costs a second timeline
+computation on a screen opened once a month, and buys the only thing that
+matters: **this month's figure on the Year screen is the figure the Ledger
+screen shows.** Two screens deriving one number two ways is how they start
+disagreeing, and the household would be right to trust neither.
+
+Past the horizon there are no rows, so the templates are run forward and each
+occurrence becomes a delta through `accountDelta` - the one function in
+Headroom allowed to decide a sign. The two ranges cannot overlap: the
+timeline's query is bounded at the horizon and generation starts the day after
+it. An API test asserts the seam directly, because a double count there would
+look like an ordinary bad month rather than like a bug.
+
+The screen prints where the ledger stops, in words, and says the rest assumes
+every bill costs what it costs today and that nothing else is spent - "read the
+shape rather than the figure". That is not a disclaimer to be tidied away. The
+shape is right even where the level is not: the month that dips lowest is still
+the month that dips lowest, and that is the whole value.
+
+### A structural note: the lumps are not in the moves
+
+The engine takes the irregular bills as a separate input from the moves that
+carry the balance, which looks like duplication and is not. A ledger row knows
+its amount and its date; it does not know what cadence produced it. So the
+balance comes from the ledger where the ledger reaches, and the bills that skip
+months are read off the templates over the whole window. A lump never moves the
+balance - it is a label on money the moves already carry once - and a test
+asserts exactly that, because adding them would take every yearly bill out of
+the account twice.
+
+### What is tested
+
+- **28 engine tests** against values, including the binding-month case the
+  level figure exists for, a windfall split across two squeezes, a squeeze
+  drawing on two windfalls, a month whose extras cancel, and February in a leap
+  year.
+- **19 API tests** against a real Postgres: that an archived yearly bill is left
+  out, that a monthly one never appears, that the projection opens on the same
+  figure the home screen shows, that the seam does not double-count, that no
+  pairing promises more cover than a squeeze is worth or spends a windfall
+  twice, and that every amount is integer cents on the wire.
+- **19 web tests** that every new field goes through `toCents`, that a month
+  with no projection stays null rather than becoming a confident zero, and that
+  the projection's caveat is on the page.
+
+Seeding those API tests found a real distinction worth recording: **writing pay
+schedules straight into Prisma gives a household no income at all.** A payday is
+only a set of dates; the paycheque is its own template, created by
+`POST /api/pay-schedules`. The first draft of the test projected fourteen months
+of outgoings against nothing coming in and the assertions still passed.
+
+### Still to do
+
+- Nothing asked for. If this earns its place, the next obvious question is
+  whether the savings goals belong on the same calendar - when each one lands
+  at the current rate - but nobody has asked.
 
 ## The budget's pie chart, and a drill-down (2026-11-19, asked for from use)
 
@@ -3859,6 +4079,22 @@ is possible at all, so it is the cheapest to ask.
     before, beside the typed one. This is a change to a screen that already worked, so it is
     worth a look: the two are allowed to disagree, and the disagreement is reported rather than
     hidden, exactly as the earmarks already are.
+
+Questions 25 and 26 come from the Year screen's four new sections (2026-11-20). Both have a
+defensible default built, and both are the kind of judgement that only looks wrong once
+somebody has lived with it.
+
+25. **Is "put aside each month" the figure you would actually act on?** *Built:* the smallest
+    level amount that is never short on any date a bill falls, rather than the total divided
+    by the months - because a policy renewing in March cannot be paid for by a twelfth a month.
+    It is the more conservative of the two and the even share is shown underneath it when they
+    differ. If the household already keeps a float for this sort of thing, the even share may
+    be the honest headline instead, with the level figure as the warning.
+26. **Should the bills that skip months include a quarterly one?** They would, and nothing
+    produces one: `Cadence.quarterly` has existed since the first commit with no schedule able
+    to create it, so today this section shows yearly bills only. The quarterly path is written
+    and tested and has nothing to catch. Adding "every three months, on a date" to the expense
+    form is the same shape of change the yearly one was. Nobody has asked for it.
 
 ## Blocked / needs the owner
 

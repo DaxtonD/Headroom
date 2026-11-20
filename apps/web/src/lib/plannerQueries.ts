@@ -437,6 +437,22 @@ export interface YearEntry {
   readonly dates: readonly string[];
 }
 
+/**
+ * One bill that does not come every month, landing on a date.
+ *
+ * The ones nobody remembers until they arrive: annual insurance, the yearly
+ * subscriptions, a quarterly utility. Invisible on a ledger whose horizon is
+ * a fortnight, which is why they live on this screen.
+ */
+export interface YearLump {
+  readonly name: string;
+  readonly date: string;
+  /** A positive magnitude: what it costs. */
+  readonly cents: Cents;
+  /** `yearly` or `quarterly`. */
+  readonly cadence: string;
+}
+
 export interface YearMonth {
   readonly year: number;
   readonly month: number;
@@ -445,6 +461,14 @@ export interface YearMonth {
   readonly start: string;
   readonly end: string;
   readonly isUnusual: boolean;
+  /** Everything arriving in this month, as a positive magnitude. */
+  readonly inCents: Cents | null;
+  /** Everything leaving, as a positive magnitude. */
+  readonly outCents: Cents | null;
+  /** Where chequing lands on the last day of the month. */
+  readonly endBalanceCents: Cents | null;
+  readonly lumps: readonly YearLump[];
+  readonly lumpTotalCents: Cents;
   /**
    * What this month is worth against a normal one. Positive is a windfall,
    * negative is a squeeze - and the two can sit side by side, because the
@@ -455,11 +479,59 @@ export interface YearMonth {
   readonly entries: readonly YearEntry[];
 }
 
+/**
+ * What to put aside each month so the irregular bills are already paid for.
+ *
+ * Two figures, and the gap between them is the point. `evenCents` is the
+ * total divided by the months, which is what anybody would work out and is
+ * right only if the bills happen to be evenly spread. `levelCents` is the
+ * smallest amount that is never short on any date a bill actually falls -
+ * if the insurance lands in March, a twelfth of the year's total will not be
+ * there in time however correct the division was.
+ */
+export interface YearSetAside {
+  readonly monthCount: number;
+  readonly totalCents: Cents;
+  readonly billCount: number;
+  readonly evenCents: Cents;
+  readonly levelCents: Cents;
+  /** The month that forces the level figure up, or null when the two agree. */
+  readonly bindingStart: string | null;
+  readonly bindingLabel: string | null;
+}
+
+/** One extra paycheque, matched to the extra payment it pays for. */
+export interface YearPairing {
+  readonly windfallStart: string;
+  readonly windfallLabel: string;
+  readonly squeezeStart: string;
+  readonly squeezeLabel: string;
+  readonly coveredCents: Cents;
+  /** The squeeze lands before the money meant to cover it: the one that hurts. */
+  readonly squeezeFirst: boolean;
+}
+
 export interface YearOverview {
   readonly today: string;
   readonly monthCount: number;
   readonly hasMortgage: boolean;
   readonly months: readonly YearMonth[];
+  /** False when there is no chequing account, so there is nothing to project. */
+  readonly hasBalance: boolean;
+  readonly startBalanceCents: Cents;
+  /**
+   * The last date the ledger's own rows cover. Up to here the monthly figures
+   * are the ledger's; past it they are worked out from the schedules and
+   * assume every bill costs what it costs today.
+   */
+  readonly ledgerThrough: string;
+  readonly lowestStart: string | null;
+  readonly setAside: YearSetAside;
+  readonly pairs: readonly YearPairing[];
+  /** Squeeze with no extra cheque anywhere in the window to answer it. */
+  readonly uncoveredCents: Cents;
+  /** Extra cheque left once every squeeze is paid for. */
+  readonly spareCents: Cents;
 }
 
 export const yearKey = ["year"] as const;
@@ -475,17 +547,49 @@ export function useYear(months?: number) {
   return useQuery({
     queryKey: [...yearKey, months ?? null],
     queryFn: async (): Promise<YearOverview> => {
+      /*
+       * Every amount crosses the wire as a decimal string, because JSON has
+       * no integer big enough to be trusted with money. `toCents` is the one
+       * place that turns one back into a bigint; a `Number` anywhere on this
+       * path would be a silent rounding of somebody's balance.
+       */
       const wire = await api.get<{
         today: string;
         monthCount: number;
         hasMortgage: boolean;
-        months: (Omit<YearMonth, "netExtraCents" | "entries"> & {
+        months: (Omit<
+          YearMonth,
+          | "netExtraCents"
+          | "entries"
+          | "inCents"
+          | "outCents"
+          | "endBalanceCents"
+          | "lumps"
+          | "lumpTotalCents"
+        > & {
           netExtraCents: string;
+          inCents: string | null;
+          outCents: string | null;
+          endBalanceCents: string | null;
+          lumpTotalCents: string;
+          lumps: (Omit<YearLump, "cents"> & { cents: string })[];
           entries: (Omit<YearEntry, "cents" | "extraCents"> & {
             cents: string;
             extraCents: string;
           })[];
         })[];
+        hasBalance: boolean;
+        startBalanceCents: string;
+        ledgerThrough: string;
+        lowestStart: string | null;
+        setAside: Omit<YearSetAside, "totalCents" | "evenCents" | "levelCents"> & {
+          totalCents: string;
+          evenCents: string;
+          levelCents: string;
+        };
+        pairs: (Omit<YearPairing, "coveredCents"> & { coveredCents: string })[];
+        uncoveredCents: string;
+        spareCents: string;
       }>(months === undefined ? "/api/year" : `/api/year?months=${String(months)}`);
 
       return {
@@ -495,12 +599,37 @@ export function useYear(months?: number) {
         months: wire.months.map((month) => ({
           ...month,
           netExtraCents: toCents(month.netExtraCents),
+          // Null means the projection did not cover this month, which cannot
+          // happen today. Kept as null rather than folded to zero, because a
+          // zero would be read as "nothing happens here".
+          inCents: month.inCents === null ? null : toCents(month.inCents),
+          outCents: month.outCents === null ? null : toCents(month.outCents),
+          endBalanceCents:
+            month.endBalanceCents === null ? null : toCents(month.endBalanceCents),
+          lumpTotalCents: toCents(month.lumpTotalCents),
+          lumps: month.lumps.map((lump) => ({ ...lump, cents: toCents(lump.cents) })),
           entries: month.entries.map((entry) => ({
             ...entry,
             cents: toCents(entry.cents),
             extraCents: toCents(entry.extraCents),
           })),
         })),
+        hasBalance: wire.hasBalance,
+        startBalanceCents: toCents(wire.startBalanceCents),
+        ledgerThrough: wire.ledgerThrough,
+        lowestStart: wire.lowestStart,
+        setAside: {
+          ...wire.setAside,
+          totalCents: toCents(wire.setAside.totalCents),
+          evenCents: toCents(wire.setAside.evenCents),
+          levelCents: toCents(wire.setAside.levelCents),
+        },
+        pairs: wire.pairs.map((pair) => ({
+          ...pair,
+          coveredCents: toCents(pair.coveredCents),
+        })),
+        uncoveredCents: toCents(wire.uncoveredCents),
+        spareCents: toCents(wire.spareCents),
       };
     },
   });

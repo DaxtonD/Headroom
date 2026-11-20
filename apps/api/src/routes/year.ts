@@ -14,14 +14,17 @@
  */
 import {
   computeChequeCalendar,
+  lowestMonth,
   mortgageSeries,
   mortgageSeriesFromPaySchedule,
+  pairUnusualMonths,
 } from "@headroom/core";
 import type { BiweeklySeries } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { HttpError } from "../lib/http.js";
 import { toPlainDate, todayInZone } from "../lib/timelineService.js";
+import { loadYearAhead } from "../lib/yearAheadService.js";
 
 /** A year plus a little, so the next anniversary of anything is in view. */
 const DEFAULT_MONTHS = 14;
@@ -115,6 +118,32 @@ export async function registerYearRoutes(app: FastifyInstance): Promise<void> {
 
     const months = computeChequeCalendar({ from: today, monthCount, series });
 
+    /*
+     * The four extras, asked for on 2026-11-20. They are a separate read
+     * because they need something the cheque calendar deliberately does not:
+     * amounts, and the balance the ledger is showing right now. See
+     * `yearAheadService.ts` for where the ledger stops and the projection
+     * starts.
+     */
+    const ahead = await loadYearAhead(app.db.prisma, user.householdId, monthCount, new Date());
+
+    /*
+     * Keyed on the first of the month rather than zipped by index. Both lists
+     * are built from the same `today` and the same `monthCount`, so they
+     * cannot disagree today - but a lookup says so, and an index does not.
+     */
+    const aheadByStart = new Map(ahead.months.map((month) => [month.start, month]));
+
+    const pairs = pairUnusualMonths(
+      months.map((month) => ({
+        start: month.start,
+        label: month.label,
+        netExtraCents: month.netExtraCents,
+      })),
+    );
+
+    const lowest = lowestMonth(ahead.months);
+
     return reply.send({
       today,
       monthCount,
@@ -129,6 +158,19 @@ export async function registerYearRoutes(app: FastifyInstance): Promise<void> {
         end: month.end,
         isUnusual: month.isUnusual,
         netExtraCents: month.netExtraCents,
+        // What actually moves through the month, and where it leaves the
+        // balance. Null for a month the projection does not cover, which
+        // cannot happen today and would be a silent zero if it ever did.
+        inCents: aheadByStart.get(month.start)?.inCents ?? null,
+        outCents: aheadByStart.get(month.start)?.outCents ?? null,
+        endBalanceCents: aheadByStart.get(month.start)?.endBalanceCents ?? null,
+        lumpTotalCents: aheadByStart.get(month.start)?.lumpTotalCents ?? 0n,
+        lumps: (aheadByStart.get(month.start)?.lumps ?? []).map((lump) => ({
+          name: lump.name,
+          date: lump.date,
+          cents: lump.cents,
+          cadence: lump.cadence,
+        })),
         entries: month.entries.map((entry) => ({
           id: entry.id,
           name: entry.name,
@@ -139,6 +181,41 @@ export async function registerYearRoutes(app: FastifyInstance): Promise<void> {
           dates: entry.dates,
         })),
       })),
+
+      /* ---- Where the balance goes ---- */
+      hasBalance: ahead.hasBalance,
+      startBalanceCents: ahead.startBalanceCents,
+      /*
+       * Up to here the monthly figures are the ledger's own rows; past it
+       * they are worked out from the schedules and assume every bill costs
+       * what it costs today. The screen draws the line rather than letting
+       * the reader assume the whole year is equally solid.
+       */
+      ledgerThrough: ahead.ledgerThrough,
+      lowestStart: lowest?.start ?? null,
+
+      /* ---- What to put aside for the bills that skip months ---- */
+      setAside: {
+        monthCount: ahead.setAside.monthCount,
+        totalCents: ahead.setAside.totalCents,
+        billCount: ahead.setAside.billCount,
+        evenCents: ahead.setAside.evenCents,
+        levelCents: ahead.setAside.levelCents,
+        bindingStart: ahead.setAside.bindingStart,
+        bindingLabel: ahead.setAside.bindingLabel,
+      },
+
+      /* ---- Which windfall pays for which squeeze ---- */
+      pairs: pairs.pairs.map((pair) => ({
+        windfallStart: pair.windfallStart,
+        windfallLabel: pair.windfallLabel,
+        squeezeStart: pair.squeezeStart,
+        squeezeLabel: pair.squeezeLabel,
+        coveredCents: pair.coveredCents,
+        squeezeFirst: pair.squeezeFirst,
+      })),
+      uncoveredCents: pairs.uncoveredCents,
+      spareCents: pairs.spareCents,
     });
   });
 }
