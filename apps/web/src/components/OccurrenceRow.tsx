@@ -16,7 +16,15 @@ import { useId, useState } from "react";
 import { Amount, Chip, PaidBadge, VerificationBadge } from "./Badges.js";
 import { Thumb } from "./Thumb.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
-import { conflictFrom, type ConflictInfo, type OccurrenceChange, type TimelineRow } from "../lib/queries.js";
+import { conflictFrom, type Account, type ConflictInfo, type OccurrenceChange, type TimelineRow } from "../lib/queries.js";
+import {
+  CHEQUING,
+  NOWHERE,
+  accountIdOf,
+  destinationOptions,
+  pickedFrom,
+  sourceOptions,
+} from "../lib/routing.js";
 import "./OccurrenceRow.css";
 
 export interface MoveTarget {
@@ -54,6 +62,18 @@ export interface OccurrenceRowProps {
   readonly chargedTo?: string | null;
   /** The account this is a payment toward, when it is one. */
   readonly paidToward?: string | null;
+  /**
+   * The household's accounts, so this row can be moved between them.
+   *
+   * The chips above take names (`chargedTo`, `paidToward`) because displaying
+   * one needs nothing else. A picker needs the list, so the list is here as
+   * well - and the row still looks nothing up for the chips, which is the part
+   * that was worth keeping.
+   *
+   * Empty means the question is not asked, which is right for a household with
+   * one account: the answer would always be the same.
+   */
+  readonly accounts?: readonly Account[];
 }
 
 export function OccurrenceRow({
@@ -66,9 +86,12 @@ export function OccurrenceRow({
   onRemove,
   chargedTo = null,
   paidToward = null,
+  accounts = [],
 }: OccurrenceRowProps): React.JSX.Element {
   const amountId = useId();
   const dateId = useId();
+  const sourceId = useId();
+  const destinationId = useId();
   const panelId = useId();
 
   const [amountText, setAmountText] = useState(() => formatCents(row.cents, { currencySymbol: false }));
@@ -100,6 +123,30 @@ export function OccurrenceRow({
   }
 
   const isPaycheque = row.kind === "paycheque";
+
+  /**
+   * Whether asking "which account?" makes sense for this row at all.
+   *
+   * Only for money going out. On something arriving, `paidFromAccountId` is
+   * where it LANDS rather than where it came from - the engine reads the field
+   * as one end of a move, and the move of a deposit runs the other way - so
+   * the question would read backwards from what it does. The one-off sheet
+   * hides it for the same reason.
+   */
+  const outgoing = row.kind === "bill" || row.kind === "transfer";
+
+  /*
+   * Each list excludes the other end, because money that leaves an account and
+   * arrives in the same one has not moved and every figure derived from it
+   * nets to zero. The API refuses that pairing; not offering it means nobody
+   * has to meet the refusal.
+   */
+  const sources = outgoing
+    ? sourceOptions(accounts, pickedFrom(row.transferToAccountId))
+    : [];
+  const destinations = outgoing
+    ? destinationOptions(accounts, pickedFrom(row.paidFromAccountId))
+    : [];
 
   /*
    * Did this row move the account the ledger is about?
@@ -462,6 +509,78 @@ export function OccurrenceRow({
                     : "Mark as paid"}
               </button>
             </div>
+
+            {/*
+              Which account, for this one row.
+
+              Asked for in exactly these terms: the water bill is an expense in
+              Manage that says which account it is planned to come out of, and
+              opening it on the ledger gave no way to say that this month it
+              went on the Visa. The template is still where a permanent change
+              belongs - so this moves this row and nothing else.
+
+              Saved on change rather than behind a Save button, and read
+              straight back off `row` rather than held in local state. There is
+              no half-typed state for a picker to be in, so a button would be a
+              second press for nothing; and with no copy of the value there is
+              no copy to go stale when the other phone saves first.
+            */}
+            {sources.length > 0 ? (
+              <div className="hr-field row__account">
+                <label className="hr-label" htmlFor={sourceId}>
+                  Which account did it come out of?
+                </label>
+                <select
+                  className="hr-input"
+                  id={sourceId}
+                  value={pickedFrom(row.paidFromAccountId)}
+                  onChange={(event) =>
+                    void save({ paidFromAccountId: accountIdOf(event.target.value) })
+                  }
+                  disabled={!canEdit || saving}
+                >
+                  <option value={CHEQUING}>Chequing</option>
+                  {sources.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
+
+            {/*
+              And whether it is a payment INTO something rather than a cost.
+
+              This is the repair path as much as a choice: a one-off into
+              savings, added before the sheet sent a destination, is sitting
+              here as a transfer with nowhere to go - it took money out of
+              chequing and put it nowhere. Naming the destination here fixes
+              that row in place, without deleting and retyping it.
+            */}
+            {destinations.length > 0 ? (
+              <div className="hr-field row__account">
+                <label className="hr-label" htmlFor={destinationId}>
+                  Is it a payment into another account?
+                </label>
+                <select
+                  className="hr-input"
+                  id={destinationId}
+                  value={pickedFrom(row.transferToAccountId)}
+                  onChange={(event) =>
+                    void save({ transferToAccountId: accountIdOf(event.target.value) })
+                  }
+                  disabled={!canEdit || saving}
+                >
+                  <option value={NOWHERE}>No &mdash; it is a cost</option>
+                  {destinations.map((account) => (
+                    <option key={account.id} value={account.id}>
+                      {account.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : null}
 
             {/*
               Removing is for a row somebody typed in by hand. Without it, a

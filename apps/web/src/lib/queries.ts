@@ -536,6 +536,21 @@ export interface OccurrenceChange {
    * back on a payday instead.
    */
   readonly date?: string | null;
+  /**
+   * Which account this one came out of. Null is chequing.
+   *
+   * A decision about this month and not about the bill: the water bill is
+   * planned to come out of chequing, and this month it went on the Visa. The
+   * template in Manage is where a permanent change belongs, so changing it
+   * here changes this row and nothing else - which is also why the API counts
+   * it among the row's own details and stops generation overwriting it.
+   */
+  readonly paidFromAccountId?: string | null;
+  /**
+   * Set, and this row is a payment INTO that account rather than a cost: one
+   * tick moves two balances. Null takes that back.
+   */
+  readonly transferToAccountId?: string | null;
 }
 
 export interface ConflictInfo {

@@ -50,6 +50,7 @@ import {
   usePatchOccurrence,
   usePayPeriods,
   useRemoveOneOff,
+  type Account,
   type PayPeriod,
   type TimelineRow,
 } from "../lib/queries.js";
@@ -472,6 +473,7 @@ export function Ledger({
                 period={period}
                 moveTargets={moveTargets}
                 accountName={accountName}
+                accounts={data.accounts}
                 canEdit={canEdit}
                 expandedId={expandedId}
                 onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
@@ -520,11 +522,21 @@ function PeriodGroup({
   onSave,
   onRemove,
   accountName,
+  accounts,
 }: {
   period: PayPeriod;
   moveTargets: readonly MoveTarget[];
   /** Resolves an account id to its name, for the chip on a charge. */
   accountName: (id: string | null) => string | null;
+  /**
+   * The accounts themselves, so an expanded row can be moved between them.
+   *
+   * Passed as well as `accountName` rather than instead of it: the chips on a
+   * collapsed row want one name and nothing else, and handing every row the
+   * whole list to find it in would be the row doing lookups the screen has
+   * already done.
+   */
+  accounts: readonly Account[];
   canEdit: boolean;
   expandedId: string | null;
   onToggle: (id: string) => void;
@@ -611,6 +623,7 @@ function PeriodGroup({
               onRemove={onRemove}
               chargedTo={accountName(entry.row.paidFromAccountId)}
               paidToward={accountName(entry.row.transferToAccountId)}
+              accounts={accounts}
             />
           ) : (
             <li

@@ -234,11 +234,19 @@ describe("making a payment toward a card", () => {
     expect(oneOff).toMatch(/\{ kind: "card", label: "Paying a credit card" \}/);
     // And mapped to what the API actually takes.
     expect(oneOff).toMatch(/kind: kind === "card" \? "transfer" : kind/);
-    expect(oneOff).toMatch(/transferToAccountId: cardId/);
+    /*
+     * The destination used to be sent only for a card, in those words. It is
+     * now one value for both kinds that move money, because the branch that
+     * named only the card is what left "Into savings" sending nothing.
+     */
+    expect(oneOff).toMatch(/kind === "card" \? cardId : kind === "transfer" \? savingsId/);
+    expect(oneOff).toMatch(/transferToAccountId: destinationId/);
   });
 
   it("is not offered to a household with no cards", () => {
-    expect(oneOff).toMatch(/option\.kind !== "card" \|\| cards\.length > 0/);
+    // Now one rule covering both destinations rather than a clause about
+    // cards, since "Into savings" needs the same guard and never had it.
+    expect(oneOff).toMatch(/if \(option\.kind === "card"\) return cards\.length > 0/);
   });
 
   it("refuses to be saved without saying which card", () => {
@@ -247,19 +255,26 @@ describe("making a payment toward a card", () => {
 
   it("can come out of savings instead of chequing", () => {
     expect(oneOff).toMatch(/Which account does it come out of\?/);
-    expect(oneOff).toMatch(/<option value="">Chequing<\/option>/);
+    // `CHEQUING` is the same empty string, named: the API spells chequing as a
+    // null source and a `<select>` cannot hold one. routing.test.ts proves the
+    // round trip.
+    expect(oneOff).toMatch(/<option value=\{CHEQUING\}>Chequing<\/option>/);
   });
 
   it("does not offer to pay a card out of itself", () => {
     // The API refuses it; offering it would be an error waiting to be made.
-    expect(oneOff).toMatch(/kind !== "card" \|\| account\.id !== cardId/);
+    //
+    // Done by excluding the destination from the source list, which is one
+    // rule for every kind instead of a clause about cards - and is tested
+    // against values in routing.test.ts.
+    expect(oneOff).toMatch(/sourceOptions\(accounts, destinationId\)/);
   });
 });
 
 describe("setting a bill up on a card", () => {
   it("asks which account a recurring bill comes out of", () => {
     expect(billForm).toMatch(/Which account does it come out of\?/);
-    expect(billForm).toMatch(/paidFromAccountId: paidFromAccountId === "" \? null : paidFromAccountId/);
+    expect(billForm).toMatch(/paidFromAccountId: accountIdOf\(paidFromAccountId\)/);
   });
 
   it("says what changes, where the choice is made", () => {

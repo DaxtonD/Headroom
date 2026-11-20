@@ -38,6 +38,13 @@ import { Field, Sheet } from "./Sheet.js";
 import type { MoveTarget } from "./OccurrenceRow.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
 import { useCreateOneOff, type Account } from "../lib/queries.js";
+import {
+  CHEQUING,
+  accountIdOf,
+  destinationOptions,
+  needsDestination,
+  sourceOptions,
+} from "../lib/routing.js";
 
 /*
  * `card` is this form's own kind, not the API's.
@@ -88,13 +95,36 @@ export function OneOffForm({
     date: useId(),
     payday: useId(),
     card: useId(),
+    savings: useId(),
     payFrom: useId(),
   };
 
-  const cards = accounts.filter((account) => account.kind === "credit_card");
-  const payFrom = accounts.filter((account) => account.kind !== "chequing");
-  // No cards, no reason to offer paying one.
-  const kinds = KINDS.filter((option) => option.kind !== "card" || cards.length > 0);
+  const cards = destinationOptions(accounts).filter(
+    (account) => account.kind === "credit_card",
+  );
+  /*
+   * Where "Into savings" lands.
+   *
+   * This list is the whole bug. The choice was offered without it: the form
+   * sent `kind: "transfer"` and no destination, so the row was a transfer with
+   * nowhere to go. Chequing went down by the amount and savings never moved -
+   * the money was simply gone as far as every figure here is concerned.
+   *
+   * It read as working because the card flow beside it does work: that one was
+   * built later, with a destination, when there was more than one account to
+   * name. "Into savings" is older than that and predates there being anywhere
+   * for it to go.
+   */
+  const savingsAccounts = destinationOptions(accounts).filter(
+    (account) => account.kind === "savings",
+  );
+  // Nowhere to put it, nothing to offer. Same rule as the cards: a choice with
+  // no valid answer is worse than no choice.
+  const kinds = KINDS.filter((option) => {
+    if (option.kind === "card") return cards.length > 0;
+    if (option.kind === "transfer") return savingsAccounts.length > 0;
+    return true;
+  });
 
   const [name, setName] = useState("");
   const [amount, setAmount] = useState("");
@@ -114,10 +144,27 @@ export function OneOffForm({
     () => paydays.find((target) => target.id !== null)?.id ?? "",
   );
   /** Which card is being paid. Pre-picked when there is only one. */
-  const [cardId, setCardId] = useState<string>(() => cards[0]?.id ?? "");
+  const [cardId, setCardId] = useState<string>(() => cards[0]?.id ?? CHEQUING);
+  /** Which savings account it goes into. Pre-picked when there is only one. */
+  const [savingsId, setSavingsId] = useState<string>(
+    () => savingsAccounts[0]?.id ?? CHEQUING,
+  );
   /** Where the money comes from. "" is chequing, as the API spells it. */
-  const [paidFromAccountId, setPaidFromAccountId] = useState("");
+  const [paidFromAccountId, setPaidFromAccountId] = useState(CHEQUING);
   const [error, setError] = useState<string | null>(null);
+
+  /**
+   * Where the money arrives, for the two kinds that send it somewhere.
+   *
+   * One value rather than a branch at each use, so the destination the form
+   * shows, the destination it sends and the account it strikes off the source
+   * list are the same string by construction.
+   */
+  const destinationId =
+    kind === "card" ? cardId : kind === "transfer" ? savingsId : CHEQUING;
+
+  /** Chequing is the empty option, so it is not in this list. */
+  const payFrom = sourceOptions(accounts, destinationId);
 
   /*
    * Something that has happened happened on a day. So the placement choice
@@ -175,8 +222,15 @@ export function OneOffForm({
       return;
     }
 
-    if (kind === "card" && cardId === "") {
+    if (needsDestination(kind === "card", cardId, cards)) {
       setError("Pick which card this pays.");
+      return;
+    }
+
+    // The money has to land somewhere nameable. Saving it without a
+    // destination is what made it disappear.
+    if (needsDestination(kind === "transfer", savingsId, savingsAccounts)) {
+      setError("Pick which savings account this goes into.");
       return;
     }
 
@@ -187,8 +241,12 @@ export function OneOffForm({
         cents: (cents < 0n ? -cents : cents).toString(),
         // This form's `card` is the API's `transfer`, with a destination.
         kind: kind === "card" ? "transfer" : kind,
-        ...(kind === "card" ? { transferToAccountId: cardId } : {}),
-        ...(paidFromAccountId === "" ? {} : { paidFromAccountId }),
+        // Both kinds that move money send where it lands. Paying a card did
+        // this already; "Into savings" did not, and that was the bug.
+        ...(destinationId === CHEQUING ? {} : { transferToAccountId: destinationId }),
+        ...(paidFromAccountId === CHEQUING
+          ? {}
+          : { paidFromAccountId: accountIdOf(paidFromAccountId) }),
         // Created with the tick already on, rather than added and then found
         // again on the ledger to tick. Same field, same meaning.
         ...(happened ? { paid: true } : {}),
@@ -281,6 +339,24 @@ export function OneOffForm({
         </Field>
       ) : null}
 
+      {kind === "transfer" && savingsAccounts.length > 1 ? (
+        <Field label="Which savings account?" htmlFor={ids.savings}>
+          <select
+            className="hr-input"
+            id={ids.savings}
+            value={savingsId}
+            onChange={(event) => setSavingsId(event.target.value)}
+            disabled={create.isPending}
+          >
+            {savingsAccounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+
       {/*
         Where it comes from. Chequing is the empty option and the default,
         because it nearly always is - but the household asked to be able to
@@ -295,14 +371,12 @@ export function OneOffForm({
             onChange={(event) => setPaidFromAccountId(event.target.value)}
             disabled={create.isPending}
           >
-            <option value="">Chequing</option>
-            {payFrom
-              .filter((account) => kind !== "card" || account.id !== cardId)
-              .map((account) => (
-                <option key={account.id} value={account.id}>
-                  {account.name}
-                </option>
-              ))}
+            <option value={CHEQUING}>Chequing</option>
+            {payFrom.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
           </select>
         </Field>
       ) : null}

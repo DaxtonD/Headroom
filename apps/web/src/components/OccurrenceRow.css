@@ -235,7 +235,8 @@
   }
 
   .row__amount-input,
-  .row__date-input {
+  .row__date-input,
+  .row__account {
     max-width: 420px;
   }
 }

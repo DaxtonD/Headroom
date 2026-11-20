@@ -18,6 +18,16 @@ import {
   timesPerYear,
 } from "@headroom/core";
 import { useId, useState } from "react";
+import {
+  CHEQUING,
+  NOWHERE,
+  accountFor,
+  accountIdOf,
+  destinationOptions,
+  pickedFrom,
+  sectionForDestination,
+  sourceOptions,
+} from "../lib/routing.js";
 import { ApiError, OfflineError } from "../lib/api.js";
 import {
   useCreateBill,
@@ -105,6 +115,7 @@ export function BillForm({
     offset: useId(),
     section: useId(),
     payFrom: useId(),
+    transferTo: useId(),
     owner: useId(),
     override: useId(),
   };
@@ -148,16 +159,35 @@ export function BillForm({
   );
   const [ownerUserId, setOwnerUserId] = useState(existing?.ownerUserId ?? "");
   /** "" means chequing, which is how the API spells a null source. */
-  const [paidFromAccountId, setPaidFromAccountId] = useState(existing?.paidFromAccountId ?? "");
+  const [paidFromAccountId, setPaidFromAccountId] = useState(
+    pickedFrom(existing?.paidFromAccountId),
+  );
+  /**
+   * Where this pays INTO, when it is a transfer rather than a cost.
+   *
+   * The field existed in the database, the engine and the API from the day
+   * cards arrived, and no screen ever set it. So a planned savings payment
+   * could be entered here, appear on the ledger, be ticked off - and savings
+   * would not move, because nothing had said where the money went.
+   */
+  const [transferToAccountId, setTransferToAccountId] = useState(
+    pickedFrom(existing?.transferToAccountId),
+  );
 
   /*
-   * Chequing is the empty option, so it is not in this list.
+   * Chequing is the empty option, so it is not in either list, and each one
+   * excludes whatever the other end is set to: money that leaves an account
+   * and arrives in the same one has not moved.
    *
-   * Savings is here as well as the cards: the household asked for it, because
-   * an expense can come straight out of savings, and that leaving the chequing
-   * forecast untouched is the same fact as a card charge doing so.
+   * Savings is a source as well as the cards: the household asked for it,
+   * because an expense can come straight out of savings, and that leaving the
+   * chequing forecast untouched is the same fact as a card charge doing so.
    */
-  const payFrom = accounts.filter((account) => account.kind !== "chequing");
+  const payFrom = sourceOptions(accounts, transferToAccountId);
+  const transferTo = destinationOptions(accounts, paidFromAccountId);
+  /** The destination itself, which decides the budget question below. */
+  const destination = accountFor(accounts, transferToAccountId);
+  const paysACard = destination?.kind === "credit_card";
   /**
    * Whether a stated monthly figure is in use.
    *
@@ -284,8 +314,20 @@ export function BillForm({
       }
     }
 
-    // Income has no fixed/variable half of the budget to sit in.
-    const budgetSection = incoming ? "income" : section;
+    /*
+     * Income has no fixed/variable half of the budget to sit in, and a payment
+     * toward a card has no business in the budget at all: the charges on the
+     * card each carry their own section and are already counted. Count the
+     * payment as well and every card expense is budgeted twice - once as the
+     * spending and once as the settling.
+     *
+     * A transfer into savings keeps its section, deliberately. That is the
+     * household treating what it puts aside as a real commitment, and
+     * `routes/budget.ts` draws the same line in the same place.
+     */
+    const budgetSection = incoming
+      ? "income"
+      : sectionForDestination(section, destination);
 
     // A dated schedule produces dated items; a flexible one produces movable
     // undated items. The API enforces this too.
@@ -303,21 +345,35 @@ export function BillForm({
             section: budgetSection,
             ownerUserId: ownerUserId === "" ? null : ownerUserId,
             monthlyBudgetOverrideCents: overrideValue,
-            paidFromAccountId: paidFromAccountId === "" ? null : paidFromAccountId,
+            paidFromAccountId: accountIdOf(paidFromAccountId),
+            transferToAccountId: accountIdOf(transferToAccountId),
             imageId,
           },
         });
       } else {
         await create.mutateAsync({
           name: name.trim(),
-          kind: defaultKind,
+          /*
+           * A destination makes this a transfer rather than a bill, which is
+           * what the schema means by "set this and the template stops being a
+           * bill". Only on create: the PATCH surface has no `kind`, and it
+           * does not need one, because every figure is derived from the two
+           * account fields rather than from the word. `accountDelta` in
+           * `packages/core` is the only place that decides a sign, and it
+           * reads the ends of the move; `signedForKind` treats a bill and a
+           * transfer identically. So an edited bill keeps the name "bill" and
+           * behaves exactly as a transfer, which is the harmless half of the
+           * asymmetry.
+           */
+          kind: transferToAccountId === NOWHERE ? defaultKind : "transfer",
           defaultCents: cents.toString(),
           withdrawal,
           schedule,
           section: budgetSection,
           ownerUserId: ownerUserId === "" ? null : ownerUserId,
           monthlyBudgetOverrideCents: overrideValue,
-          paidFromAccountId: paidFromAccountId === "" ? null : paidFromAccountId,
+          paidFromAccountId: accountIdOf(paidFromAccountId),
+          transferToAccountId: accountIdOf(transferToAccountId),
           imageId,
         });
       }
@@ -525,7 +581,21 @@ export function BillForm({
         )
       ) : null}
 
-      {incoming ? null : (
+      {/*
+        The budget question, which a card payment does not get asked.
+
+        Its answer would be discarded: `sectionForDestination` drops the
+        section for a payment toward a card, because the charges on the card
+        already carry theirs and counting both budgets the same money twice.
+        A dead question with a live-looking answer is worse than a sentence
+        saying why there is nothing to answer.
+      */}
+      {incoming ? null : paysACard ? (
+        <p className="sheet__hint">
+          Paying a card is not a cost in the budget, so it has no fixed or variable half. The
+          charges on the card are what the budget counts.
+        </p>
+      ) : (
         <Field label="On the budget, is it fixed or variable?" htmlFor={ids.section}>
           <select
             className="hr-input"
@@ -545,7 +615,8 @@ export function BillForm({
         A charge on a card keeps its section above: it is a real monthly cost
         and belongs in the budget. What changes is that it stops draining the
         chequing forecast, because none of chequing's money moves until the
-        card itself is paid.
+        card itself is paid - which, since the field below exists, can now be
+        a scheduled expense of its own rather than only a one-off.
       */}
       {!incoming && payFrom.length > 0 ? (
         <Field label="Which account does it come out of?" htmlFor={ids.payFrom}>
@@ -556,17 +627,56 @@ export function BillForm({
             onChange={(event) => setPaidFromAccountId(event.target.value)}
             disabled={saving}
           >
-            <option value="">Chequing</option>
+            <option value={CHEQUING}>Chequing</option>
             {payFrom.map((account) => (
               <option key={account.id} value={account.id}>
                 {account.name}
               </option>
             ))}
           </select>
-          {paidFromAccountId !== "" ? (
+          {paidFromAccountId !== CHEQUING ? (
             <p className="sheet__hint">
-              It will show on the ledger without moving the chequing balance. Pay the card with a
-              one-off, and that is what comes out of chequing.
+              It will show on the ledger without moving the chequing balance. The chequing money
+              moves when the card itself is paid, which is its own expense or a one-off.
+            </p>
+          ) : null}
+        </Field>
+      ) : null}
+
+      {/*
+        And where it pays INTO.
+
+        The missing half. A savings line set up here used to leave chequing and
+        arrive nowhere, because nothing on any screen ever set this field -
+        only the one-off sheet did, and only for a card. So "we put $500 aside
+        on the 1st" was enterable, tickable, and moved one balance of the two.
+
+        Offered for the cards as well as savings, because they are one thing
+        here: money leaving one account and arriving in another, one tick
+        moving two balances. A scheduled card payment is the thing the card
+        warning asks for by name.
+      */}
+      {!incoming && transferTo.length > 0 ? (
+        <Field label="Is it a payment into another account?" htmlFor={ids.transferTo}>
+          <select
+            className="hr-input"
+            id={ids.transferTo}
+            value={transferToAccountId}
+            onChange={(event) => setTransferToAccountId(event.target.value)}
+            disabled={saving}
+          >
+            <option value={NOWHERE}>No &mdash; it is a cost</option>
+            {transferTo.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+          {transferToAccountId !== NOWHERE ? (
+            <p className="sheet__hint">
+              {paysACard
+                ? "Marking it paid takes the money out of chequing and off the card. It is kept out of the budget, because the charges on the card are already counted there."
+                : `Marking it paid takes the money out of chequing and adds it to ${destination?.name ?? "that account"}.`}
             </p>
           ) : null}
         </Field>
