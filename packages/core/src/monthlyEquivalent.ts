@@ -85,6 +85,7 @@ export function cadenceOfSchedule(
   schedule:
     | { readonly type: "monthly" }
     | { readonly type: "monthly_last" }
+    | { readonly type: "yearly" }
     | { readonly type: "relative_to_pay" }
     | { readonly type: "biweekly" }
     | { readonly type: "flexible"; readonly frequency: "monthly" | "per_pay_period" },
@@ -93,6 +94,15 @@ export function cadenceOfSchedule(
     case "monthly":
     case "monthly_last":
       return "monthly";
+    /*
+     * Charged once, spread over twelve months. A $1,200 annual policy is $100
+     * a month in the budget, which is the whole reason an annual expense is
+     * worth entering as one: the yearly cost is visible without anybody
+     * dividing it by hand, and the Budget page already knew how to do this
+     * before any schedule could produce it.
+     */
+    case "yearly":
+      return "yearly";
     // Follows a biweekly payday, so it recurs with the paydays.
     case "relative_to_pay":
     case "biweekly":

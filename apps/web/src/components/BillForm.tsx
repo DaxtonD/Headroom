@@ -12,6 +12,7 @@
  */
 import {
   cadenceOfSchedule,
+  MONTH_NAMES,
   formatCents,
   monthlyFigureFor,
   parseCents,
@@ -45,6 +46,10 @@ import { Field, RemoveButton, Sheet } from "./Sheet.js";
 const RECURRENCE_OPTIONS = [
   { key: "monthly_day", label: "Every month, on a date" },
   { key: "monthly_last", label: "Every month, on the last day" },
+  // Annual insurance, a yearly subscription. The Budget page spreads it over
+  // twelve months, which is the reason to enter it as a yearly amount rather
+  // than dividing it by hand and losing the real date it comes out.
+  { key: "yearly", label: "Every year, on a date" },
   // The one that was missing. "A few days after someone's payday" is also
   // fortnightly, but only because the payday is - and it cannot express dates
   // a lender set, which is what a mortgage has.
@@ -62,6 +67,8 @@ function recurrenceOf(schedule: ScheduleSpec): RecurrenceKey {
       return "monthly_day";
     case "monthly_last":
       return "monthly_last";
+    case "yearly":
+      return "yearly";
     case "relative_to_pay":
       return "after_payday";
     case "biweekly":
@@ -109,6 +116,7 @@ export function BillForm({
     amount: useId(),
     recurrence: useId(),
     day: useId(),
+    yearlyMonth: useId(),
     plannedDay: useId(),
     anchor: useId(),
     payday: useId(),
@@ -128,7 +136,13 @@ export function BillForm({
     existing ? recurrenceOf(existing.schedule) : "monthly_day",
   );
   const [day, setDay] = useState(
-    existing?.schedule.type === "monthly" ? String(existing.schedule.day) : "1",
+    existing?.schedule.type === "monthly" || existing?.schedule.type === "yearly"
+      ? String(existing.schedule.day)
+      : "1",
+  );
+  /** Which month a yearly item falls in. January until somebody says otherwise. */
+  const [yearlyMonth, setYearlyMonth] = useState(
+    existing?.schedule.type === "yearly" ? String(existing.schedule.month) : "1",
   );
   const [payScheduleId, setPayScheduleId] = useState(() => {
     if (existing?.schedule.type === "relative_to_pay") return existing.schedule.payScheduleId;
@@ -228,6 +242,13 @@ export function BillForm({
       }
       case "monthly_last":
         return { type: "monthly_last" };
+      case "yearly": {
+        const parsedMonth = Number(yearlyMonth);
+        const parsedDay = Number(day);
+        if (!Number.isInteger(parsedMonth) || parsedMonth < 1 || parsedMonth > 12) return null;
+        if (!Number.isInteger(parsedDay) || parsedDay < 1 || parsedDay > 31) return null;
+        return { type: "yearly", month: parsedMonth, day: parsedDay };
+      }
       case "biweekly_own": {
         if (anchorDate === "") return null;
         return { type: "biweekly", anchorDate };
@@ -482,11 +503,35 @@ export function BillForm({
         </select>
       </Field>
 
-      {recurrence === "monthly_day" ? (
+      {recurrence === "yearly" ? (
+        <Field label="Which month?" htmlFor={ids.yearlyMonth}>
+          <select
+            className="hr-input"
+            id={ids.yearlyMonth}
+            value={yearlyMonth}
+            onChange={(event) => setYearlyMonth(event.target.value)}
+            disabled={saving}
+          >
+            {MONTH_NAMES.map((label, index) => (
+              <option key={label} value={String(index + 1)}>
+                {label}
+              </option>
+            ))}
+          </select>
+        </Field>
+      ) : null}
+
+      {recurrence === "monthly_day" || recurrence === "yearly" ? (
         <Field
-          label="On which day of the month?"
+          label={
+            recurrence === "yearly" ? "On which day of that month?" : "On which day of the month?"
+          }
           htmlFor={ids.day}
-          hint="A day a short month does not have moves to its last day, so the 31st is the 30th in November."
+          hint={
+            recurrence === "yearly"
+              ? "A day the month does not have moves to its last day, so the 29th of February comes out on the 28th in the three years out of four without one."
+              : "A day a short month does not have moves to its last day, so the 31st is the 30th in November."
+          }
         >
           <input
             className="hr-input"
@@ -716,8 +761,17 @@ export function BillForm({
             {formatCents(preview.monthlyCents)} a month
           </p>
           <p className="sheet__preview-note">
-            {timesPerYear(preview.cadence)} times a year, so {formatCents(preview.yearlyCents)} a
-            year.
+            {preview.cadence === "yearly" ? (
+              <>
+                Charged once a year, {formatCents(preview.yearlyCents)} at a time, spread over the
+                twelve months here.
+              </>
+            ) : (
+              <>
+                {timesPerYear(preview.cadence)} times a year, so{" "}
+                {formatCents(preview.yearlyCents)} a year.
+              </>
+            )}
             {preview.cadence === "biweekly" ? (
               <>
                 {" "}

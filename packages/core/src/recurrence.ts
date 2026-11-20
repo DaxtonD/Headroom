@@ -37,6 +37,20 @@ export type ScheduleSpec =
   | { readonly type: "monthly"; readonly day: number }
   /** The last day of every month, which is how "the 31st" behaves. */
   | { readonly type: "monthly_last" }
+  /**
+   * The same date every year: the 3rd of March, every March.
+   *
+   * Annual insurance and the yearly subscriptions are what this is for. `day`
+   * is clamped to the month's length exactly as a monthly one is, so a bill on
+   * the 29th of February comes out on the 28th in the three years out of four
+   * that have no 29th.
+   *
+   * It is a DATED schedule, so it is an automatic withdrawal and the weekend
+   * rule applies to it. There is deliberately no flexible yearly: "we choose
+   * when" is a question about which paycheque absorbs something, and a yearly
+   * item has no paycheque of its own to hang from.
+   */
+  | { readonly type: "yearly"; readonly month: number; readonly day: number }
   /** A fixed number of days after each of one person's paydays. */
   | { readonly type: "relative_to_pay"; readonly payScheduleId: string; readonly offsetDays: number }
   /** A paycheque: every 14 days from the schedule's anchor. */
@@ -158,6 +172,18 @@ export function generateOccurrences(options: GenerateOptions): GeneratedOccurren
         generated.push(...monthlyOccurrences(template, "last", options, weekendRule));
         break;
 
+      case "yearly":
+        generated.push(
+          ...yearlyOccurrences(
+            template,
+            template.schedule.month,
+            template.schedule.day,
+            options,
+            weekendRule,
+          ),
+        );
+        break;
+
       case "relative_to_pay": {
         const schedule = schedulesById.get(template.schedule.payScheduleId);
         if (!schedule) {
@@ -276,6 +302,65 @@ function monthlyOccurrences(
       // Keyed by the month, not the date: moving a bill to a different day of
       // the month must not generate a second copy for that month.
       periodKey: monthKey(year, month),
+      name: template.name,
+      cents: outflowSign(template),
+      kind: template.kind,
+      placement: "auto",
+      date,
+      sortIndex: template.sortIndex ?? 0,
+      ownerId: template.ownerId,
+    });
+  }
+
+  return result;
+}
+
+/**
+ * Every year touched by `[from, to]`, and the one before it.
+ *
+ * The year before is included because the weekend rule can move a date across
+ * New Year: a bill on the 31st of December under `next_business_day` comes out
+ * on the 2nd of January. Generation always starts at today, so this only
+ * matters for a couple of days either side of the boundary - but the window
+ * filter discards anything that falls outside it anyway, so covering the extra
+ * year costs one iteration and removes the edge case rather than documenting
+ * it.
+ */
+function yearsBetween(from: PlainDate, to: PlainDate): number[] {
+  const start = parseDate(from).year - 1;
+  const end = parseDate(to).year;
+  const years: number[] = [];
+  for (let year = start; year <= end; year += 1) years.push(year);
+  return years;
+}
+
+/**
+ * One occurrence a year, on the same month and day.
+ *
+ * Deliberately the shape of `monthlyOccurrences`: the same clamping for a day
+ * the month does not have, the same weekend rule, the same window filter. The
+ * one difference is the period key, which is the year alone - so moving an
+ * annual bill to a different date inside the same year moves the row that is
+ * already there rather than producing a second one for that year.
+ */
+function yearlyOccurrences(
+  template: TemplateSpec,
+  month: number,
+  day: number,
+  options: GenerateOptions,
+  weekendRule: WeekendRule,
+): GeneratedOccurrence[] {
+  const result: GeneratedOccurrence[] = [];
+
+  for (const year of yearsBetween(options.from, options.to)) {
+    const scheduled = monthlyOccurrenceDate(year, month, day);
+    const date = applyWeekendRule(scheduled, weekendRule);
+
+    if (compareDates(date, options.from) < 0 || compareDates(date, options.to) > 0) continue;
+
+    result.push({
+      templateId: template.id,
+      periodKey: String(year),
       name: template.name,
       cents: outflowSign(template),
       kind: template.kind,

@@ -131,6 +131,134 @@ describe("monthly_last", () => {
   });
 });
 
+describe("yearly", () => {
+  const insurance = template({
+    id: "policy",
+    name: "House insurance",
+    schedule: { type: "yearly", month: 3, day: 3 },
+  });
+
+  it("places one occurrence a year, on its month and day", () => {
+    const generated = generateOccurrences({
+      templates: [insurance],
+      paySchedules: SCHEDULES,
+      from: "2026-11-01",
+      to: "2029-06-30",
+    });
+
+    expect(generated.map((occurrence) => occurrence.date)).toEqual([
+      "2027-03-03",
+      "2028-03-03",
+      "2029-03-03",
+    ]);
+  });
+
+  it("produces nothing in a window its date does not reach", () => {
+    const generated = generateOccurrences({
+      templates: [insurance],
+      paySchedules: SCHEDULES,
+      from: "2026-11-01",
+      to: "2026-12-31",
+    });
+
+    expect(generated).toEqual([]);
+  });
+
+  it("keys by the year, so moving the date cannot create a second copy", () => {
+    const generated = generateOccurrences({
+      templates: [insurance],
+      paySchedules: SCHEDULES,
+      from: "2027-01-01",
+      to: "2028-12-31",
+    });
+
+    expect(generated.map((occurrence) => occurrence.periodKey)).toEqual(["2027", "2028"]);
+  });
+
+  /*
+   * The one date a year cannot be taken literally. Somebody whose policy
+   * renews on the 29th of February has a renewal in three years out of four
+   * anyway, and clamping is what every other schedule here does with a day its
+   * month is too short for.
+   */
+  it("clamps the 29th of February to the 28th in a year that has no 29th", () => {
+    const generated = generateOccurrences({
+      templates: [template({ id: "leap", schedule: { type: "yearly", month: 2, day: 29 } })],
+      paySchedules: SCHEDULES,
+      from: "2027-01-01",
+      to: "2029-12-31",
+    });
+
+    expect(generated.map((occurrence) => occurrence.date)).toEqual([
+      "2027-02-28",
+      "2028-02-29",
+      "2029-02-28",
+    ]);
+  });
+
+  it("is an outflow, dated, and placed by date", () => {
+    const [occurrence] = generateOccurrences({
+      templates: [insurance],
+      paySchedules: SCHEDULES,
+      from: "2027-01-01",
+      to: "2027-12-31",
+    });
+
+    expect(occurrence?.cents).toBe(-12_345n);
+    expect(occurrence?.placement).toBe("auto");
+    expect(occurrence?.anchorPaydayDate).toBeUndefined();
+  });
+
+  it("follows the weekend rule, like every other dated withdrawal", () => {
+    // The 4th of July is a Saturday in 2026 and a Sunday in 2027, so one moves
+    // back a day and the next back two; 2028 is a Tuesday and does not move.
+    const generated = generateOccurrences({
+      templates: [template({ id: "fees", schedule: { type: "yearly", month: 7, day: 4 } })],
+      paySchedules: SCHEDULES,
+      from: "2026-01-01",
+      to: "2028-12-31",
+      weekendRule: "friday_before",
+    });
+
+    expect(generated.map((occurrence) => occurrence.date)).toEqual([
+      "2026-07-03",
+      "2027-07-02",
+      "2028-07-04",
+    ]);
+  });
+
+  /*
+   * The reason the generator looks back a year. The 31st of December 2028 is a
+   * Sunday, so under this rule the money leaves on the 1st of January 2029 -
+   * inside a window that opens that morning, from a template whose year is the
+   * one before it.
+   */
+  it("still generates a New Year bill the weekend rule pushed over the boundary", () => {
+    const generated = generateOccurrences({
+      templates: [template({ id: "renewal", schedule: { type: "yearly", month: 12, day: 31 } })],
+      paySchedules: SCHEDULES,
+      from: "2029-01-01",
+      to: "2029-03-01",
+      weekendRule: "next_business_day",
+    });
+
+    expect(generated.map((occurrence) => [occurrence.periodKey, occurrence.date])).toEqual([
+      ["2028", "2029-01-01"],
+    ]);
+  });
+
+  it("generates the identical list when it runs twice", () => {
+    const options = {
+      templates: [insurance],
+      paySchedules: SCHEDULES,
+      from: "2026-11-01",
+      to: "2029-06-30",
+    } as const;
+
+    expect(generateOccurrences(options)).toEqual(generateOccurrences(options));
+  });
+});
+
 describe("relative_to_pay", () => {
   const mortgage = template({
     id: "mortgage",

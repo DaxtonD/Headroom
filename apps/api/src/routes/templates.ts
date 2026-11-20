@@ -134,6 +134,8 @@ function scheduleTypeFor(schedule: z.infer<typeof scheduleSchema>) {
       return "monthly" as const;
     case "monthly_last":
       return "monthly_last" as const;
+    case "yearly":
+      return "yearly" as const;
     case "relative_to_pay":
       return "relative_to_pay" as const;
     case "biweekly":

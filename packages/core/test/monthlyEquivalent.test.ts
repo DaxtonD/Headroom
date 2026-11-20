@@ -87,6 +87,8 @@ describe("cadenceOfSchedule", () => {
   it("maps the timeline's scheduling rules onto a cadence", () => {
     expect(cadenceOfSchedule({ type: "monthly" })).toBe("monthly");
     expect(cadenceOfSchedule({ type: "monthly_last" })).toBe("monthly");
+    // Once a year, which the budget then spreads over twelve months.
+    expect(cadenceOfSchedule({ type: "yearly" })).toBe("yearly");
     // Follows a biweekly payday, so it recurs with the paydays.
     expect(cadenceOfSchedule({ type: "relative_to_pay" })).toBe("biweekly");
     expect(cadenceOfSchedule({ type: "biweekly" })).toBe("biweekly");

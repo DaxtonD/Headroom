@@ -23,7 +23,9 @@ import {
   isPaydayOn,
   isPlainDate,
   isWeekend,
+  MONTH_NAMES,
   monthlyOccurrenceDate,
+  monthName,
   nextPaydays,
   parseDate,
   paydaysBetween,
@@ -278,5 +280,24 @@ describe("a date with the year on it", () => {
   it("is the only formatter that keeps the year, because a payoff date needs it", () => {
     expect(formatDayAndMonth("2027-08-13")).toBe("Aug 13");
     expect(formatDayMonthAndYear("2027-08-13")).toContain("2027");
+  });
+});
+
+describe("month names", () => {
+  it("names every month, numbered the way every other date function here is", () => {
+    expect(monthName(1)).toBe("January");
+    expect(monthName(2)).toBe("February");
+    expect(monthName(12)).toBe("December");
+    expect(MONTH_NAMES).toHaveLength(12);
+  });
+
+  /*
+   * Zero-indexed months are the classic version of this mistake, and a silent
+   * off-by-one here would label an annual bill with the wrong month on the
+   * Manage screen while every figure stayed correct.
+   */
+  it("refuses a month that is not one, rather than returning nothing", () => {
+    expect(() => monthName(0)).toThrow(RangeError);
+    expect(() => monthName(13)).toThrow(RangeError);
   });
 });

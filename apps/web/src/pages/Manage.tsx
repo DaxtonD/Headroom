@@ -17,6 +17,7 @@
  */
 import {
   cadenceOfSchedule,
+  monthName,
   formatCents,
   formatDateShort,
   parseCents,
@@ -704,6 +705,13 @@ function describeSchedule(bill: Bill): string {
       return `Monthly on the ${ordinal(schedule.day)}${howOften}`;
     case "monthly_last":
       return `Monthly, last day${howOften}`;
+    /*
+     * No "1x a year" tail. For everything else the count is the useful part -
+     * it is what tells somebody a fortnightly bill is 26 payments - and for a
+     * yearly one it restates the word yearly and reads like a mistake.
+     */
+    case "yearly":
+      return `Yearly, on the ${ordinal(schedule.day)} of ${monthName(schedule.month)}`;
     case "relative_to_pay":
       return `${schedule.offsetDays === 0 ? "On" : `${schedule.offsetDays} day(s) after`} a payday${howOften}`;
     case "biweekly":

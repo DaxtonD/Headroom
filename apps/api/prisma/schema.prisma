@@ -35,6 +35,9 @@ enum TemplateKind {
 enum ScheduleType {
   monthly
   monthly_last
+  /// The same month and day every year: annual insurance, a yearly
+  /// subscription. Dated, so it is an automatic withdrawal like `monthly`.
+  yearly
   relative_to_pay
   biweekly
   flexible
@@ -381,8 +384,9 @@ model Template {
   ownerUserId  String?        @db.Uuid
   withdrawal   WithdrawalKind
   scheduleType ScheduleType
-  /// Shape depends on scheduleType: {day}, {user, offsetDays}, {anchorDate},
-  /// {frequency}. Validated with Zod at the edge, never trusted raw.
+  /// Shape depends on scheduleType: {day}, {month, day}, {user, offsetDays},
+  /// {anchorDate}, {frequency}. Validated with Zod at the edge, never trusted
+  /// raw.
   scheduleJson Json
   section      BudgetSection?
   budgetLineId String?        @db.Uuid

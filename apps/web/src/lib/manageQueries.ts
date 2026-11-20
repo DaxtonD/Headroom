@@ -20,6 +20,8 @@ const toCents = (value: string): Cents => BigInt(value);
 export type ScheduleSpec =
   | { readonly type: "monthly"; readonly day: number }
   | { readonly type: "monthly_last" }
+  /** The same month and day every year: annual insurance, a yearly sub. */
+  | { readonly type: "yearly"; readonly month: number; readonly day: number }
   | { readonly type: "relative_to_pay"; readonly payScheduleId: string; readonly offsetDays: number }
   /**
    * Every fourteen days: either from a date of its own, or from someone's

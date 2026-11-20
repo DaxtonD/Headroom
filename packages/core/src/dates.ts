@@ -275,6 +275,37 @@ const MONTHS_SHORT = [
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
 
+/**
+ * Full month names, for a schedule that names one.
+ *
+ * Here rather than in a screen because two screens need the same list: the
+ * expense form offers them and the Manage list reads one back out. The short
+ * forms above are for dates; these are for sentences.
+ */
+export const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+] as const;
+
+/** The name of a month, numbered 1-12 as every other date function here is. */
+export function monthName(month: number): string {
+  const name = MONTH_NAMES[month - 1];
+  if (name === undefined) {
+    throw new RangeError(`A month must be 1-12; received ${String(month)}.`);
+  }
+  return name;
+}
+
 /** `Sun, Nov 22`, the form the mockups use in chips and warnings. */
 export function formatDateShort(value: PlainDate): string {
   const { month, day } = parseDate(value);

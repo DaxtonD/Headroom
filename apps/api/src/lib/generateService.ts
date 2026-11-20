@@ -52,6 +52,18 @@ import { fromPlainDate, todayInZone, toPlainDate } from "./timelineService.js";
 const scheduleSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("monthly"), day: z.number().int().min(1).max(31) }),
   z.object({ type: z.literal("monthly_last") }),
+  /**
+   * Once a year, on a month and a day.
+   *
+   * The day is accepted up to 31 for any month and clamped by the engine, the
+   * same as a monthly one: somebody entering a renewal on the 29th of February
+   * should not be refused in the three years out of four that have no 29th.
+   */
+  z.object({
+    type: z.literal("yearly"),
+    month: z.number().int().min(1).max(12),
+    day: z.number().int().min(1).max(31),
+  }),
   z.object({
     type: z.literal("relative_to_pay"),
     payScheduleId: z.string().min(1),
