@@ -155,13 +155,16 @@ export function isPastTheHeader(
 /**
  * The header's height, re-rendering whoever asks when it changes.
  *
+ * Exported because two screens now hang something off the header's bottom
+ * edge: the ledger's pinned balance line, and the Manage screen's jump bar.
+ *
  * Not read once: React runs a child's effects before its parent's, so the
  * ledger can mount, observe and decide before the shell has measured
  * anything. With cached data on screen that is a real sequence, not a
  * theoretical one, and it would leave the observer built on the fallback -
  * out by the whole safe-area inset on an installed app.
  */
-function useHeaderHeight(): number {
+export function useHeaderHeight(): number {
   const [height, setHeight] = useState(() => measured ?? FALLBACK_HEADER_PX);
 
   useEffect(() => {

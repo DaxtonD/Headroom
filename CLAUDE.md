@@ -33,6 +33,12 @@ milestone (HANDOFF section 13), keeping each one green before starting the next.
 - First session only: if the repo isn't cloned yet, clone it and copy the handoff package contents (including hidden files: `.env.example`, `.gitignore`, `.claude/`) into the repo root.
 - Before the first commit, check visibility: `gh repo view DaxtonD/Headroom --json visibility`. **If PUBLIC:** add `seed/household-nov-2026.json` to `.gitignore`, keep every real figure out of git, put synthetic fixtures with the same structure under `packages/core/test/fixtures/`, and have golden tests also run against the real seed when the local file exists. Log this in PROGRESS.md. If `gh` is unavailable, treat the repo as public.
 - Trunk-based on `main`. Small conventional commits (`feat:`, `fix:`, `test:`, `chore:`, `docs:`, `ci:`).
+- **`dev` follows `main`.** Standing instruction from the owner, 2026-11-20: whenever work
+  lands on `main`, bring `dev` up to it in the same session - `git checkout dev && git merge
+  --ff-only main && git push origin dev`, then back to `main`. It is always a fast-forward,
+  because `dev` is only ever used to try something out and is merged back before the next
+  push. If it ever is not a fast-forward, stop and ask rather than reconciling it. This is
+  the one push that does not need to be asked for each time; everything else still does.
 - Commit whenever a coherent step is green. Push after every milestone and at the end of every work session, so nothing lives only on this machine.
 - Tag each finished milestone: `m0` ... `m6` (`git tag m1 && git push origin m1`).
 - Never force-push, rewrite pushed history, or commit `.env`, secrets, database dumps or `reference/`.

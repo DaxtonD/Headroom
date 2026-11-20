@@ -4,6 +4,88 @@
   gap: var(--hr-space-4);
 }
 
+/* ---- The jump bar (sectionNav.ts says why this and not tabs) ---- */
+
+/*
+ * Pinned directly under the app header, which measures itself: see
+ * `pinnedHeader.ts` for why that height cannot be written down.
+ */
+.manage__jump {
+  position: sticky;
+  top: var(--hr-header-h);
+  /* Over the cards, under the app header (10) and well under any sheet. */
+  z-index: 5;
+  /*
+   * Out through the shell's gutter to the edge of the screen. A horizontal
+   * scroller has to start and end at the edge, because a chip cut off by the
+   * edge is the only thing telling you there are more of them.
+   */
+  margin-inline: calc(var(--hr-space-4) * -1);
+  background: var(--hr-ground);
+  border-bottom: 1px solid var(--hr-card-border);
+}
+
+.manage__jump-list {
+  display: flex;
+  gap: var(--hr-space-2);
+  margin: 0;
+  /* The 4px above and below is half of what makes `--hr-jump-h`. */
+  padding: var(--hr-space-1) var(--hr-space-4);
+  list-style: none;
+  overflow-x: auto;
+  /* A flick along the chips must not start scrolling the page behind them. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.manage__jump-list::-webkit-scrollbar {
+  display: none;
+}
+
+.manage__jump-chip {
+  display: inline-flex;
+  align-items: center;
+  /* The M5 minimum, and the other half of `--hr-jump-h`. */
+  min-height: var(--hr-touch-min);
+  padding: 0 var(--hr-space-3);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-pill);
+  background: var(--hr-card);
+  color: var(--hr-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  /* Eleven chips on one line, as wide as they need: the strip scrolls. */
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.manage__jump-chip:hover {
+  color: var(--hr-ink);
+}
+
+/*
+ * Where you are. Filled rather than tinted, and `aria-current="location"` in
+ * the markup says the same thing in words - the fill is never the only way to
+ * know which chip is live.
+ */
+.manage__jump-chip--here {
+  background: var(--hr-primary);
+  border-color: var(--hr-primary);
+  color: var(--hr-on-primary);
+}
+
+/*
+ * Where a chip lands you.
+ *
+ * Without this a jumped-to heading arrives underneath the header and the bar,
+ * both of which are pinned over the top of the page - so the section you
+ * asked for would be the one thing you could not see.
+ */
+.manage__section,
+.manage__checklist {
+  scroll-margin-top: calc(var(--hr-header-h) + var(--hr-jump-h) + var(--hr-space-3));
+}
+
 .manage__title {
   font-size: 1.5rem;
 }

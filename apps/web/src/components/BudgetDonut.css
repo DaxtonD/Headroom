@@ -17,8 +17,17 @@
 .donut__plot {
   position: relative;
   width: 100%;
-  /* Big enough to aim at on a phone, never wider than the card. */
-  max-width: 320px;
+  /*
+   * Big enough to aim at on a phone, never wider than the card - and now
+   * never taller than two fifths of the screen either, because the ring is
+   * pinned while its list scrolls under it and a square 320px chart would
+   * leave a phone in landscape with no list at all.
+   *
+   * The 220px floor is not cosmetic: the hole is half the ring across and the
+   * figures sit inside it, so below about that the amount in the middle stops
+   * fitting in its own hole.
+   */
+  max-width: clamp(220px, 42vh, 320px);
   aspect-ratio: 1;
 }
 

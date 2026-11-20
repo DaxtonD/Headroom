@@ -40,19 +40,6 @@
   cursor: pointer;
 }
 
-.row__payday-mark {
-  display: grid;
-  place-items: center;
-  flex: 0 0 auto;
-  width: 32px;
-  height: 32px;
-  border-radius: var(--hr-radius-pill);
-  background: var(--hr-green-tint);
-  color: var(--hr-positive);
-  font-family: var(--hr-font-display);
-  font-size: 1.125rem;
-  font-weight: 600;
-}
 
 .row__main {
   flex: 1;

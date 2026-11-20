@@ -115,6 +115,20 @@
    */
   --hr-header-h: 69px;
 
+  /*
+   * How tall the Manage screen's jump bar is, for the sections that have to
+   * clear it when a chip scrolls to one.
+   *
+   * Written down rather than measured, unlike the header above it: this is
+   * one row of chips at a fixed size, 44px of chip plus 4px of padding above
+   * and below plus the hairline under it, with nothing in it that depends on
+   * the device. `sectionNav.ts` holds the same number as `JUMP_BAR_PX`,
+   * because the observer that lights a chip needs it in JavaScript and
+   * cannot read a stylesheet; `section-nav.test.ts` derives it from the three
+   * declarations that draw the bar and checks both, so they cannot drift.
+   */
+  --hr-jump-h: 53px;
+
   /* ---- Spacing ---- */
   --hr-space-1: 4px;
   --hr-space-2: 8px;

@@ -52,6 +52,32 @@
   line-height: 1;
 }
 
+/*
+ * Received: the same filled green as paid and verified, carrying a "+".
+ *
+ * Shared with `.badge--paid` rather than written twice, because if these two
+ * ever drift apart the ledger has two different-looking kinds of "the money
+ * has moved" and nobody could say which was which.
+ */
+.badge--received {
+  background: var(--hr-primary);
+  color: var(--hr-on-primary);
+}
+
+/*
+ * A payday still to come.
+ *
+ * A real 2px border and not a tint, which is the whole fix: this badge sits
+ * on `--hr-payday-row`, and a fill a few percent off that background is a
+ * badge nobody can see. Solid rather than the estimate badge's dashes -
+ * dashes mean "this amount is a guess", and a payday that has not happened
+ * yet is not a guess, it is simply the future.
+ */
+.badge--incoming {
+  border: 2px solid var(--hr-positive);
+  color: var(--hr-positive);
+}
+
 .badge--estimate {
   /* Dashed, not just a different colour: the shape carries the meaning too. */
   border: 2px dashed var(--hr-estimate-ring);

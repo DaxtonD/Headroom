@@ -115,6 +115,55 @@ export function PaidBadge({ paidBy }: { paidBy?: Person | null }): React.JSX.Ele
   );
 }
 
+/**
+ * Money arriving: a payday, and whether it has landed.
+ *
+ * This was a bare "+" in a tinted circle for most of the build, and reported
+ * from use as the row having no badge at all - which was very nearly true.
+ * The circle was `--hr-green-tint` and a payday row is `--hr-payday-row`;
+ * those two are a few percent apart in every light theme, and on an EXPANDED
+ * payday row they are literally the same token. So the mark had no edge, no
+ * fill anyone could see and no initial, while the bill above it carried a
+ * filled badge saying who had paid it.
+ *
+ * It is now the same badge as the rest of the ledger, carrying a "+" rather
+ * than a tick or a dollar sign so money in still reads as money in at a
+ * glance: filled once the money is in the account, an outlined ring with a
+ * real border until then. The ring is drawn in `--hr-positive` rather than
+ * being a lighter fill, because the one thing this badge may never do again
+ * is disappear into the row it sits on.
+ *
+ * The initial is `paidBy` only, exactly as `PaidBadge` does it. A paycheque
+ * settled by the balance checklist has nobody attached, and inventing one
+ * would be worse than leaving it off.
+ */
+export function PaydayBadge({
+  received,
+  paidBy,
+}: {
+  received: boolean;
+  paidBy?: Person | null;
+}): React.JSX.Element {
+  const label = received ? (paidBy ? `Received, marked by ${paidBy.name}` : "Received") : "Payday";
+
+  return (
+    <span
+      className={`badge ${received ? "badge--received" : "badge--incoming"}`}
+      role="img"
+      aria-label={label}
+    >
+      <span className="badge__glyph" aria-hidden="true">
+        +
+      </span>
+      {received && paidBy ? (
+        <span className="badge__initial" aria-hidden="true">
+          {initialOf(paidBy)}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 export type ChipTone = "neutral" | "flexible" | "oneoff" | "payday" | "warning";
 
 /** The small label on each row: `Auto · Nov 13`, `Flexible`, `Payday`. */

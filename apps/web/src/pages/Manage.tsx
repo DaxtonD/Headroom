@@ -23,7 +23,7 @@ import {
   parseCents,
   timesPerYear,
 } from "@headroom/core";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router";
 import { AssetForm } from "../components/AssetForm.js";
 import { Amount, Chip, InitialBubble } from "../components/Badges.js";
@@ -34,6 +34,7 @@ import { ImagePicker } from "../components/ImagePicker.js";
 import { Thumb } from "../components/Thumb.js";
 import { PaydayForm } from "../components/PaydayForm.js";
 import { ApiError, OfflineError } from "../lib/api.js";
+import { useSectionSpy, type JumpTarget } from "../lib/sectionNav.js";
 import {
   useBills,
   useCategories,
@@ -62,6 +63,79 @@ type Editing =
   | { readonly kind: "payday"; readonly payday: PayScheduleEntry | null }
   | null;
 
+/**
+ * Every section on this page, in the order they appear, and what the chip
+ * that jumps to each one says.
+ *
+ * The chip is allowed to be shorter than the heading - "Categories" for
+ * "Budget-only categories", "Owned" for "What you own". Eleven full headings
+ * is more text than a phone's width holds, and a chip is read as one of a set
+ * while a heading is read on its own. "Owned" and "Owed" rather than the
+ * headings' own "What you own" and "What you owe", which differ by a single
+ * letter in the middle of a phrase and are genuinely hard to tell apart at a
+ * glance.
+ *
+ * `archived` is the one section that comes and goes, so this is a function of
+ * whether there is anything in it rather than a constant.
+ */
+function jumpTargets(hasArchived: boolean): JumpTarget[] {
+  return [
+    { id: "manage-expenses", label: "Expenses" },
+    { id: "manage-money-in", label: "Money in" },
+    ...(hasArchived ? [{ id: "manage-archived", label: "Archived" }] : []),
+    { id: "manage-categories", label: "Categories" },
+    { id: "manage-goals", label: "Goals" },
+    { id: "manage-owned", label: "Owned" },
+    { id: "manage-owed", label: "Owed" },
+    { id: "manage-paydays", label: "Paydays" },
+    { id: "manage-accounts", label: "Accounts" },
+    { id: "manage-income", label: "Net income" },
+    { id: "manage-settings", label: "How things work" },
+  ];
+}
+
+/**
+ * The pinned row of chips.
+ *
+ * A `nav` of real buttons, not a tablist: nothing here is a tab, because
+ * nothing is hidden. Each chip scrolls the page to a heading that was always
+ * on it, so `aria-current="location"` is what marks the one you are in -
+ * `aria-selected` would be claiming a tab panel that does not exist.
+ */
+function JumpBar({
+  targets,
+  activeId,
+  onJump,
+  barRef,
+}: {
+  targets: readonly JumpTarget[];
+  activeId: string | null;
+  onJump: (id: string) => void;
+  barRef: (node: HTMLElement | null) => void;
+}): React.JSX.Element {
+  return (
+    <nav className="manage__jump" aria-label="Jump to a section">
+      <ul className="manage__jump-list" ref={barRef}>
+        {targets.map((target) => (
+          <li key={target.id}>
+            <button
+              className={`manage__jump-chip${
+                target.id === activeId ? " manage__jump-chip--here" : ""
+              }`}
+              type="button"
+              data-jump={target.id}
+              aria-current={target.id === activeId ? "location" : undefined}
+              onClick={() => onJump(target.id)}
+            >
+              {target.label}
+            </button>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
 export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const setup = useSetup();
   const bills = useBills();
@@ -76,6 +150,16 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const restorePay = useRestorePaycheque();
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  /*
+   * Above the early returns, because hooks have to be. That means working out
+   * whether there is an Archived section from data that may not have arrived
+   * yet - hence the `?? 0` rather than reading it off `bills.data` below,
+   * where everything else on this page reads it.
+   */
+  const hasArchived = (bills.data ?? []).some((bill) => !bill.active);
+  const targets = useMemo(() => jumpTargets(hasArchived), [hasArchived]);
+  const spy = useSectionSpy(targets);
 
   if (setup.isPending || bills.isPending) {
     return (
@@ -131,6 +215,15 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       <p className="manage__intro">
         Everything the app works from is entered here, and anything listed here can be changed.
       </p>
+
+      {/*
+        Pinned under the app header, so any of the eleven sections is one tap
+        away from anywhere on the page. Above the checklist rather than below
+        it: the checklist comes and goes, and a bar that moved up the screen
+        when the last setup task was finished would be a bar nobody could
+        learn the position of.
+      */}
+      <JumpBar targets={targets} activeId={spy.activeId} onJump={spy.jumpTo} barRef={spy.barRef} />
 
       {data.missing.length > 0 ? (
         <section className="manage__checklist" role="status">
@@ -206,6 +299,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
       {/* ---- Expenses ---- */}
       <Section
+        id="manage-expenses"
         title="Expenses"
         count={expenses.length}
         note="Entered once. Each one appears on the ledger with its due date, and on Budget with its monthly cost, as soon as you save it."
@@ -252,6 +346,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
       {/* ---- Money coming in ---- */}
       <Section
+        id="manage-money-in"
         title="Money coming in"
         count={incoming.length}
         note="Each payday below brings its paycheque here automatically; change the amount there and future cheques follow. Anything else that arrives — a refund, a benefit, a transfer in — is added here."
@@ -293,7 +388,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
       {/* ---- Archived ---- */}
       {archived.length > 0 ? (
-        <section className="hr-card manage__section">
+        <section className="hr-card manage__section" id="manage-archived">
           <button
             className="manage__disclosure"
             type="button"
@@ -335,6 +430,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
       {/* ---- Budget-only categories ---- */}
       <Section
+        id="manage-categories"
         title="Budget-only categories"
         count={categories.data?.length}
         note="Spending with no due date and no bill — food, gas, everyday things. These appear on the Budget page only."
@@ -377,6 +473,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
       {/* ---- Savings goals ---- */}
       <Section
+        id="manage-goals"
         title="Savings goals"
         count={goals.data?.goals.length}
         note="What you are saving towards, and how much is set aside so far."
@@ -418,6 +515,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
       {/* ---- What you own and owe ---- */}
       <Section
+        id="manage-owned"
         title="What you own"
         count={netWorth.data?.assets.length}
         note="Everything owned, which adds to net worth."
@@ -449,6 +547,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
       </Section>
 
       <Section
+        id="manage-owed"
         title="What you owe"
         count={netWorth.data?.liabilities.length}
         note="Everything owed, which comes off net worth."
@@ -486,6 +585,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
 
       {/* ---- Paydays ---- */}
       <Section
+        id="manage-paydays"
         title="Paydays"
         count={data.paySchedules.length}
         note="Pay is every two weeks. Give one real payday and Headroom works out the rest, and puts the paycheque itself on the ledger. Everything else on the ledger hangs off these dates."
@@ -575,6 +675,7 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
  * an empty state or a count.
  */
 function Section({
+  id,
   title,
   count,
   note,
@@ -585,6 +686,8 @@ function Section({
   actions,
   children,
 }: {
+  /** What the jump bar's chip scrolls to; see `sectionNav.ts`. */
+  id: string;
   title: string;
   count?: number | undefined;
   note: string;
@@ -605,7 +708,7 @@ function Section({
   children: React.ReactNode;
 }): React.JSX.Element {
   return (
-    <section className="hr-card manage__section">
+    <section className="hr-card manage__section" id={id}>
       <header className="manage__section-head">
         <h2 className="manage__section-title">{title}</h2>
         {count === undefined ? null : <span className="manage__count">{count}</span>}
@@ -843,7 +946,7 @@ function AccountsSection({
   };
 
   return (
-    <section className="hr-card manage__section">
+    <section className="hr-card manage__section" id="manage-accounts">
       <header className="manage__section-head">
         <h2 className="manage__section-title">Accounts</h2>
         <span className="manage__count">{accounts.length}</span>
@@ -1093,7 +1196,7 @@ function IncomeSection({ setup, canEdit }: { setup: Setup; canEdit: boolean }): 
   };
 
   return (
-    <section className="hr-card manage__section">
+    <section className="hr-card manage__section" id="manage-income">
       <h2 className="manage__section-title">Net income</h2>
       <p className="manage__note">
         What actually arrives, after tax and pension. Both figures are stored, because a stated
@@ -1190,7 +1293,7 @@ function SettingsSection({
   };
 
   return (
-    <section className="hr-card manage__section">
+    <section className="hr-card manage__section" id="manage-settings">
       <h2 className="manage__section-title">How things are worked out</h2>
       <p className="manage__note">
         These three change every figure in the app, so they are worth understanding.

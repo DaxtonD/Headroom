@@ -13,7 +13,7 @@
  */
 import { formatCents, formatDateShort, parseCents } from "@headroom/core";
 import { useId, useState } from "react";
-import { Amount, Chip, PaidBadge, VerificationBadge } from "./Badges.js";
+import { Amount, Chip, PaidBadge, PaydayBadge, VerificationBadge } from "./Badges.js";
 import { Thumb } from "./Thumb.js";
 import { ApiError, OfflineError, newIdempotencyKey } from "../lib/api.js";
 import { conflictFrom, type Account, type ConflictInfo, type OccurrenceChange, type TimelineRow } from "../lib/queries.js";
@@ -224,9 +224,14 @@ export function OccurrenceRow({
         aria-controls={panelId}
       >
         {isPaycheque ? (
-          <span className="row__payday-mark" role="img" aria-label="Payday">
-            <span aria-hidden="true">+</span>
-          </span>
+          /*
+            A payday carries a badge like every other row, rather than the
+            bare "+" it had for most of the build. Reported from use,
+            2026-11-20: "pay days on the ledger do not show a badge. They
+            just show a +". `PaydayBadge` says why the old one could not be
+            seen - it was tinted the colour of the row underneath it.
+          */
+          <PaydayBadge received={row.settled} paidBy={row.paidBy} />
         ) : row.settled ? (
           /*
             Paid replaces verified rather than joining it. A row can be paid

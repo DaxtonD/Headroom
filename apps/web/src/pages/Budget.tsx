@@ -219,15 +219,24 @@ export function Budget(): React.JSX.Element {
         </header>
         <p className="budget__note">{note}</p>
 
-        <BudgetDonut
-          title={title}
-          data={donutData}
-          total={total}
-          selectedId={chosenId}
-          onSelect={setChosenId}
-          drillId={drillId}
-          onDrill={setDrillId}
-        />
+        {/*
+          The dock is what keeps the ring on screen while the list under it
+          scrolls - see `.budget__chart-dock`. It is a wrapper rather than the
+          chart itself because the chart is also the thing that lifts a wedge
+          out past its own box, and a sticky element with a background has to
+          be the opaque rectangle, not the drawing inside it.
+        */}
+        <div className="budget__chart-dock">
+          <BudgetDonut
+            title={title}
+            data={donutData}
+            total={total}
+            selectedId={chosenId}
+            onSelect={setChosenId}
+            drillId={drillId}
+            onDrill={setDrillId}
+          />
+        </div>
 
         {section.lines.length === 0 ? (
           <p className="budget__empty">Nothing entered yet.</p>
