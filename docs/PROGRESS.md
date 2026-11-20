@@ -30,6 +30,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| The budget's pie chart, and a drill-down | done | | 2026-11-19, asked for from use. A ring per section, tappable: a wedge puts that expense's real figures in the middle, a folded wedge opens into a ring of its own. Reverses a recorded decision - see below |
 | The ledger at the width of the phone | done | | 2026-11-19, three things reported from use. The ledger bleeds to the edges, chips sit in fixed places, the card figures line up, and a one-off that pays an account wears that account's picture |
 | A pay period the horizon cuts short | done | | 2026-11-19, reported from use. The ledger drew a window thirteen days longer than it could fill, counting pay it had no bills for. It is now reported as far as the ledger reaches, and says so |
 | An expense that comes out once a year | done | | 2026-11-19, asked for from use. "Every year, on a date" on the expense form, for annual insurance and the yearly subscriptions. The whole amount lands on the ledger on its real date; the Budget page counts a twelfth of it a month, which it has always known how to do |
@@ -106,6 +107,78 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## The budget's pie chart, and a drill-down (2026-11-19, asked for from use)
+
+> "[one of the household] keeps a pie chart in the budget... Can you replicate this in the budget screen? My
+> thoughts are to take it one further and make it interactive. Tapping on a slice creates a
+> wonderful morphing animation that drills down into that expense and shows real numbers."
+
+### This reverses a decision the spec records
+
+HANDOFF section 4.3: *"Two pie charts show the same shares (the app uses bars instead; they
+compare better on a phone)."* That was a real decision and it was a defensible one - the charting
+guidance says the same thing, bluntly, and a pie is close to the worst form for a dozen
+categories. It was taken before anybody had used the app, though, and the household has now used
+both. They asked for the chart. **Both are here now**, each doing the job it is good at: the ring
+shows the shape of a section at a glance; the bars and figures under it compare the lines exactly.
+
+### Eight wedges, and the tail folds
+
+Past about seven, adjacent slices blur whatever colours they wear, and a ninth hue would be
+invented rather than chosen from a set that has been checked. So a ring draws at most eight
+wedges and folds its tail into one "everything else".
+
+Nothing is hidden by that, because **the fold can be tapped like any other wedge** and opens into
+a ring of its own, where five lines that were 3% each become readable. The spreadsheet's own
+chart draws twelve slices, six of them under 3% and unreadable with leader lines crossing each
+other; this shows the same money in a form that survives a phone.
+
+### A ring rather than a solid pie
+
+The hole is where the drill-down lives. Tapping a wedge puts that expense's real figures in the
+middle of the chart they came from, which is exactly what was asked for; a solid pie would have
+to put them somewhere else and the connection would be lost.
+
+### The wedges are not the accessible control, and do not pretend to be
+
+A 1.6% wedge is about five pixels of arc. It cannot be a 44px touch target and no care makes it
+one. So **the list under the chart is the control**: full-width buttons, one per line, each
+carrying its wedge's colour, its name and its amount. It is the legend, the table view and the
+keyboard path at once, and the svg is hidden from assistive technology because everything in it
+is said better down there. Tapping a wedge is a shortcut for a pointer, nothing more.
+
+### The colours were computed, not chosen
+
+Eight hues in a fixed order, assigned by rank and never cycled, added to all five themes -
+`theme-contrast.test.ts` enforces that a theme defining none of them would silently inherit
+Daylight's. The set was run through the validator against **this app's four real card colours**
+rather than a reference surface: it passes the lightness band, the chroma floor, adjacent-pair
+colour-blind separation and the normal-vision floor on every one. Both dark surfaces clear 3:1
+outright; on the two light ones several wedges sit under it, which is allowed only with relief -
+and the relief is the figures printed in the list under every chart, so no share is ever carried
+by colour alone.
+
+### What is tested, and what is not
+
+The arithmetic is a pure module with 52 tests against values: shares from the cents themselves
+rather than the rounded percentage, wedges that tile the turn exactly with no hairline at the
+end, the full-ring case that would otherwise draw nothing, the fold, the morph, and a ring of
+twelve lines whose every emitted coordinate is checked to land inside its box. Writing that last
+one caught a mistake in the test itself - it read an arc flag as a coordinate.
+
+**What is not tested is how it looks.** There is no DOM in the suite and label collisions need
+eyes. The geometry is checked, the colours are computed, the promises the chart makes are
+grepped; whether it is *nice* is the owner's call on a real phone.
+
+### Verified
+
+1429 tests green - 383 engine, 513 web, 533 API, up from 1377.
+
+### Still to do
+
+- Nothing for this item. If the ring earns its place, the obvious next question is whether the
+  Year screen wants one too; nobody has asked.
 
 ## The ledger at the width of the phone (2026-11-19, three things from use)
 
