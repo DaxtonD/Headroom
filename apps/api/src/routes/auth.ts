@@ -10,6 +10,49 @@ import { z } from "zod";
 import { hashPassword, verifyPassword } from "../auth/password.js";
 import { endSession, startSession } from "../auth/session.js";
 
+/**
+ * One stored preference token.
+ *
+ * Deliberately a shape rather than a list of the names this build knows.
+ * The themes, the text-size steps and the two densities are all tables in
+ * `apps/web/src/lib/appearance.ts`, which already refuses a value it does not
+ * recognise and falls back to the default - that is how a value left behind
+ * by an older build is handled today. A second list here would be a copy that
+ * lags behind the first new theme, and the symptom would be the server
+ * refusing a choice the app offers.
+ *
+ * So the server's job is narrow and permanent: a short, boring token. It is
+ * never interpreted here, only handed back to the browser that set it.
+ */
+const preferenceToken = z
+  .string()
+  .trim()
+  .min(1)
+  .max(16)
+  .regex(/^[a-z][a-z0-9_]*$/, "That is not a setting this app stores.");
+
+const preferencesPatch = z
+  .object({
+    theme: preferenceToken.optional(),
+    textSize: preferenceToken.optional(),
+    ledgerDensity: preferenceToken.optional(),
+  })
+  .strict();
+
+interface PreferencesWire {
+  readonly theme: string;
+  readonly textSize: string;
+  readonly ledgerDensity: string;
+}
+
+function serialisePreferences(row: {
+  theme: string;
+  textSize: string;
+  ledgerDensity: string;
+}): PreferencesWire {
+  return { theme: row.theme, textSize: row.textSize, ledgerDensity: row.ledgerDensity };
+}
+
 const loginBody = z.object({
   email: z.string().trim().min(1, "Enter your email.").max(320).toLowerCase(),
   password: z.string().min(1, "Enter your password."),
@@ -127,6 +170,95 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       orderBy: { name: "asc" },
     });
 
-    return reply.send({ user: request.user, household, members });
+    /*
+     * How the app should look for this person.
+     *
+     * `null` when they have never chosen, which is a real answer and not a
+     * stand-in for the defaults: it is what tells a browser that already has
+     * a choice in `localStorage` to send that up rather than be reset by it.
+     * See `20261121000100_user_preferences`.
+     */
+    const preferences = await app.db.prisma.userPreference.findUnique({
+      where: { userId: request.user.id },
+      select: { theme: true, textSize: true, ledgerDensity: true },
+    });
+
+    return reply.send({
+      user: request.user,
+      household,
+      members,
+      preferences: preferences ? serialisePreferences(preferences) : null,
+    });
+  });
+
+  /**
+   * The theme, the text size and the ledger's density.
+   *
+   * ## Why this one mutation carries neither `If-Match` nor `Idempotency-Key`
+   *
+   * Every other write in this app does, and the rule is not being bent here
+   * so much as read. Versioning exists so that two people editing the same
+   * money fact cannot silently overwrite one another, and so that a change
+   * which lost a race says so instead of vanishing. This row holds no money
+   * and has exactly one writer: your own display settings, which only you can
+   * sign in as and which the other person is not shown. There is no race to
+   * detect, and a 409 on a theme would be a question nobody could answer -
+   * the honest resolution of "this phone just chose Night" against "that
+   * phone just chose Slate" is that each phone did, last one wins, and both
+   * of them are right.
+   *
+   * It needs no idempotency key either, for the plainer reason: setting a
+   * value is idempotent. Sending it twice is sending it once.
+   *
+   * `push_subscription` is the existing precedent in this codebase for a
+   * per-person device fact written the plain way, and the reasoning is the
+   * same one. `apps/api/test/preferences.test.ts` holds this deliberate.
+   *
+   * Field level, like every PATCH here: a key that is not sent is not
+   * changed, so a build that learns a fourth setting cannot clear the three
+   * it did not know about.
+   */
+  app.patch("/me/preferences", async (request, reply) => {
+    const user = request.user;
+    if (!user) {
+      return reply.status(401).send({ error: "not_signed_in", message: "Sign in to continue." });
+    }
+
+    const parsed = preferencesPatch.safeParse(request.body ?? {});
+    if (!parsed.success) {
+      return reply.status(400).send({
+        error: "invalid_request",
+        message: parsed.error.issues[0]?.message ?? "Could not read those settings.",
+      });
+    }
+
+    const changes = Object.fromEntries(
+      Object.entries(parsed.data).filter(([, value]) => value !== undefined),
+    );
+    if (Object.keys(changes).length === 0) {
+      return reply.status(400).send({
+        error: "nothing_to_change",
+        message: "That request did not change anything.",
+      });
+    }
+
+    /*
+     * The row is created here or nowhere. Whatever is missing from a first
+     * write falls to the column defaults, which are the same ones the web app
+     * starts from.
+     */
+    const row = await app.db.prisma.userPreference.upsert({
+      where: { userId: user.id },
+      create: { userId: user.id, ...changes },
+      update: changes,
+      select: { theme: true, textSize: true, ledgerDensity: true },
+    });
+
+    /*
+     * No change ping. A ping makes every mounted query on the OTHER phone
+     * refetch, and nothing about how this screen looks is any of its
+     * business.
+     */
+    return reply.send({ preferences: serialisePreferences(row) });
   });
 }

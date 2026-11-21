@@ -11,7 +11,7 @@
  */
 import { useEffect, useRef } from "react";
 import { NavLink } from "react-router";
-import { firstNameOf } from "../lib/people.js";
+import { useAppearance } from "../lib/appearance.js";
 import { trackHeaderHeight } from "../lib/pinnedHeader.js";
 import { useSettingsRoute } from "../lib/settingsRoute.js";
 import type { LiveStatus } from "../lib/useLiveUpdates.js";
@@ -33,15 +33,12 @@ const TABS = [
 ] as const;
 
 export function Shell({
-  you,
   live,
   onSignOut,
   activityOpen,
   onToggleActivity,
   children,
 }: {
-  /** Whoever is signed in on this phone. */
-  you: { readonly name: string };
   live: LiveStatus;
   onSignOut: () => void;
   /** The activity panel is open, so the button reads as pressed. */
@@ -50,6 +47,21 @@ export function Shell({
   children: React.ReactNode;
 }): React.JSX.Element {
   const settings = useSettingsRoute();
+
+  /*
+   * The compact ledger, switched from the header.
+   *
+   * Asked for here rather than in Settings on 2026-11-21: "move the compact
+   * view button to the app header." It is a way of looking at the screen you
+   * are already on, so it belongs where you can see what it does to it -
+   * Settings would mean leaving the ledger to change how the ledger looks and
+   * coming back to find out.
+   *
+   * The choice is stored against the person, so it survives the browser being
+   * cleared; see `preferences.ts`.
+   */
+  const [appearance, setAppearance] = useAppearance();
+  const compact = appearance.density === "compact";
 
   /*
    * Publish the header's own height, so a screen can pin something directly
@@ -71,12 +83,30 @@ export function Shell({
 
         <div className="shell-header__right">
           {/*
-            Who is signed in on this phone, not who is in the household.
-            Two initials side by side answered a question nobody was asking -
-            and read as a pair of avatars, so the obvious guess was that one
-            of them was a button.
+            "Hi <name>" was here until 2026-11-21, when it was dropped on
+            request to make room for the button below. It answered a question
+            nobody was asking: there are two people, both of them know which
+            of them is holding the phone, and the header is the narrowest
+            space in the app.
           */}
-          <p className="shell-header__greeting">Hi {firstNameOf(you.name)}</p>
+          {/*
+            Comfortable or compact rows. The glyph draws what you will get -
+            three rows or five - because the one thing a density toggle must
+            not be is a mystery icon that rearranges the screen.
+          */}
+          <button
+            className={`shell-header__settings ${
+              compact ? "shell-header__settings--active" : ""
+            }`}
+            type="button"
+            aria-pressed={compact}
+            aria-label={compact ? "Comfortable rows" : "Compact rows"}
+            onClick={() =>
+              setAppearance({ ...appearance, density: compact ? "comfortable" : "compact" })
+            }
+          >
+            <RowsIcon dense={compact} />
+          </button>
           {/*
             Settings lives here rather than in the tab bar: five tabs is
             already as many as a phone holds, and this is opened once in a
@@ -148,6 +178,52 @@ export function Shell({
 
       <main className="shell-main">{children}</main>
     </div>
+  );
+}
+
+/**
+ * Comfortable or compact: a framed box with rows in it.
+ *
+ * Drawn here rather than taken from Lucide, which is the opposite of the
+ * decision made for the gear beside it - and for the opposite reason. A gear
+ * is a shape everybody recognises and there is nothing to gain by having our
+ * own slightly wrong one. This is not a standard icon at all: it has to say
+ * "this many rows", which means the number of lines is the content, not the
+ * styling. Three evenly spaced lines in a rounded rectangle has no geometry
+ * to get subtly wrong.
+ *
+ * `dense` draws what the ledger looks like NOW, so the button shows its state
+ * rather than its effect. The label says the effect, which is the half a
+ * screen reader needs.
+ */
+function RowsIcon({ dense }: { dense: boolean }): React.JSX.Element {
+  // Evenly spaced inside the frame: two dividers make three rows, four make
+  // five. Computed rather than written out so they cannot drift apart.
+  const rows = dense ? 5 : 3;
+  const top = 4;
+  const height = 16;
+  const dividers = Array.from({ length: rows - 1 }, (_unused, index) =>
+    top + (height * (index + 1)) / rows,
+  );
+
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="22"
+      height="22"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      focusable="false"
+    >
+      <rect x="3" y={top} width="18" height={height} rx="2.5" />
+      {dividers.map((at) => (
+        <path d={`M3 ${at.toFixed(2)}h18`} key={at} />
+      ))}
+    </svg>
   );
 }
 

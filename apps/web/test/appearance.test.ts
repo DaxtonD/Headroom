@@ -19,6 +19,8 @@ import { resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_APPEARANCE,
+  DENSITIES,
+  DENSITY_STORAGE_KEY,
   TEXT_SCALE_STORAGE_KEY,
   TEXT_SIZES,
   THEMES,
@@ -26,6 +28,8 @@ import {
   paletteFor,
   readAppearance,
   saveAppearance,
+  scaleForTextSize,
+  textSizeKeyFor,
 } from "../src/lib/appearance.js";
 
 const INDEX_HTML = readFileSync(resolve(import.meta.dirname, "..", "index.html"), "utf8");
@@ -95,23 +99,34 @@ describe("the appearance store", () => {
   it("starts on the theme the app already had", () => {
     // Not "match my device": installing an update must never change how the
     // app looks without being asked.
-    expect(readAppearance()).toEqual({ theme: "daylight", scale: 1 });
+    expect(readAppearance()).toEqual({ theme: "daylight", scale: 1, density: "comfortable" });
     expect(DEFAULT_APPEARANCE.scale).toBe(1);
+    // The ledger as it was built and is in daily use. Somebody who has never
+    // chosen gets the view the app was designed around.
+    expect(DEFAULT_APPEARANCE.density).toBe("comfortable");
   });
 
   it("remembers a choice", () => {
-    saveAppearance({ theme: "night", scale: 0.88 });
-    expect(readAppearance()).toEqual({ theme: "night", scale: 0.88 });
+    saveAppearance({ theme: "night", scale: 0.88, density: "compact" });
+    expect(readAppearance()).toEqual({ theme: "night", scale: 0.88, density: "compact" });
   });
 
   it("applies the choice to the document", () => {
-    saveAppearance({ theme: "slate", scale: 0.82 });
+    saveAppearance({ theme: "slate", scale: 0.82, density: "compact" });
 
     expect(document.documentElement.dataset["theme"]).toBe("slate");
     expect(document.documentElement.style.setProperty).toHaveBeenCalledWith(
       "--hr-text-scale",
       "0.82",
     );
+    /*
+     * The whole of the compact ledger hangs off this attribute. It is a
+     * stylesheet rather than a prop threaded down to every row, because a
+     * second row component written for the compact view would be two things
+     * to keep in step on every future change to a row - and the first thing
+     * to drift would be the money.
+     */
+    expect(document.documentElement.dataset["density"]).toBe("compact");
   });
 
   it("survives storage that refuses to be read", () => {
@@ -124,12 +139,15 @@ describe("the appearance store", () => {
 
   it("survives storage that refuses to be written", () => {
     fake.throws = true;
-    expect(() => saveAppearance({ theme: "paper", scale: 1 })).not.toThrow();
+    expect(() =>
+      saveAppearance({ theme: "paper", scale: 1, density: "compact" }),
+    ).not.toThrow();
   });
 
   it("ignores a stored value it does not recognise", () => {
     fake.store.set(THEME_STORAGE_KEY, "chartreuse");
     fake.store.set(TEXT_SCALE_STORAGE_KEY, "0.3");
+    fake.store.set(DENSITY_STORAGE_KEY, "microscopic");
 
     // A scale from an older build, or edited by hand, must not leave the text
     // at a size the settings screen has no button to undo.
@@ -184,6 +202,30 @@ describe("the choices on offer", () => {
   it("has no two steps the same", () => {
     const scales = TEXT_SIZES.map((size) => size.scale);
     expect(new Set(scales).size).toBe(scales.length);
+  });
+
+  /**
+   * The text size is two things: a multiplier on the device, because
+   * `index.html` applies it before the first paint and a name would mean that
+   * inline script carrying its own copy of the table; and a step's NAME on the
+   * server, because a multiplier is a float and nothing here stores a float
+   * if a name will do. One table, so they cannot disagree - unless this
+   * round trip stops holding, which is what this checks.
+   */
+  it("turns every text size into a name and back", () => {
+    for (const size of TEXT_SIZES) {
+      expect(textSizeKeyFor(size.scale)).toBe(size.key);
+      expect(scaleForTextSize(size.key)).toBe(size.scale);
+    }
+  });
+
+  it("falls back rather than leaving the text at a size nothing can undo", () => {
+    expect(scaleForTextSize("enormous")).toBe(DEFAULT_APPEARANCE.scale);
+    expect(textSizeKeyFor(3.5)).toBe(TEXT_SIZES[0]?.key);
+  });
+
+  it("offers exactly the two densities the stylesheets know", () => {
+    expect(DENSITIES.map((density) => density.key)).toEqual(["comfortable", "compact"]);
   });
 });
 

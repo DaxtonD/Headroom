@@ -5,6 +5,7 @@ import { BrowserRouter } from "react-router";
 import { App } from "./App.js";
 import { UpdateReady } from "./components/UpdateReady.js";
 import { ApiError } from "./lib/api.js";
+import { applyAppearance, getAppearance } from "./lib/appearance.js";
 import "./styles/global.css";
 
 const queryClient = new QueryClient({
@@ -29,6 +30,21 @@ const queryClient = new QueryClient({
     },
   },
 });
+
+/*
+ * Put the stored appearance on the document before React draws anything.
+ *
+ * `index.html` has already applied the theme and the text size from its own
+ * inline script, which is the only thing that can run before the browser's
+ * first paint. The ledger's density is applied here instead, because nothing
+ * has to be read that early for it - the ledger does not exist until React
+ * builds it - and this still runs before the first render, so a compact
+ * ledger is never drawn comfortable first and then rearranged.
+ *
+ * Re-applying the other two costs nothing and keeps one function responsible
+ * for the whole of "put the choice on the document".
+ */
+applyAppearance(getAppearance());
 
 const container = document.getElementById("root");
 if (!container) throw new Error("No #root element to mount Headroom into.");

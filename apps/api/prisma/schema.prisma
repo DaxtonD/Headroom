@@ -267,9 +267,48 @@ model User {
   activities       Activity[]
   idempotencyKeys  IdempotencyKey[]
   pushSubscriptions PushSubscription[]
+  preferences      UserPreference?
 
   @@index([householdId])
   @@map("user")
+}
+
+/// How the app looks for one person: theme, text size, ledger density.
+///
+/// Per user rather than per household - two people share the money, not their
+/// eyes - and on the server rather than only in the browser, which is the
+/// change asked for on 2026-11-21: one of the two clears their browser cache
+/// every day, so a choice kept only in `localStorage` had to be made again
+/// every morning - "I'd like to store the user preferences in the server and
+/// load on login. Then we don't lose the theme, font size or view settings."
+///
+/// Not versioned and not logged, unlike every other table here, and that is
+/// deliberate rather than an oversight. The versioning rules exist so that two
+/// people editing the same money fact cannot silently overwrite each other;
+/// this row has exactly one writer by construction, holds no money, and a 409
+/// on a theme is a question nobody can answer. `push_subscription` is the
+/// existing precedent for a per-person device fact written the same plain way.
+///
+/// The row is created when somebody first changes something, so its absence is
+/// a real answer: it means this person has never chosen, and the device may
+/// seed it with whatever it already had in `localStorage`.
+model UserPreference {
+  userId String @id @db.Uuid
+
+  /// A theme name the web app knows, or `system` to follow the device.
+  theme         String @default("daylight") @db.VarChar(16)
+  /// The text-size STEP's name, not its multiplier. The table of multipliers
+  /// lives in `appearance.ts`, and a number here would be a second copy of it
+  /// that drifts the first time a step changes.
+  textSize      String @default("largest") @db.VarChar(16)
+  /// `comfortable` or `compact`: how tightly the ledger packs its rows.
+  ledgerDensity String @default("comfortable") @db.VarChar(16)
+
+  updatedAt DateTime @default(now()) @updatedAt @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preference")
 }
 
 /// Opaque server-side sessions. The cookie carries only this row's id, signed.

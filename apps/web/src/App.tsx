@@ -23,6 +23,7 @@ import { NetWorth } from "./pages/NetWorth.js";
 import { Savings } from "./pages/Savings.js";
 import { Settings } from "./pages/Settings.js";
 import { Year } from "./pages/Year.js";
+import { useAppearanceSync } from "./lib/preferences.js";
 import { useLogout, useSession } from "./lib/session.js";
 import { useLiveUpdates } from "./lib/useLiveUpdates.js";
 import { Login } from "./pages/Login.js";
@@ -53,6 +54,16 @@ export function App(): React.JSX.Element {
   // Only listen once there is someone to listen for.
   const live = useLiveUpdates(Boolean(session.data));
 
+  /*
+   * How the app looks is stored against the person now, not just in this
+   * browser - one of the two clears theirs every day, which took the theme,
+   * the text size and the ledger's density with it every morning.
+   *
+   * Mounted here and only here: it is one exchange for the whole app, and two
+   * copies of it would race each other to send the same thing twice.
+   */
+  useAppearanceSync(Boolean(session.data));
+
   if (session.isPending) {
     return (
       <main className="app-splash" aria-busy="true">
@@ -82,7 +93,6 @@ export function App(): React.JSX.Element {
 
   return (
     <Shell
-      you={{ name: session.data.user.name }}
       live={live}
       onSignOut={signOut}
       activityOpen={activityOpen}

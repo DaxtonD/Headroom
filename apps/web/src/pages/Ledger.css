@@ -780,3 +780,69 @@
   font-size: 0.875rem;
   line-height: 1.45;
 }
+
+/* ---- The compact ledger: the furniture between the rows -------------------
+ *
+ * The rows themselves are in `OccurrenceRow.css`, which also carries the
+ * reasoning for the whole view. What is left is everything the rows sit
+ * between - the window heading, the "Balance now" line, what each cheque
+ * leaves, and the band under each window - and in a view whose whole purpose
+ * is more lines on a screen, four pay windows of generously spaced furniture
+ * costs more height than the rows it separates.
+ *
+ * Tightened, never dropped. Every figure stays: the left-over per cheque, the
+ * left-over and room-to-save per window, and the prose note under them that
+ * says where those figures came from and how low the balance gets inside the
+ * window. A denser view that quietly stopped showing a number would be a
+ * different ledger.
+ *
+ * The hero, the cards and the coverage warning are deliberately untouched.
+ * "I like the current UI" - and those three are the instant answer the top of
+ * this screen exists for, not list furniture.
+ */
+
+[data-density="compact"] .ledger__periods {
+  gap: var(--hr-space-3);
+}
+
+[data-density="compact"] .ledger__period-head {
+  padding-bottom: var(--hr-space-1);
+}
+
+[data-density="compact"] .ledger__period-title {
+  font-size: 0.9375rem;
+}
+
+[data-density="compact"] .ledger__now {
+  margin: var(--hr-space-1) 0;
+  padding: var(--hr-space-1) 0;
+}
+
+/*
+ * Still a 44px target, because it is still a row you may put a finger on;
+ * only the air around it goes.
+ */
+[data-density="compact"] .ledger__block-left {
+  min-height: var(--hr-touch-min);
+  margin-bottom: var(--hr-space-1);
+  padding: var(--hr-space-1) var(--hr-space-3);
+  font-size: 0.8125rem;
+}
+
+[data-density="compact"] .ledger__projected {
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-1) 0;
+}
+
+[data-density="compact"] .ledger__subtotal {
+  margin-top: var(--hr-space-2);
+  padding: var(--hr-space-2) var(--hr-space-3);
+}
+
+[data-density="compact"] .ledger__subtotal-row {
+  min-height: 22px;
+}
+
+[data-density="compact"] .ledger__subtotal-row--strong {
+  font-size: 1rem;
+}

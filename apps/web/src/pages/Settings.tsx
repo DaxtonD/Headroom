@@ -1,14 +1,24 @@
 /**
- * Settings: how the app looks on this device.
+ * Settings: how the app looks.
  *
  * Separate from Manage on purpose. Manage holds household facts - the paydays,
  * the expenses, the cushion - which both people share and which change the
  * numbers. Nothing on this screen changes a single figure, and nothing on it
- * is shared: the theme and the text size are stored on this device only, so
- * one person turning the text down does not shrink the other's.
+ * is shared: the theme and the text size are stored against the person, so one
+ * of them turning the text down does not shrink the other's.
  *
- * Both choices apply on the tap rather than on a Save, because the only way to
- * judge a theme or a text size is to look at it.
+ * They were stored on the device only until 2026-11-21, which was per BROWSER
+ * rather than per person - and a browser that gets cleared every day took the
+ * choice with it every morning. They are kept on the server now and loaded at
+ * sign-in; `preferences.ts` has the whole of it, including why the device
+ * still holds a copy.
+ *
+ * The ledger's third choice - comfortable or compact rows - is not on this
+ * screen. It lives in the app header, where you can see what it does to the
+ * screen you are on; it was going to be here until the owner said to move it.
+ *
+ * Both choices here apply on the tap rather than on a Save, because the only
+ * way to judge a theme or a text size is to look at it.
  */
 import { TEXT_SIZES, THEMES, useAppearance } from "../lib/appearance.js";
 import { BUILD_ID, isStamped, shortBuild } from "../lib/buildId.js";
@@ -335,8 +345,8 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
           This device
         </h2>
         <p className="settings__section-note">
-          Signing out leaves the household data untouched. Your theme and text size stay as you
-          set them.
+          Signing out leaves the household data untouched. Your theme, text size and row density
+          are kept against your name, so they come back with you on any device.
         </p>
         <button className="hr-button hr-button--secondary" type="button" onClick={onSignOut}>
           Sign out

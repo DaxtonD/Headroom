@@ -321,3 +321,142 @@
 .row__running--elsewhere {
   opacity: 0.55;
 }
+
+/* ---- The compact ledger ----------------------------------------------------
+ *
+ * Asked for on 2026-11-21, for the person this app replaced a spreadsheet
+ * for: "I like the current UI. She might appreciate seeing more at a glance,
+ * like her spreadsheet. This view needs to make more appear on the screen, so
+ * we'll need to make some sacrifices on what and how things are displayed."
+ * And then, on the shape of it: "one column like it is now. We just compact
+ * the rows."
+ *
+ * So this is the same row, squeezed - not a table, and not a second row
+ * component. One component means the amount editor, verify, mark-as-paid, the
+ * move buttons, the conflict handling and every figure behave identically in
+ * both views, which they could not be relied on to do if there were two.
+ *
+ * ## What is given up, and what is not
+ *
+ * Given up: the paid/verified badge, the second line of chips (One-off, which
+ * card), the line saying whose bill it is, and the first of the chips on the
+ * top line - "Received" or "Paid", which a settled row says in two other ways
+ * already. The name gets one line with an ellipsis instead of two.
+ *
+ * Kept: every figure, untouched. The amount, the running balance, the
+ * per-cheque left-over and the window subtotals are the reason this screen
+ * exists; a denser view that showed fewer numbers would be a different ledger
+ * rather than a tighter one. Kept as well: the date and the kind of row, as
+ * the one chip left on the line, because "is this flexible" is the household's
+ * main lever on a tight week.
+ *
+ * ## Hidden, not removed
+ *
+ * Everything dropped here is hidden VISUALLY and stays in the accessibility
+ * tree - the badges carry `role="img"` and a real label, and the chips are
+ * text. A screen reader is told exactly the same thing in both views, which is
+ * what makes this a way of looking at the ledger rather than a second one.
+ *
+ * ## The floor
+ *
+ * 44px, and not a pixel under. That is the brief's minimum for anything a
+ * thumb has to hit, and the whole row is the tap target. A comfortable row
+ * runs 76-102px depending on what it is carrying, so this is still about
+ * twice as many rows on a screen.
+ */
+
+[data-density="compact"] .ledger__rows .row__summary {
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-1) var(--hr-space-3);
+  gap: var(--hr-space-2);
+}
+
+/*
+ * One line: the picture, the name and the one surviving chip, side by side,
+ * where comfortable stacks them.
+ */
+[data-density="compact"] .ledger__rows .row__main {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  gap: var(--hr-space-2);
+}
+
+/*
+ * The name takes whatever is left, which pushes the chip over to the right
+ * against the figures - so the dates line up down the list and can be read as
+ * a column. Hugging the name instead would put each date wherever the name
+ * before it happened to end.
+ */
+[data-density="compact"] .ledger__rows .row__title {
+  flex: 1 1 auto;
+}
+
+/* The name gives way to the chip beside it rather than widening the row. */
+[data-density="compact"] .ledger__rows .row__name {
+  display: block;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+[data-density="compact"] .ledger__rows .row__chips {
+  flex: 0 0 auto;
+  flex-wrap: nowrap;
+}
+
+/* A smaller square, so the names still line up but cost less width. */
+[data-density="compact"] .ledger__rows .thumb--row {
+  width: 20px;
+}
+
+[data-density="compact"] .ledger__rows .thumb--row .thumb__initial {
+  font-size: 0.6875rem;
+}
+
+/* The running balance, quieter but still there. */
+[data-density="compact"] .ledger__rows .row__running {
+  font-size: 0.6875rem;
+}
+
+/*
+ * Out of sight, still in the accessibility tree.
+ *
+ * The same treatment as `.hr-visually-hidden` in `global.css`, applied to the
+ * things a compact row gives up. `display: none` would have been shorter and
+ * would have taken them out of the tree with them, which is the one thing
+ * this view may not do.
+ */
+[data-density="compact"] .ledger__rows .badge,
+[data-density="compact"] .ledger__rows .row__chips--about,
+[data-density="compact"] .ledger__rows .row__owner,
+/*
+ * Every chip but the last. The last is always the one that says what kind of
+ * row this is and when it falls - "Auto - Nov 23", "Flexible", "Payday - Nov
+ * 25" - because `OccurrenceRow.tsx` renders it unconditionally and after the
+ * optional one. The optional one is "Received" or "Paid", which a settled row
+ * already says by being dimmed and by printing no running balance.
+ */
+[data-density="compact"] .ledger__rows .row__chips > .chip:not(:last-child) {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+ * An expanded row goes back to being roomy.
+ *
+ * The panel is where the amount is typed, a bill is moved and a conflict is
+ * resolved, and none of that is improved by being 20% smaller. Compact is
+ * about how much of the LIST fits on a screen.
+ */
+[data-density="compact"] .ledger__rows .row--expanded .row__summary {
+  min-height: 56px;
+  padding: var(--hr-space-2) var(--hr-space-3);
+}

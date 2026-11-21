@@ -64,19 +64,11 @@
 }
 
 /*
- * Who is signed in, where the two initials used to be.
- *
- * It truncates rather than wrapping: the header is one line, and a long name
- * must not be allowed to push the gear and Sign out off the edge.
+ * "Hi <name>" was here, where the two initials were before that. Dropped on
+ * 2026-11-21 to make room for the rows button: the header is one line and the
+ * narrowest space in the app, and a greeting answered a question neither of
+ * two people was asking.
  */
-.shell-header__greeting {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-weight: 600;
-  color: var(--hr-text-secondary);
-}
 
 .shell-header__signout {
   min-height: var(--hr-touch-min);

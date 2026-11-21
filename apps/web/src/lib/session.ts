@@ -43,6 +43,22 @@ export interface SessionResponse {
   readonly user: SessionUser;
   readonly household: Household | null;
   readonly members: readonly HouseholdMember[];
+  /**
+   * How this person has asked the app to look, or null if they never have.
+   *
+   * Null is a real answer and not a stand-in for the defaults: it is what
+   * tells a browser that already has a choice to send that up rather than be
+   * reset by it. `preferences.ts` has the whole of the reasoning.
+   *
+   * Optional on the wire as well, so a response cached by an older build -
+   * which carried no such field - reads as "nothing said" rather than as
+   * "nothing chosen", and leaves the device alone.
+   */
+  readonly preferences?: {
+    readonly theme: string;
+    readonly textSize: string;
+    readonly ledgerDensity: string;
+  } | null;
 }
 
 export const sessionQueryKey = ["session"] as const;
