@@ -114,6 +114,90 @@ producing bills.
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
 
+## A row with no way to remove it (2026-11-21, reported from use)
+
+> "I think I accidentally duplicated payments to savings. I now have a ledger item for the
+> payment but I have no way to remove it. I removed the expense and it still shows on the
+> ledger."
+
+The worst shape a bug can take in this app: a figure that is wrong, seen several times a day,
+and unfixable from the screen it is wrong on. Two independent holes put it there and both are
+closed.
+
+### Archiving a bill kept any row somebody had touched
+
+`generateService.ts` refused to remove a row where `isSomebodysOwn` was true, which counted
+four things: the amount edited, the amount confirmed, the row ticked, or the row inside a
+typed-in balance. That rule exists so generation never silently overwrites a person's edit,
+and it is right about that. It was being asked a second question it is wrong about - whether a
+row should survive the bill behind it being archived.
+
+Confirming an amount says "this figure is right". It does not say "keep this row after the
+thing that produces it is gone". The guard on removal is now `hasMoved`: `paidAt` or
+`clearedAt`, and nothing else. A ticked row is history - the balance at the top has already
+been brought down to match, and archiving a bill cannot unspend it - so it stays. Everything
+else goes with its bill. The no-overwrite rule is untouched; the two questions are now two
+functions.
+
+**This clears itself up on deploy.** Generation sweeps at startup and on `GENERATION_SWEEP_HOURS`,
+so an unsettled row left behind by an archived bill disappears on the next sweep without
+anybody doing anything.
+
+### There was no way to remove such a row by hand
+
+`DELETE /api/occurrences/:id` refused anything that was not a one-off, because "removing it
+here would be undone or made permanent by the next generation run depending on how the period
+key matched". That is sound while the template is still producing rows and no reason at all
+once it is not - which is exactly when somebody wants the row gone.
+
+The rule is now "is anything going to put this back": a one-off, or a row whose template is
+archived, soft-deleted, or missing, can be removed. A row from a live bill is still refused
+with the same message. The decision is sent to the screen as `canRemove` on each row, so the
+button and the route read one fact instead of each deriving it - a remove the screen offers
+and the API refuses would be worse than no remove.
+
+One behaviour changed as a side effect, and it is wanted: a row with **no template at all and
+not flagged as a one-off** is now removable. Those exist - the demo data was seeded that way,
+which is the state the `import-seed` constraint at the top of this file is about - and nothing
+will ever produce them again, so they were the most stranded rows of all.
+
+### What was decided without asking
+
+1. **A ticked row survives archiving.** The alternative is removing rows whose money has
+   already left the account, which would silently contradict a typed-in balance. It can now be
+   removed by hand if the household wants it off the page.
+2. **`canRemove` is computed on the server.** The browser has the pieces to work it out and
+   must not: the two copies would drift and the symptom would be a button that fails on press.
+3. **An older cached response falls back to the old rule.** An installed app can be reading a
+   response written by a previous build with no `canRemove` on it. It falls back to `isOneOff`,
+   which is what that build would have shown, rather than a ledger where nothing can be removed.
+4. **No new wording on the remove confirmation.** "It stops counting. The record of it stays in
+   the history" is true for both kinds of removable row, and a second sentence explaining why
+   this particular row may be removed is explaining the plumbing.
+
+### Verified
+
+- `apps/api/test/archivedBillRows.test.ts` (new, 8) against real Postgres: archiving takes an
+  untouched row, a confirmed row and an edited row off the ledger, and keeps a ticked one;
+  removal is refused while the bill is live, allowed once it is archived, still allowed for a
+  one-off, and leaves the row soft-deleted with an entry in the history.
+- `apps/api/test/views.test.ts`: the refusal test rewritten. It pointed at a scenario row with
+  no template, so it was really testing `isOneOff` and passed for the wrong reason; it now
+  builds a real bill and is refused on a row that bill is producing.
+- `apps/web/test/removing-a-row.test.ts` (new, 4): the button driven by the server's answer,
+  the fallback for an older cached response, and the route's own guard checked from the web
+  suite so the two cannot drift apart.
+- Full suite green: 443 engine, 614 web, 586 API.
+
+### Still to do
+
+- Nothing outstanding.
+- **Worth watching:** whether a duplicate is easy enough to create that it will happen again.
+  The report started with "I accidentally duplicated payments to savings", and nothing on
+  Manage warns that a second savings payment on the same cadence already exists. Logged as
+  question 30 rather than built, because a warning that fires on legitimate duplicates is its
+  own annoyance.
+
 ## Both halves of yesterday's ledger line were wrong (2026-11-21, reported from use)
 
 > "I think there is a problem with the math Claude. Look at the screenshot. I don't think the
@@ -4574,6 +4658,12 @@ somebody has lived with it.
     window reads as short by that amount. If it has already gone, ticking it is what puts the
     window right. Worth asking more generally whether a dated transfer that has passed should
     prompt for a tick rather than wait to be found.
+30. **Should Manage warn when a new bill looks like one that is already there?** *Asked
+    2026-11-21, after a savings payment was entered twice.* *Built:* nothing - a duplicate is
+    accepted silently, and the ledger is where it shows up. A warning on the same name, or the
+    same amount on the same cadence, would have caught this one; it would also fire on two
+    genuinely separate payments to the same place, which is a real arrangement. Worth deciding
+    only if it happens again.
 
 ## Blocked / needs the owner
 

@@ -628,6 +628,16 @@ export interface OccurrenceDecoration {
   readonly version: number;
   readonly templateId: string | null;
   /**
+   * Nothing is going to produce this row again.
+   *
+   * True for a row whose bill has been archived or deleted, and false for a
+   * one-off, which never had one. It is what the screen offers a remove on
+   * and what `DELETE /api/occurrences/:id` allows, so both read the same
+   * fact rather than each working it out - the two disagreeing would be a
+   * button that fails on every press.
+   */
+  readonly orphaned: boolean;
+  /**
    * The picture beside the name, taken from the bill this row came from.
    *
    * On the template rather than the row: a picture belongs to the thing, not
@@ -665,7 +675,7 @@ export async function loadOccurrenceDecorations(
       id: true,
       version: true,
       templateId: true,
-      template: { select: { imageId: true } },
+      template: { select: { imageId: true, active: true, deletedAt: true } },
       transferToAccount: { select: { imageId: true } },
       paidFromAccount: { select: { imageId: true } },
       verifiedAt: true,
@@ -684,6 +694,9 @@ export async function loadOccurrenceDecorations(
       {
         version: row.version,
         templateId: row.templateId,
+        orphaned:
+          row.templateId !== null &&
+          (row.template === null || !row.template.active || row.template.deletedAt !== null),
         /*
          * The picture a row wears, in order of how specific it is: the one
          * somebody chose for the thing itself, then the account the money

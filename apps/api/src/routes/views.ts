@@ -86,6 +86,16 @@ function serialiseTimelineRow(row: TimelineRow, decoration: OccurrenceDecoration
     imageId: decoration?.imageId ?? null,
     version: decoration?.version ?? 1,
     fromTemplate: decoration?.templateId !== null,
+    /**
+     * Whether this row can be taken off the ledger by hand.
+     *
+     * A one-off, which nothing produces, or a row whose bill has been
+     * archived or deleted, which nothing produces any more. Sent rather than
+     * worked out in the browser so the button and the route it calls agree:
+     * a remove the screen offers and the API then refuses is worse than no
+     * remove at all.
+     */
+    canRemove: row.event.isOneOff === true || decoration?.orphaned === true,
   };
 }
 

@@ -500,17 +500,31 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
   });
 
   /**
-   * Remove a one-off.
+   * Remove a row nothing is going to put back.
    *
-   * Only a one-off. A generated occurrence belongs to its template, and
-   * removing it here would be undone or made permanent by the next generation
-   * run depending on how the period key matched - neither of which is a thing
-   * anyone asked for. Those are ended by changing the bill on Manage.
+   * Two kinds qualify. A one-off, which has no template behind it: this
+   * exists because the one-off form does, and being able to add a row
+   * without being able to remove one leaves a typo distorting every figure
+   * on the ledger with no way out but SQL. Marking it cleared is not the
+   * same thing - that says it happened.
    *
-   * This exists because the one-off form does: being able to add a row without
-   * being able to remove one leaves a typo distorting every figure on the
-   * ledger with no way out but SQL. Marking it cleared is not the same thing -
-   * that says it happened.
+   * And a row whose bill has been archived or deleted. This route used to
+   * refuse those, because "removing it here would be undone or made
+   * permanent by the next generation run depending on how the period key
+   * matched". That is a sound reason while the template is still producing
+   * rows, and no reason at all once it is not - which is precisely when
+   * somebody wants the row gone. Reported on 2026-11-21: a payment to
+   * savings entered twice, the duplicate archived, and its row left on the
+   * ledger with no way to remove it from any screen.
+   *
+   * Reconciliation handles the ordinary case of archiving a bill and should
+   * leave nothing behind but rows whose money has already moved. This is the
+   * hatch underneath it, for whatever it does leave - and for a household
+   * that simply wants an old settled row off the page.
+   *
+   * A row from a LIVE template is still refused, with the same message as
+   * before. Generation owns those, and deleting one would be a decision
+   * quietly reversed the next time the sweep ran.
    */
   app.delete<{ Params: { id: string } }>("/occurrences/:id", async (request, reply) => {
     const user = request.user;
@@ -530,10 +544,24 @@ export async function registerOccurrenceRoutes(app: FastifyInstance): Promise<vo
       work: async (tx) => {
         const existing = await tx.occurrence.findFirst({
           where: { id: request.params.id, householdId: user.householdId, deletedAt: null },
+          include: { template: { select: { active: true, deletedAt: true } } },
         });
         if (!existing) throw new HttpError(404, "not_found", "That item no longer exists.");
 
-        if (!existing.isOneOff) {
+        /*
+         * Is anything still going to produce this row?
+         *
+         * A missing template counts as gone, not as a reason to refuse: a row
+         * pointing at nothing is the most stranded a row can be.
+         */
+        const template = existing.template;
+        const comesFromALiveBill =
+          existing.templateId !== null &&
+          template !== null &&
+          template.active &&
+          template.deletedAt === null;
+
+        if (!existing.isOneOff && comesFromALiveBill) {
           throw new HttpError(
             409,
             "not_a_one_off",

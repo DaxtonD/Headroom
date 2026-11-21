@@ -626,11 +626,18 @@ export function OccurrenceRow({
             ) : null}
 
             {/*
-              Removing is for a row somebody typed in by hand. Without it, a
-              mistyped one-off would distort every figure on the ledger with no
-              way out but SQL - and marking it paid would be a lie.
+              Removing is for a row nothing is going to put back: one somebody
+              typed in by hand, or one whose bill has been archived. Without
+              it, a mistyped one-off would distort every figure on the ledger
+              with no way out but SQL - and marking it paid would be a lie.
+
+              `canRemove` comes from the API, which decides the same thing for
+              the route this button calls. Working it out here as well is how
+              a button that always fails gets written: reported on 2026-11-21
+              as a duplicate savings payment whose bill had been archived and
+              whose row had no remove on it at all.
             */}
-            {row.isOneOff && onRemove ? (
+            {row.canRemove && onRemove ? (
               <div className="row__remove">
                 {armed ? (
                   <>

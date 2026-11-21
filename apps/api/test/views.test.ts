@@ -565,16 +565,50 @@ describe("DELETE /api/occurrences/:id", () => {
     expect(BigInt(after.leftThisCycleCents)).toBe(BigInt(before.leftThisCycleCents) + 12_500n);
   });
 
-  it("refuses to remove one that comes from a bill", async () => {
-    const { ids } = await buildScenario();
+  /**
+   * A live bill owns its rows. Deleting one here would be a decision quietly
+   * reversed the next time generation ran, which is worse than refusing.
+   *
+   * This used to point at a scenario row that had no template at all, so it
+   * was really testing `isOneOff` and passed for the wrong reason. Once the
+   * rule became "is anything going to put this back", that row - which
+   * nothing produces and nothing is going to produce - became removable, as
+   * it should be. So the test now builds a real bill to be refused on.
+   *
+   * The other side of the rule, a row whose bill has been archived, is in
+   * `archivedBillRows.test.ts` along with what archiving itself clears up.
+   */
+  it("refuses to remove one that a live bill is still producing", async () => {
+    await buildScenario();
+
+    const bill = await harness.app.inject({
+      method: "POST",
+      url: "/api/templates",
+      headers: { cookie, "idempotency-key": randomUUID() },
+      payload: {
+        name: "Internet",
+        kind: "bill",
+        defaultCents: "11500",
+        withdrawal: "auto",
+        schedule: { type: "monthly", day: 18 },
+        section: "fixed",
+      },
+    });
+    expect(bill.statusCode, bill.body).toBe(201);
+    const templateId = bill.json().template.id as string;
+
+    const generated = await harness.db.prisma.occurrence.findFirstOrThrow({
+      where: { householdId, templateId, deletedAt: null },
+      select: { id: true, version: true },
+    });
 
     const response = await harness.app.inject({
       method: "DELETE",
-      url: `/api/occurrences/${ids.mortgage.id as string}`,
+      url: `/api/occurrences/${generated.id}`,
       headers: {
         cookie,
         "idempotency-key": randomUUID(),
-        "if-match": `"${String(ids.mortgage.version)}"`,
+        "if-match": `"${String(generated.version)}"`,
       },
     });
 
@@ -582,7 +616,7 @@ describe("DELETE /api/occurrences/:id", () => {
     expect(response.json().error).toBe("not_a_one_off");
 
     const row = await harness.db.prisma.occurrence.findUniqueOrThrow({
-      where: { id: ids.mortgage.id },
+      where: { id: generated.id },
     });
     expect(row.deletedAt).toBeNull();
   });

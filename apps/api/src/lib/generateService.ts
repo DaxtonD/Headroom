@@ -752,13 +752,38 @@ export async function generateForHousehold(
   for (const occurrence of placedByDate) await reconcile(occurrence, null);
 
   // ---- What the templates no longer call for -------------------------------
+  /*
+   * Rows whose template no longer wants them.
+   *
+   * The guard here is `hasMoved`, NOT `isSomebodysOwn`, and the difference
+   * is the whole of a bug reported on 2026-11-21: a payment to savings
+   * entered twice, the duplicate archived on Manage, and its row left on the
+   * ledger with no way to remove it from any screen. The row had been
+   * confirmed, `isSomebodysOwn` counted that as a reason to keep it, and
+   * there is no delete for a row that came from a bill.
+   *
+   * Confirming an amount says "this figure is right". Editing one says "this
+   * figure is right and the template's is not". Neither says "keep this row
+   * after the bill behind it is gone", and reading them that way strands a
+   * row that nothing will ever produce again.
+   *
+   * What does say to keep it is the money having actually moved. A ticked
+   * row is history: the balance at the top has already been brought down to
+   * match, and archiving a bill cannot unspend it. That line is held here
+   * and nowhere else.
+   *
+   * The rule at the top of `reconcile` is untouched: a person's edit is
+   * still never overwritten by a later change to the template. Not changing
+   * a row and not removing it were the same flag, and they are two different
+   * questions.
+   */
   const doomed = presentRows.filter(
     (row) =>
       row.templateId !== null &&
       row.periodKey !== null &&
       reconcilable.has(row.templateId) &&
       !wanted.has(occurrenceKey(row.templateId, row.periodKey)) &&
-      !isSomebodysOwn(row) &&
+      !hasMoved(row) &&
       stillAhead(row),
   );
 
@@ -881,12 +906,29 @@ function occurrenceKey(templateId: string, periodKey: string): string {
 }
 
 /**
+ * Has the money already moved?
+ *
+ * The narrower of the two questions below, and the one that decides whether
+ * a row survives its template no longer wanting it. A tick, or a typed-in
+ * balance that has been past it, means the account is already lower by this
+ * amount - so the row is a record of something that happened, and no edit to
+ * a template can make it un-happen.
+ */
+function hasMoved(row: { paidAt: Date | null; clearedAt: Date | null }): boolean {
+  return row.paidAt !== null || row.clearedAt !== null;
+}
+
+/**
  * Has a person made this row their own?
  *
- * If so, generation must never change it again. Three things count, and all
+ * If so, generation must never change it again. Four things count, and all
  * four are statements by a person rather than by a template: the row's own
  * details were edited, somebody confirmed the amount, somebody ticked it as
  * dealt with, or it is already inside a typed-in balance.
+ *
+ * This is about CHANGING a row, not about keeping one. Whether a row whose
+ * template is gone should stay is `hasMoved`, which is narrower - see the
+ * comment on `doomed`.
  */
 function isSomebodysOwn(row: {
   customisedAt: Date | null;

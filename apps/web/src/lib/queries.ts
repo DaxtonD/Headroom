@@ -109,6 +109,7 @@ interface TimelineRowWire {
   readonly isDated: boolean;
   readonly anchorOccurrenceId: string | null;
   readonly isOneOff: boolean;
+  readonly canRemove?: boolean;
   readonly verified: boolean;
   readonly verifiedBy: PersonWire | null;
   readonly verifiedAt: string | null;
@@ -233,6 +234,16 @@ export interface TimelineRow {
   readonly isDated: boolean;
   readonly anchorOccurrenceId: string | null;
   readonly isOneOff: boolean;
+  /**
+   * Nothing is going to produce this row again, so it can be taken off the
+   * ledger by hand.
+   *
+   * A one-off, or a row whose bill has been archived or deleted. Decided by
+   * the API rather than here: the button and the route it calls have to
+   * agree, and a remove the screen offers and the server refuses is worse
+   * than no remove at all.
+   */
+  readonly canRemove: boolean;
   readonly verified: boolean;
   readonly verifiedBy: PersonWire | null;
   /**
@@ -396,6 +407,9 @@ function parseTimelineRow(row: TimelineRowWire): TimelineRow {
     cents: toCents(row.cents),
     runningCents: toCents(row.runningCents),
     deltaCents: toCents(row.deltaCents),
+    // Absent from a cached response written by an older build; a one-off was
+    // the only removable row then, and that is still true of such a cache.
+    canRemove: row.canRemove ?? row.isOneOff,
   };
 }
 
