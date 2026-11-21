@@ -343,6 +343,27 @@ the single misreading this strip exists to prevent. Chequing is in neither
 view's strip: it is the figure at the top of the same screen in 34px type,
 and saying it twice within an inch is not a summary.
 
+#### And then smaller type, a day later
+
+"Make the text smaller in compact mode." One step down, consistently, through
+the whole compact ledger: 1rem becomes 0.875, 0.875 becomes 0.8125, and so on,
+in about two dozen places.
+
+Worth recording what this buys, because it is not what the rest of the compact
+view buys and it would be easy to assume otherwise. It does **not** fit more
+rows. Every row already sits on the 44px touch floor, so the height of a row
+is settled and smaller type leaves more air inside it rather than less row.
+What it buys is sideways - a name that fits where it used to be cut off with
+an ellipsis - and type that looks the size of the layout it is in rather than
+the size of the roomier one it was borrowed from.
+
+Which makes the floor the part worth holding. Nothing goes below 0.6875rem,
+which is 11px at the app's own largest setting, and a test checks every
+font-size in every compact rule against it. These multiply with the text-size
+setting: compact at the smallest of the five steps is 0.76 of what is written
+in the stylesheet, so 11px becomes about 8. That is the deliberate bottom of
+two dials turned together, and the way back up is the text size in Settings.
+
 ### Tabs that felt stuck
 
 Reported: "we might need to revisit the cache idea. Often, when I click on a tab the UI gets

@@ -158,6 +158,78 @@ describe("what a compact row gives up", () => {
   });
 });
 
+/* -------------------------------------------------------------------------- */
+/* How small the type goes                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Asked for on 2026-11-21, after a day in compact: "make the text smaller in
+ * compact mode."
+ *
+ * Worth being clear that this buys something different from the rest of the
+ * compact view. It does NOT fit more rows: every row already sits on the 44px
+ * touch floor, so the height of a row is settled and smaller type leaves more
+ * air inside it rather than less row. What it buys is sideways - a name that
+ * fits where it used to be cut off - and type that looks the size of the
+ * layout it is in.
+ *
+ * Which makes the floor the part worth testing. These sizes multiply with the
+ * household's own text-size setting, so a compact ledger at the smallest of
+ * the five steps is already at 0.76 of whatever is written here. There is a
+ * size below which this stops being a dense ledger and becomes an unreadable
+ * one, and nothing should cross it by accident.
+ */
+describe("how small the type goes", () => {
+  /** 0.6875rem is 11px at the app's own largest setting. */
+  const FLOOR = 0.6875;
+
+  const sizes = compactRules.flatMap((rule) => {
+    const selector = rule.slice(0, rule.indexOf("{"));
+    return [...rule.matchAll(/font-size:\s*([\d.]+)rem/g)].map((match) => ({
+      selector: selector.trim(),
+      rem: Number(match[1]),
+    }));
+  });
+
+  it("is smaller than the comfortable ledger in a good many places", () => {
+    expect(sizes.length).toBeGreaterThan(15);
+  });
+
+  it("never goes below the floor", () => {
+    for (const size of sizes) {
+      expect(size.rem, `${size.selector} at ${String(size.rem)}rem`).toBeGreaterThanOrEqual(FLOOR);
+    }
+  });
+
+  /**
+   * And the floor is real rather than nominal: at the smallest text size the
+   * household can choose, 0.6875rem is about 8px. That is the deliberate
+   * bottom of two dials multiplied together, and the way back up is the text
+   * size in Settings - which is why the smallest step exists.
+   */
+  it("leaves the text-size setting as the dial that goes the other way", () => {
+    const appearance = source("src/lib/appearance.ts");
+    expect(appearance).toContain('key: "largest"');
+    expect(appearance).toContain("scale: 1,");
+  });
+
+  /** The amount a row is about is never the smallest thing on that row. */
+  it("keeps the amount bigger than the tail beside it", () => {
+    const amount = sizes.find((size) => size.selector.includes("row__amount"));
+    const running = sizes.find((size) => size.selector.includes("row__running"));
+    expect(amount?.rem).toBeGreaterThan(running?.rem ?? 0);
+  });
+
+  /** Pixel sizes get the same floor; the hero's two are the only ones. */
+  it("holds the pixel-sized figures well clear of it", () => {
+    const pixels = compactRules.flatMap((rule) =>
+      [...rule.matchAll(/font-size:\s*clamp\((\d+)px/g)].map((match) => Number(match[1])),
+    );
+    expect(pixels.length).toBeGreaterThan(0);
+    for (const px of pixels) expect(px).toBeGreaterThanOrEqual(20);
+  });
+});
+
 describe("what a compact row keeps", () => {
   /** The floor the brief sets for anything a thumb has to hit. */
   it("is still 44px of row to press", () => {

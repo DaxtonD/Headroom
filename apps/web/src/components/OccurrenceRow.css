@@ -414,6 +414,36 @@
   font-size: 0.6875rem;
 }
 
+/* ---- Smaller type, asked for on 2026-11-21 after a day in compact ----
+ *
+ * "Make the text smaller in compact mode."
+ *
+ * Worth being clear about what this buys, because it is not what the rest of
+ * the compact view buys: it does NOT fit more rows on the screen. Every row
+ * is already sitting on the 44px floor, which is the touch target and cannot
+ * move, so the height of a row is settled and smaller type leaves more air
+ * inside it rather than less row. What it buys is sideways - a name that fits
+ * where it used to be cut off with an ellipsis, and type that looks the size
+ * of the layout it is in rather than the size of the roomier one.
+ *
+ * One step down, consistently: 1rem becomes 0.875rem, 0.875 becomes 0.8125,
+ * and so on. Nothing in the compact ledger goes below 0.6875rem, which is 11px
+ * at the app's own largest setting - held by a test, because the floor is the
+ * part that matters. These multiply with the household's text-size setting,
+ * so compact at the smallest size is 11 x 0.76 = 8px; the dial that goes the
+ * other way is in Settings, and it is the right one to reach for.
+ */
+
+[data-density="compact"] .ledger__rows .row__name,
+[data-density="compact"] .ledger__rows .row__amount {
+  font-size: 0.875rem;
+}
+
+[data-density="compact"] .ledger__rows .chip {
+  padding: 1px 8px;
+  font-size: 0.6875rem;
+}
+
 /* The running balance, quieter but still there. */
 [data-density="compact"] .ledger__rows .row__running {
   font-size: 0.6875rem;

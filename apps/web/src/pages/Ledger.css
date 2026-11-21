@@ -810,7 +810,7 @@
 }
 
 [data-density="compact"] .ledger__period-title {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
 }
 
 [data-density="compact"] .ledger__now {
@@ -826,7 +826,7 @@
   min-height: var(--hr-touch-min);
   margin-bottom: var(--hr-space-1);
   padding: var(--hr-space-1) var(--hr-space-3);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 [data-density="compact"] .ledger__projected {
@@ -844,7 +844,7 @@
 }
 
 [data-density="compact"] .ledger__subtotal-row--strong {
-  font-size: 1rem;
+  font-size: 0.9375rem;
 }
 
 /* ---- The compact ledger: the top of the screen ---------------------------
@@ -908,16 +908,16 @@
 }
 
 [data-density="compact"] .ledger__hero-label {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 [data-density="compact"] .ledger__hero-amount {
   margin: 0 0 2px;
-  font-size: clamp(28px, 9vw, 36px);
+  font-size: clamp(25px, 8vw, 32px);
 }
 
 [data-density="compact"] .ledger__hero-meta {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
 }
 
 /*
@@ -935,7 +935,7 @@
 
 [data-density="compact"] .ledger__hero-action {
   padding-inline: var(--hr-space-3);
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 [data-density="compact"] .ledger__hero-split {
@@ -945,16 +945,16 @@
 }
 
 [data-density="compact"] .ledger__hero-sublabel {
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
 }
 
 [data-density="compact"] .ledger__hero-subamount {
-  font-size: 1.25rem;
+  font-size: 1.125rem;
 }
 
 [data-density="compact"] .ledger__hero-note {
   margin-top: var(--hr-space-2);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
 }
 
 /* ---- The accounts under it ---- */
@@ -964,7 +964,7 @@
 }
 
 [data-density="compact"] .ledger__cards-label {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 [data-density="compact"] .ledger__cards-list {
@@ -991,7 +991,7 @@
 }
 
 [data-density="compact"] .ledger__card-name {
-  font-size: 0.875rem;
+  font-size: 0.8125rem;
 }
 
 [data-density="compact"] .ledger__card-ahead {
@@ -1000,14 +1000,14 @@
 
 [data-density="compact"] .ledger__cards-warning {
   margin-top: var(--hr-space-2);
-  font-size: 0.75rem;
+  font-size: 0.6875rem;
 }
 
 /* ---- And the rest of the furniture at the top and bottom ---- */
 
 [data-density="compact"] .ledger__covered {
   padding: var(--hr-space-2) var(--hr-space-3);
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 [data-density="compact"] .ledger__warning {
@@ -1015,12 +1015,12 @@
 }
 
 [data-density="compact"] .ledger__warning-title {
-  font-size: 0.9375rem;
+  font-size: 0.875rem;
 }
 
 [data-density="compact"] .ledger__warning-detail,
 [data-density="compact"] .ledger__estimates {
-  font-size: 0.8125rem;
+  font-size: 0.75rem;
 }
 
 [data-density="compact"] .ledger__footer {
@@ -1028,9 +1028,41 @@
 }
 
 [data-density="compact"] .ledger__footer-amount {
-  font-size: clamp(24px, 8vw, 30px);
+  font-size: clamp(22px, 7vw, 27px);
 }
 
 [data-density="compact"] .ledger__footer-note {
+  font-size: 0.6875rem;
+}
+
+/*
+ * The rest of the window furniture, at the same step down as everything else
+ * in the compact ledger. These three had kept the comfortable size because
+ * the first pass only touched what was costing height; the ask on 2026-11-21
+ * was about the type itself.
+ */
+
+[data-density="compact"] .ledger__period-dates,
+[data-density="compact"] .ledger__period-note {
   font-size: 0.75rem;
+}
+
+[data-density="compact"] .ledger__projected-name {
+  font-size: 0.8125rem;
+}
+
+[data-density="compact"] .ledger__now-label {
+  font-size: 0.75rem;
+}
+
+[data-density="compact"] .ledger__now-amount {
+  font-size: 0.9375rem;
+}
+
+[data-density="compact"] .ledger__subtotal-row {
+  font-size: 0.8125rem;
+}
+
+[data-density="compact"] .ledger__subtotal-note {
+  font-size: 0.6875rem;
 }
