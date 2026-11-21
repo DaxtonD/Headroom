@@ -88,19 +88,30 @@ describe("a settled row on the ledger", () => {
     expect(row).not.toContain("{row.paid ? (\n              <Chip");
   });
 
-  it("still prints a running balance", () => {
+  it("prints no running balance at all", () => {
     /*
-     * An earlier attempt replaced the figure with the words "in your
-     * balance", which left a column of rows with no numbers beside them and
-     * read as though something had broken. The balance walks past a settled
-     * row unchanged; showing that is more honest than hiding it.
+     * The third answer to this question, and the first that works.
+     *
+     * The first printed the words "in your balance" instead of the figure,
+     * which left a column of rows with no numbers and read as broken. The
+     * second put the figure back on every row, dimmed - but a settled row
+     * moves nothing, so each one repeated the balance above it, and a dozen
+     * identical figures down the top of the ledger read as a stuck counter.
+     * Reported on 2026-11-20 in exactly those terms: the running total sits
+     * on one figure and then moves "despite all of the expenses" above it.
+     *
+     * What changed is that the blank now has something explaining it. The
+     * ledger prints one "Balance now" line where the settled rows end, so
+     * the figure is stated once, where it means something, and the rows
+     * above it read as history rather than as rows missing their numbers.
+     * Without that line this would be the first attempt again, so the two
+     * are checked together - see `balance-now.test.ts`.
      */
     const figures = /<span className="row__figures">[\s\S]*?<\/span>\s*<\/button>/.exec(row)?.[0] ?? "";
     expect(figures, "the figures block should be findable").not.toBe("");
-    expect(figures).toContain("row__running--settled");
-    expect(figures).toContain("{formatCents(row.runningCents)}");
+    expect(figures).toContain("{row.settled ? null : (");
     // Scoped to this block on purpose: the phrase is a fine label elsewhere
-    // on the row, and a bad substitute for the number itself.
+    // on the row, and was a bad substitute for the number itself.
     expect(figures).not.toContain("in your balance");
   });
 

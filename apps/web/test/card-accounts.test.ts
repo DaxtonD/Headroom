@@ -47,13 +47,20 @@ const queries = read("lib", "queries.ts");
 describe("a row that moved nothing", () => {
   it("decides from the delta, not from whether it settled", () => {
     /*
-     * Two different rows print no movement for two different reasons: one has
-     * settled, and one belongs to another account. Driving the display off
-     * `settled` would leave a charge on a card showing a running balance it
-     * never reached, and the column would stop adding up.
+     * A charge on a card prints a figure that has not moved, and it is the
+     * delta that decides so. Reading `row.cents` instead would leave a $95
+     * charge showing a running balance it never reached and the column would
+     * stop adding up.
+     *
+     * The class is named for the reason it survives. Settled rows used to
+     * share it and now print no figure at all, so what is left here is only
+     * the row whose money went somewhere else - which is the one case where
+     * a repeated balance is the point rather than the problem.
      */
     expect(row).toMatch(/const movedNothing = row\.deltaCents === 0n/);
-    expect(row).toMatch(/row__running--settled.*movedNothing|movedNothing.*row__running--settled/s);
+    expect(row).toMatch(
+      /row__running--elsewhere.*movedNothing|movedNothing.*row__running--elsewhere/s,
+    );
   });
 
   it("does not go back to reading the amount instead", () => {

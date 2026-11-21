@@ -30,8 +30,8 @@
  * the header a single line takes its place carrying the balance, what is safe
  * to spend, and both buttons again. Asked for from use, in those words.
  */
-import { formatCents, formatDateShort } from "@headroom/core";
-import { useCallback, useId, useMemo, useState } from "react";
+import { formatCents, formatDateShort, type Cents } from "@headroom/core";
+import { Fragment, useCallback, useId, useMemo, useState } from "react";
 import { Amount, Chip, CoveragePill } from "../components/Badges.js";
 import { ExplainButton, ExplainPanel } from "../components/Explain.js";
 import { OccurrenceRow, type MoveTarget } from "../components/OccurrenceRow.js";
@@ -126,6 +126,28 @@ export function Ledger({
    * holds in every case that matters.
    */
   const spy = useSectionSpy(jumpTargets, JUMP_BAR_PX + (heroGone ? pinnedHeight : 0));
+
+  /*
+   * The last row whose money has already moved, which is where today is.
+   *
+   * The "Balance now" line goes under it. Found by walking the windows in
+   * order and keeping the last settled row seen, rather than by comparing
+   * dates: `settled` is the flag the engine itself acted on when it stopped
+   * counting those rows, so the line lands exactly where the balance at the
+   * top stops being history and starts being a forecast.
+   *
+   * Null when nothing has been ticked yet. There is then no run of repeated
+   * figures to break up and no history to mark the end of, so no line.
+   */
+  const balanceAfterId = useMemo(() => {
+    let last: string | null = null;
+    for (const period of payPeriods.data?.periods ?? []) {
+      for (const row of period.rows) {
+        if (row.settled) last = row.id;
+      }
+    }
+    return last;
+  }, [payPeriods.data]);
 
   // An opened row is a step, so Android's Back closes it rather than leaving
   // the ledger.
@@ -540,6 +562,8 @@ export function Ledger({
               >
                 <PeriodGroup
                   period={period}
+                  balanceAfterId={balanceAfterId}
+                  balanceCents={data.balance.cents}
                   moveTargets={moveTargets}
                   accountName={accountName}
                   accounts={data.accounts}
@@ -584,6 +608,26 @@ export function Ledger({
  * The running balance is on every line, which is the single thing the
  * spreadsheet does that three separate screens could not.
  */
+/**
+ * One thing on a window's list: a row of the timeline, or a cheque the window
+ * counts that has no row yet because it falls past the horizon.
+ */
+type Entry =
+  | { kind: "row"; row: TimelineRow; at: string | null }
+  | { kind: "cheque"; cheque: PayPeriod["projectedPaycheques"][number]; at: string };
+
+/**
+ * The id the engine knows an entry by.
+ *
+ * A projected cheque has no row and so no id of its own; the engine names it
+ * for the schedule and the day it falls on, and this has to spell it the same
+ * way or a block would never find its last row. Both spellings live in
+ * `payPeriods.ts`.
+ */
+function idOfEntry(entry: Entry): string {
+  return entry.kind === "row" ? entry.row.id : `${entry.cheque.scheduleId}|${entry.cheque.date}`;
+}
+
 function PeriodGroup({
   period,
   moveTargets,
@@ -594,9 +638,18 @@ function PeriodGroup({
   onRemove,
   accountName,
   accounts,
+  balanceAfterId,
+  balanceCents,
 }: {
   period: PayPeriod;
   moveTargets: readonly MoveTarget[];
+  /**
+   * The row the "Balance now" line goes under: the last one whose money has
+   * already moved. Null in every window that holds no such row, which is
+   * every window but the first.
+   */
+  balanceAfterId: string | null;
+  balanceCents: Cents;
   /** Resolves an account id to its name, for the chip on a charge. */
   accountName: (id: string | null) => string | null;
   /**
@@ -626,10 +679,6 @@ function PeriodGroup({
    * which is where the timeline puts them.
    */
   const entries = useMemo(() => {
-    type Entry =
-      | { kind: "row"; row: TimelineRow; at: string | null }
-      | { kind: "cheque"; cheque: PayPeriod["projectedPaycheques"][number]; at: string };
-
     const merged: Entry[] = [
       ...period.rows.map((row) => ({ kind: "row" as const, row, at: row.date })),
       ...period.projectedPaycheques.map((cheque) => ({
@@ -651,6 +700,40 @@ function PeriodGroup({
       })
       .map(({ entry }) => entry);
   }, [period.rows, period.projectedPaycheques]);
+
+  /**
+   * Where each cheque's left-over line goes: under the last row that cheque
+   * has to cover.
+   *
+   * Found by position rather than assumed to be contiguous. The engine sorts
+   * its entries the same way this screen does, so in practice a block IS a
+   * run of adjacent rows - but "in practice" is how the window membership
+   * rule went wrong when it was written twice, and a footer that lands in the
+   * middle of the next cheque is a worse failure than one that does not
+   * appear. Taking the furthest row of each block cannot do that.
+   */
+  const leftOverAfter = useMemo(() => {
+    const positionOf = new Map<string, number>();
+    entries.forEach((entry, index) => {
+      positionOf.set(idOfEntry(entry), index);
+    });
+
+    const footers = new Map<number, PayPeriod["blocks"][number]>();
+    for (const block of period.blocks) {
+      // Only a cheque gets one. The opening stretch between now and the next
+      // cheque leaves behind exactly the running balance already printed
+      // beside its last row, and a second copy of a number is not an answer.
+      if (block.kind !== "cheque") continue;
+
+      let last = -1;
+      for (const id of block.entryIds) {
+        const at = positionOf.get(id);
+        if (at !== undefined && at > last) last = at;
+      }
+      if (last >= 0) footers.set(last, block);
+    }
+    return footers;
+  }, [entries, period.blocks]);
 
   return (
     <>
@@ -697,34 +780,67 @@ function PeriodGroup({
         bills has not counted the cheque either.
       */}
       <ul className="ledger__rows">
-        {entries.map((entry) =>
-          entry.kind === "row" ? (
-            <OccurrenceRow
-              key={entry.row.id}
-              row={entry.row}
-              expanded={expandedId === entry.row.id}
-              onToggle={() => onToggle(entry.row.id)}
-              canEdit={canEdit}
-              moveTargets={moveTargets}
-              onSave={onSave}
-              onRemove={onRemove}
-              chargedTo={accountName(entry.row.paidFromAccountId)}
-              paidToward={accountName(entry.row.transferToAccountId)}
-              accounts={accounts}
-            />
-          ) : (
-            <li
-              className="ledger__projected"
-              key={`${entry.cheque.scheduleId}|${entry.cheque.date}`}
-            >
-              <span className="ledger__projected-name">
-                {entry.cheque.owner ? `${entry.cheque.owner.name}'s pay` : "Expected pay"}
-                <Chip tone="neutral">Expected · {formatDateShort(entry.cheque.date)}</Chip>
-              </span>
-              <Amount cents={entry.cheque.cents} signed />
-            </li>
-          ),
-        )}
+        {entries.map((entry, index) => {
+          const id = idOfEntry(entry);
+          const leftOver = leftOverAfter.get(index);
+
+          return (
+            <Fragment key={id}>
+              {entry.kind === "row" ? (
+                <OccurrenceRow
+                  row={entry.row}
+                  expanded={expandedId === entry.row.id}
+                  onToggle={() => onToggle(entry.row.id)}
+                  canEdit={canEdit}
+                  moveTargets={moveTargets}
+                  onSave={onSave}
+                  onRemove={onRemove}
+                  chargedTo={accountName(entry.row.paidFromAccountId)}
+                  paidToward={accountName(entry.row.transferToAccountId)}
+                  accounts={accounts}
+                />
+              ) : (
+                <li className="ledger__projected">
+                  <span className="ledger__projected-name">
+                    {entry.cheque.owner ? `${entry.cheque.owner.name}'s pay` : "Expected pay"}
+                    <Chip tone="neutral">Expected · {formatDateShort(entry.cheque.date)}</Chip>
+                  </span>
+                  <Amount cents={entry.cheque.cents} signed />
+                </li>
+              )}
+
+              {/*
+                ---- Where today is ----
+
+                The rows above this have happened: the money has gone, and the
+                figure at the top already counts it. Said once, here, instead
+                of repeating the same balance down a dozen rows - which is
+                what the ledger used to do and what read as a stuck counter.
+              */}
+              {id === balanceAfterId ? (
+                <li className="ledger__now">
+                  <span className="ledger__now-label">Balance now</span>
+                  <span className="ledger__now-amount hr-amount">{formatCents(balanceCents)}</span>
+                </li>
+              ) : null}
+
+              {/*
+                ---- What this cheque leaves ----
+
+                The number the spreadsheet gets by dragging from a paycheque
+                down to the row above the next one. It is not on any row: the
+                running balance beside these rows still carries whatever the
+                last cheque left over, and this deliberately does not.
+              */}
+              {leftOver ? (
+                <li className="ledger__block-left">
+                  <span>Left from this cheque</span>
+                  <span className="hr-amount">{formatCents(leftOver.leftCents)}</span>
+                </li>
+              ) : null}
+            </Fragment>
+          );
+        })}
 
         {entries.length === 0 ? (
           <li className="ledger__empty">Nothing in this period.</li>

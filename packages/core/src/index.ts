@@ -16,6 +16,7 @@ export * from "./money.js";
 export * from "./dates.js";
 export * from "./types.js";
 export * from "./timeline.js";
+export * from "./chequeBlocks.js";
 export * from "./payPeriods.js";
 export * from "./budget.js";
 export * from "./netWorth.js";

@@ -336,9 +336,31 @@ export interface PayPeriod {
   readonly roomToSaveCents: Cents;
   readonly lowest: { readonly cents: Cents; readonly date: string | null } | null;
   readonly allAutoCovered: boolean;
+  /**
+   * The window one cheque at a time.
+   *
+   * `leftCents` above is a fortnight holding two cheques, so it cannot say
+   * which of the two weeks is the tight one. A block can: it is the cheque
+   * and the bills it has to cover, which is the unit the household counts in.
+   */
+  readonly blocks: readonly ChequeBlock[];
   /** Grouped by the server, so the engine stays the authority on membership. */
   readonly rows: readonly TimelineRow[];
   readonly projectedPaycheques: readonly ProjectedPaycheque[];
+}
+
+export interface ChequeBlock {
+  readonly kind: "balance" | "cheque" | "unopened";
+  /**
+   * The row or projected cheque that opens it, to be matched against the ids
+   * the same window published. Null when the opening balance opened it.
+   */
+  readonly openerId: string | null;
+  readonly date: string | null;
+  readonly inCents: Cents;
+  readonly outCents: Cents;
+  readonly leftCents: Cents;
+  readonly entryIds: readonly string[];
 }
 
 /** Cents cross the wire as a decimal string, because JSON has no bigint. */
@@ -462,6 +484,15 @@ interface PayPeriodWire {
     readonly cents: string;
     readonly owner: PersonWire | null;
   }[];
+  readonly blocks: readonly {
+    readonly kind: "balance" | "cheque" | "unopened";
+    readonly openerId: string | null;
+    readonly date: string | null;
+    readonly inCents: string;
+    readonly outCents: string;
+    readonly leftCents: string;
+    readonly entryIds: readonly string[];
+  }[];
 }
 
 export function usePayPeriods() {
@@ -497,6 +528,15 @@ export function usePayPeriods() {
             ? { cents: toCents(period.lowest.cents), date: period.lowest.date }
             : null,
           allAutoCovered: period.allAutoCovered,
+          blocks: period.blocks.map((block) => ({
+            kind: block.kind,
+            openerId: block.openerId,
+            date: block.date,
+            inCents: toCents(block.inCents),
+            outCents: toCents(block.outCents),
+            leftCents: toCents(block.leftCents),
+            entryIds: block.entryIds,
+          })),
           rows: period.rows.map(parseTimelineRow),
           projectedPaycheques: period.projectedPaycheques.map((cheque) => ({
             ...cheque,

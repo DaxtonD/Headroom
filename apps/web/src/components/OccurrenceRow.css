@@ -308,13 +308,16 @@
 }
 
 /*
- * The running balance beside a settled row.
+ * The running balance beside a row whose money went somewhere else.
  *
- * It is the same figure as the row above, because a settled row moves
- * nothing - the balance at the top has already gone past it. Printed rather
- * than blanked, so the column never looks broken, and dimmed so a repeated
- * figure does not read as the balance standing still by accident.
+ * In practice a charge on a credit card. It repeats the figure above it
+ * because this account's balance genuinely did not move, which is the thing
+ * worth saying - so it is printed, and dimmed so that the repeat reads as
+ * deliberate rather than as the balance standing still by accident.
+ *
+ * Settled rows used to land here too and no longer print a figure at all;
+ * see the comment in `OccurrenceRow.tsx`.
  */
-.row__running--settled {
+.row__running--elsewhere {
   opacity: 0.55;
 }

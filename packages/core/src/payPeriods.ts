@@ -19,6 +19,8 @@ import {
   parseDate,
   paydaysBetween,
 } from "./dates.js";
+import { chequeBlocks } from "./chequeBlocks.js";
+import type { BlockEntry } from "./chequeBlocks.js";
 import type { PlainDate } from "./dates.js";
 import type { Cents } from "./money.js";
 import type {
@@ -300,14 +302,46 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
 
     // Cheques due in this window that are not written down anywhere yet.
     const projectedPaychequeIds: string[] = [];
+    const projectedEntries: BlockEntry[] = [];
     for (const schedule of paySchedules) {
       if (silenced.has(schedule.id)) continue;
       for (const payday of paydaysBetween(schedule.anchorDate, window.start, window.end)) {
         if (claimUnplacedPaycheque(schedule, payday)) continue;
         inCents += schedule.defaultCents;
-        projectedPaychequeIds.push(`${schedule.id}|${payday}`);
+        const id = `${schedule.id}|${payday}`;
+        projectedPaychequeIds.push(id);
+        // It opens a block like any other cheque. A window past the horizon
+        // holds nothing else, so the block is the cheque alone - which is the
+        // truthful answer and not an empty one.
+        projectedEntries.push({
+          id,
+          date: payday,
+          deltaCents: schedule.defaultCents,
+          opensBlock: true,
+        });
       }
     }
+
+    /*
+     * What each cheque in this window leaves behind.
+     *
+     * The opening balance is handed over only for the window that starts
+     * today, exactly as `inCents` above counts it only there. Every later
+     * window opens on a payday, so its own first cheque is what opens it, and
+     * passing the balance again would spend it twice.
+     */
+    const blocks = chequeBlocks(
+      [
+        ...rows.map((row) => ({
+          id: row.event.id,
+          date: row.effectiveDate,
+          deltaCents: row.deltaCents,
+          opensBlock: row.event.kind === "paycheque" && row.event.settled !== true,
+        })),
+        ...projectedEntries,
+      ],
+      window.isCurrentPartial ? { cents: timeline.startBalanceCents } : null,
+    );
 
     const lowest = lowestInWindow(rows);
     const autoRows = rows.filter((row) => row.requiresCoverage);
@@ -325,6 +359,7 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       elsewhereCents,
       lowest,
       allAutoCovered: autoRows.every((row) => row.runningCents >= cushionCents),
+      blocks,
       projectedPaychequeIds,
       roomToSaveCents,
       /**

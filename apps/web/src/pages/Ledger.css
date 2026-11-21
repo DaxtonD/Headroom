@@ -460,6 +460,78 @@
   font-size: 0.9375rem;
 }
 
+/* ---- Where today is ---- */
+
+/*
+ * One line saying what is in the account right now, between the rows whose
+ * money has gone and the rows whose money has not.
+ *
+ * It replaces a column of identical dimmed figures - one beside every settled
+ * row, each repeating the one above it, because a settled row moves nothing.
+ * Reported on 2026-11-20 as a running total that holds one figure down the
+ * whole settled run and then drops at the first row that has not happened
+ * yet - "despite all of the expenses" above it. Which is exactly what a
+ * dozen copies of a number look like when nothing explains them.
+ *
+ * Rules rather than a background, because it is a boundary and not a row. It
+ * has to read as the line between two halves of the list, not as another
+ * thing in it.
+ */
+.ledger__now {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  margin: var(--hr-space-2) 0;
+  padding: var(--hr-space-2) 0;
+  border-top: 2px solid var(--hr-row-divider);
+  border-bottom: 2px solid var(--hr-row-divider);
+}
+
+.ledger__now-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--hr-text-muted);
+}
+
+.ledger__now-amount {
+  font-weight: 700;
+}
+
+/* ---- What one cheque leaves behind ---- */
+
+/*
+ * The figure the spreadsheet this app replaces is dragged for: select from a
+ * paycheque down to the row above the next one, read the sum. A fortnight
+ * holds two cheques, so the band under the whole window cannot say it, and
+ * the running balance beside these rows cannot either - it still carries
+ * whatever the previous cheque left over, which is the exact thing starting
+ * the selection at the cheque throws away.
+ *
+ * Indented and quiet. It belongs to the rows above it rather than standing
+ * level with them, and the window's own band below is still the louder of
+ * the two.
+ */
+.ledger__block-left {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  min-height: var(--hr-touch-min);
+  margin-bottom: var(--hr-space-2);
+  padding: var(--hr-space-2) var(--hr-space-3);
+  border-left: 3px solid var(--hr-row-divider);
+  font-size: 0.875rem;
+  color: var(--hr-text-muted);
+}
+
+.ledger__block-left .hr-amount {
+  font-weight: 600;
+  color: var(--hr-ink);
+}
+
 /* ---- What a window leaves behind ---- */
 
 .ledger__subtotal {

@@ -8,6 +8,7 @@
  */
 import type { Cents } from "./money.js";
 import type { PlainDate, WeekendRule } from "./dates.js";
+import type { ChequeBlock } from "./chequeBlocks.js";
 
 /** What kind of thing an amount is, as the spreadsheet names them. */
 export type OccurrenceKind = "paycheque" | "bill" | "deposit" | "transfer";
@@ -240,6 +241,16 @@ export interface PayPeriod {
   readonly elsewhereCents: Cents;
   readonly lowest: PayPeriodLowest | null;
   readonly allAutoCovered: boolean;
+  /**
+   * The window split into one block per cheque, each with what that cheque
+   * leaves behind.
+   *
+   * A window is two weeks and holds a cheque from each person, so its own
+   * `leftCents` answers for both at once. These answer one at a time, which
+   * is the unit the household counts in - see `chequeBlocks.ts`. They sum to
+   * `leftCents` exactly, by construction.
+   */
+  readonly blocks: readonly ChequeBlock[];
   /** Cheques counted here that are projected rather than already placed. */
   readonly projectedPaychequeIds: readonly string[];
   /**

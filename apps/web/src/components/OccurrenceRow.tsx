@@ -353,23 +353,38 @@ export function OccurrenceRow({
         <span className="row__figures">
           <Amount cents={row.cents} className="row__amount" signed />
           {/*
-            A row that moved nothing still prints its running balance, dimmed.
+            A settled row prints no running balance at all.
 
-            An earlier attempt at this replaced the figure with the words "in
-            your balance", which left a column of rows with no numbers beside
-            them and read as though something had broken. The balance has
-            simply walked past unchanged, and showing that is more honest than
-            hiding it.
+            This reverses what was here, and the reason the old version lost
+            is worth keeping. It printed the figure on every row, dimmed,
+            because an attempt before THAT had replaced it with the words "in
+            your balance" and left a column of rows with no numbers beside
+            them, reading as though something had broken.
 
-            Driven by the delta rather than by `settled`, so a charge on a card
-            reads the same way for the same reason: this account's balance did
-            not move here.
+            Both were solving the same thing the wrong way round. A settled
+            row moves nothing, so every one of them repeats the balance above
+            it, and a dozen identical figures down the top of the ledger read
+            as a stuck counter - reported on 2026-11-20 by the person who
+            built it, which is as clear a verdict as that gets.
+
+            What makes the blank honest this time is that something now says
+            why: the ledger prints one "Balance now" line where the settled
+            rows end (`Ledger.tsx`). The figure appears once, where it means
+            something, and the rows above it are visibly history rather than
+            rows whose numbers went missing.
+
+            A charge on a card keeps its figure. It is NOT history - the money
+            has not left this account and never will - and the unchanged
+            balance beside it is the whole point: it says the chequing
+            forecast did not fall for something that never touched chequing.
           */}
-          <span
-            className={`row__running hr-amount ${movedNothing ? "row__running--settled" : ""}`}
-          >
-            {formatCents(row.runningCents)}
-          </span>
+          {row.settled ? null : (
+            <span
+              className={`row__running hr-amount ${movedNothing ? "row__running--elsewhere" : ""}`}
+            >
+              {formatCents(row.runningCents)}
+            </span>
+          )}
         </span>
       </button>
 

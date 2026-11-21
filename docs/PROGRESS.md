@@ -114,6 +114,135 @@ producing bills.
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
 
+## Where today is, and what each cheque leaves (2026-11-20, reported from use)
+
+> "Look at the running total. It says at [one figure] then moves to [another] despite all of
+> the expenses."
+
+*(Amounts redacted: the report came with a screenshot of the real account, and this repo is
+public.)*
+
+Then, after a conversation about why the spreadsheet is still preferred:
+
+> "She updates the balance at the top (A3) and will drag/highlight a pay period (A5 to A9) and
+> see the sum quickly. This includes a pay period and all the expenses."
+
+### Nothing was wrong, which was the problem
+
+The figures were correct. A settled row moves nothing - the balance at the top has already been
+past it - so the running balance walks straight through it, and twelve settled rows in a column
+print the same number twelve times. The first unsettled row, a licence renewal, was the first to
+change it. The charge below that stayed put because it went on a card and moved no chequing
+money. Every one of those is a deliberate decision with a test behind it, and together they read
+as a counter that had stopped.
+
+This was the third attempt at that column. The first printed the words "in your balance" instead
+of a figure and left rows with no numbers beside them. The second put the figure back on every
+row, dimmed, which is what was on screen. What neither had was anything saying *why* a figure
+repeats, so:
+
+- **A settled row now prints no running balance at all.**
+- **One line - "Balance now", with the figure - sits where the settled rows end.** The number is
+  stated once, where it means something, and the rows above it read as history rather than as
+  rows whose numbers went missing.
+
+The dimmed-repeat style survives for one case: a charge on a credit card, which is not history
+and keeps its unchanged figure, because the chequing forecast genuinely did not fall for money
+that never touched chequing. The class was renamed `row__running--elsewhere` to say so.
+
+### What the spreadsheet is actually used for
+
+The screenshot settled a question that three rounds of guessing had not. Google Sheets, on a
+phone, two columns - amount and description. The balance is typed at the top. Then a selection is
+dragged from a paycheque down to the row above the next cheque, and the sum is read off the
+bottom bar: in the shared screenshot, one cheque less the four bills that come out before the
+next one. The bottom row of the sheet is the sum of everything above it, which is the
+pool left for groceries and fuel.
+
+Both numbers already existed in Headroom. The second is `leftThisCycleCents`, on the hero as
+"Left this cycle", and `explainLeftThisCycle` breaks it out as balance + in - out, which is the
+same arithmetic the sheet does. The first did not exist anywhere, and could not be read off the
+ledger:
+
+- **The window total is not it.** A pay period here is fourteen days anchored on one person's
+  paydays, so with two people paid on alternating weeks every window holds two cheques and
+  `leftCents` answers for both at once. It cannot say which of the two weeks is the tight one.
+- **The running balance is not it either.** It carries everything from today forward, so it still
+  contains whatever the previous cheque left behind. Starting the selection at the cheque is what
+  throws that away, and is the entire point of the gesture.
+
+### A block is one cheque, and the engine owns it
+
+`packages/core/src/chequeBlocks.ts`: walk a window's entries in the order the bank applies them,
+and open a new block at every paycheque that has not already landed. What a row contributes is
+`deltaCents` - what it did to the account being projected - never its face amount. That one
+choice handles every awkward case without a rule of its own: a charge on a card contributes
+nothing because it moved none of this account's money, and a settled row contributes nothing
+because the opening balance has already been past it. `timeline.ts` decided both, once.
+
+It also makes the blocks of a window sum to that window's own `leftCents` exactly. That property
+is checked against every seed on the machine, and again over the wire against a real Postgres,
+because the ledger prints a block's figure a few rows above the band carrying the window's and
+they are read together whether or not anyone means to compare them.
+
+Three cases that needed deciding rather than discovering:
+
+- **A cheque already in the bank opens nothing.** It is history; a block on one would be a
+  heading over the settled rows with a left-over of zero underneath.
+- **Only the window that starts today opens on the balance.** Every later window opens on a
+  payday, so its own first cheque opens it. Passing the balance again would spend it twice.
+- **Rows that sort ahead of their own payday join that cheque** rather than forming a block of
+  their own, whose left-over would be a negative number with no cheque above it to explain where
+  the money was supposed to come from.
+
+### What was decided without asking
+
+- **No line under the opening stretch.** The run from now to the next cheque leaves behind exactly
+  the running balance already printed beside its last row, so a line there would be a second copy
+  of a number on a screen that had just finished removing twelve of them. Only a block a cheque
+  opened gets one.
+- **"Left from this cheque", without naming whose.** Short, and the block visibly starts at the
+  cheque row, so the name would be length without information.
+- **The line is placed by position, not by assuming a block is contiguous.** The engine sorts its
+  entries the way the screen does, so in practice it is a run of adjacent rows - but that rule has
+  been written twice in this codebase before and the copies disagreed the moment one was
+  corrected. Taking the furthest row of a block cannot put the figure inside the next cheque.
+
+### What was dropped, and why it is worth recording
+
+Two features were designed in this session and then deliberately not built.
+
+**A drag-to-sum selection on the ledger.** It was the obvious reading of "make it feel like the
+spreadsheet" and it was wrong twice over. The row summary is one `<button>`, so a tappable figure
+inside it would have had to come out and become a second control in the row - a second meaning for
+a tap on the screen already described as too complicated. And the selection is not arbitrary: the
+same shape is dragged every time, cheque to cheque. The drag is a workaround for Sheets not
+knowing what a pay period is. Headroom does know, so the answer was to have the number already
+there, which is fewer taps than the spreadsheet needs.
+
+**Anything on the hero.** The ask was for the spreadsheet's bottom-line figure alongside safe to
+spend; it has been there since the ledger was built, as "Left this cycle", with an `(i)` that
+shows the same working. Nothing to do.
+
+### Verified
+
+- `packages/core/test/chequeBlocks.test.ts` (21): which entry opens a block, what a block counts,
+  and the reconciliation property against every seed present.
+- `apps/api/test/chequeBlocks.test.ts` (7): the blocks over the wire against real Postgres - every
+  cheque still to come opens exactly one, a ticked cheque stops opening one, every row lands in
+  exactly one block, and the window still reconciles after a tick.
+- `apps/web/test/balance-now.test.ts` (11): the line driven off `settled` rather than dates, the
+  left-over printed from the engine's figure rather than re-summed, and the two spellings of a
+  projected cheque's id checked against each other across the two files that build it.
+- `apps/web/test/settled-row.test.ts` rewritten: the assertion that a settled row still prints a
+  figure is now the assertion that it does not, with the three attempts recorded.
+- Full suite green: 432 engine, 608 web, 577 API.
+
+### Still to do
+
+- Nothing outstanding. Built on `dev` at the owner's request, so it wants a look on the `dev`
+  container before it goes near `main`.
+
 ## The same chips on the ledger (2026-11-20, asked for from use)
 
 > "You just implemented amazing inline chips on the manage screen to help navigate it. I love it.
@@ -178,7 +307,7 @@ container, so every element inside it became a flex ITEM - the `strong` holding 
 the bare run of text after it, the `strong` holding the second, and the amount. `space-between`
 then spread those four apart and each wrapped on its own, so the sentence came out as
 
-    Dec 2026 | 's extra cheque covers | Oct 2027 | $1,158.87
+    Dec 2026 | 's extra cheque covers | Oct 2027 | $0,000.00
 
 with `'s` orphaned at the top of its own column, which is exactly what a cut-off string looks
 like.
@@ -4313,6 +4442,15 @@ somebody has lived with it.
     to create it, so today this section shows yearly bills only. The quarterly path is written
     and tested and has nothing to catch. Adding "every three months, on a date" to the expense
     form is the same shape of change the yearly one was. Nobody has asked for it.
+27. **Should "Left this cycle" move into the pinned line as well?** *Built:* no - the hero
+    carries it beside safe to spend, and the line that takes over once the hero scrolls away
+    carries the balance, safe to spend and two buttons. A third figure there is a judgement
+    about crowding on a phone, better made by looking at it than by arguing about it. The
+    household asked for more on one screen, so it may well be wanted.
+28. **Is "Left from this cheque" the right thing to call it?** *Built:* that wording, under each
+    cheque's last row. The spreadsheet has no label for it at all - it is whatever the sum bar
+    says while a selection is held - so there is no existing phrase to match. If the household
+    calls it something else out loud, it should be called that.
 
 ## Blocked / needs the owner
 

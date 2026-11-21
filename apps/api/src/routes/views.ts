@@ -309,6 +309,22 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
           lowest: period.lowest,
           allAutoCovered: period.allAutoCovered,
 
+          /*
+           * The window split one cheque at a time.
+           *
+           * This is the figure the spreadsheet is dragged for: a selection
+           * from a paycheque down to the row above the next one, and the sum
+           * read off the bottom of the screen. A window is a fortnight and
+           * holds two cheques, so `leftCents` above answers for both at once
+           * and never reproduces it.
+           *
+           * Sent as the engine grouped them, ids and all, so the screen
+           * prints the engine's blocks rather than working out its own from
+           * the dates. That rule has been written twice here before, and the
+           * copies disagreed the moment one of them was corrected.
+           */
+          blocks: period.blocks,
+
           rows: rows.map((row) => serialiseTimelineRow(row, decorations.get(row.event.id))),
 
           /** Cheques counted in `inCents` that have no occurrence yet. */
