@@ -45,6 +45,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | A thin wedge is a wedge | done | | 2026-11-21, reported from use. A small slice was mostly its own gap: the 2px stroke is centred on the path and a 1.6% wedge is five units across. The gap is now a quarter of each wedge's narrowest crossing, the chosen wedge is painted last and grows outward, and tapping one scrolls its row into view |
 | A compact ledger | done | | 2026-11-21, asked for from use. The same row squeezed to 44px - a stylesheet, not a second row component - keeping every figure and the date, losing the badge and two lines of chips. Toggled from the app header, where "Hi <name>" was |
 | Preferences stored against the person | done | | 2026-11-21, asked for from use: a browser that gets cleared daily took the theme, the text size and the density with it. On the server now and loaded at sign-in; the device keeps a copy for the pre-paint script. The one route in this app with no If-Match and no idempotency key, reasoned beside it |
+| The top of the compact ledger | done | | 2026-11-21, reported after a day of the compact rows. The hero was about 425px and a third of it was whitespace around three 44px info targets. The targets survive as hit areas rather than as layout; the strip under it now lists savings as well as the cards |
 | A tab shows something the moment it is pressed | done | | 2026-11-21, reported from use. The query cache was emptied five minutes after a screen was left, nothing warmed the tabs, and five screens waited against an empty div. In memory only - no figure is written to a phone |
 
 ## Last session
@@ -286,6 +287,61 @@ bury what the log is for.
 
 `apps/api/test/preferences.test.ts` asserts the route works with **neither** header, so the
 deviation is held rather than left to be "fixed".
+
+### The hero was still the old size (same day, after a day of use)
+
+The compact rows shipped and the hero did not move, which turned out to be
+half an answer: "the one thing I'd change in compact view is the large card at
+the top showing the chequing balance, safe to spend, left this cycle, etc.
+I'd suggest compacting everything there too. Show the balances of all accounts
+in a compact view too."
+
+Right, and worth recording why it was missed. The first pass took "I like the
+current UI" as covering the hero, and it did - as a judgement about the
+comfortable view. It said nothing about what happens when the rows beneath it
+get twice as dense and the hero does not: on a 334px-wide phone the first
+actual row of the ledger was still below the fold, so the denser list was
+denser somewhere nobody could see without scrolling.
+
+**Where the height was, measured rather than guessed.** The hero was about
+425px, and 144 of those were three info buttons. Each is a 44px touch target
+wrapped around a 20px mark, and each sits inline in a label, so each one makes
+its label line 44px tall - in chequing, safe to spend, left this cycle. A
+third of the hero was whitespace around three small circles.
+
+**The target stays 44px. It stops being 44px of layout.** In the compact hero
+the button shrinks to its mark and grows the hit area back with a transparent
+`::after` inset by 12px, which is the ordinary way to keep a small glyph
+tappable and is what the brief's rule is actually about - what a thumb can
+hit, not what a box measures. Only in the compact hero: the comfortable view
+keeps the simpler arrangement nobody complained about. A test refuses any
+other compact rule that zeroes a target without growing the hit area back,
+because that is the way round the existing 44px check could not see.
+
+The rest is the same shrink applied to type, padding and gaps, plus both hero
+buttons fitting on one line at a narrower phone than the comfortable view
+manages - they were stacking at 334px, which is 100px of a screen somebody had
+asked to be shorter. Nothing is dropped. About 240px instead of 425.
+
+#### The strip lists every account now, in compact
+
+Asked for in the same message. Savings has had a screen of its own since the
+redesign and was not on the ledger at all; the point of the compact view is
+everything at a glance, and "everything" with one account quietly missing is
+the version that gets trusted and is wrong.
+
+**Decided in the component, not in a stylesheet** - the opposite of the rule
+the compact rows follow, and deliberately. Hiding the savings row in the
+comfortable view with CSS would leave it in the accessibility tree, so a
+screen reader would be read an account the screen does not show. This is a
+question about what is on the screen rather than how it is laid out, and no
+stylesheet can answer that one honestly.
+
+A card's figure says "owed" and savings says "saved", because a bare number
+beside Visa reads as money you have, which is the opposite of the truth and
+the single misreading this strip exists to prevent. Chequing is in neither
+view's strip: it is the figure at the top of the same screen in 34px type,
+and saying it twice within an inch is not a summary.
 
 ### Tabs that felt stuck
 
@@ -4628,6 +4684,26 @@ the repository as public" still holds, and it is.
 
 ## Decisions made without asking
 
+- 2026-11-21: **The compact hero keeps a 44px hit area while giving up a 44px box.** An
+  `::after` inset by 12px around a 20px mark. The brief's rule is about what a thumb can hit,
+  not what a box measures, so this is the rule being met rather than bent - but it is the kind
+  of thing that reads as a shortcut later, so: a test refuses any other compact rule that zeroes
+  a target without doing the same, and the comfortable view is untouched.
+- 2026-11-21: **Savings is on the compact ledger, decided in the component rather than in CSS.**
+  Every other part of the compact view is a stylesheet. This one cannot be: hiding the savings
+  row in the comfortable view would leave it in the accessibility tree, so a screen reader would
+  be read an account the screen does not show. Which accounts are listed is a question about
+  what is on the screen, not about how it is laid out.
+- 2026-11-21: **Chequing is not repeated in the account strip**, in either view, although the
+  request said "all accounts". It is the figure at the top of the same screen in 34px type.
+  Two copies of the one number this screen exists for is not a summary, it is a doubt about
+  which one is right. Easy to add if that reads as a gap in use.
+- 2026-11-21: **The account strip stays one account per line in compact**, rather than becoming
+  two columns. Two columns was the obvious denser answer: it saves about one row on a household
+  with three accounts, and it costs the alignment of those amounts with the running-balance
+  column the rest of the screen is read down - which was itself a fix for a report that the
+  figures did not line up. Not worth un-fixing for one row.
+
 - 2026-11-21: **The preferences route takes neither `If-Match` nor an `Idempotency-Key`**, which
   is the only place in this app that is true and which contradicts the `CLAUDE.md`
   non-negotiable as written. The reasoning, in full, is in "The one mutation with no version and
@@ -4954,6 +5030,19 @@ somebody has lived with it.
     2026-11-14 for a reason that has not changed. Recorded here because the answer included "for
     now", and because the next person to notice the cold open will reach for the same fix without
     knowing it is a decision.
+36. **Should the compact hero go further?** *Built:* the same arrangement, shrunk - label,
+    balance, updated line, two buttons, the two figures side by side, the lowest-point note.
+    About 240px. The next step would be rearranging it rather than shrinking it: the balance
+    and what is safe to spend side by side on one row, which would take another 40px or so and
+    needs the hero to become a grid with named areas. That is more fragile at the largest text
+    size on a narrow phone, so it is worth seeing whether 240px is already enough.
+37. **Does the 44px hit area that overlaps its neighbour cause any trouble?** The info mark in
+    the compact hero keeps its 44px target by growing a transparent area 12px past itself, which
+    on the chequing one reaches a few pixels over the top of the balance below it. Nothing there
+    is interactive, so the worst case is a tap just under the mark opening the explanation -
+    which is what a tap on the mark does anyway. Worth a mention only because it would be felt
+    before it was understood.
+
 
 ## Blocked / needs the owner
 
