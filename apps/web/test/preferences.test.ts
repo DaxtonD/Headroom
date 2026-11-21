@@ -123,9 +123,19 @@ describe("the sync", () => {
     expect(preferences).toContain("if (stored === undefined) return;");
   });
 
-  it("adopts the stored answer once, not on every render", () => {
-    expect(preferences).toContain("adoptedRef");
-    expect(preferences).toContain("if (!enabled || adoptedRef.current) return;");
+  /**
+   * Once per PERSON, not once per mount. One of them signing out and the
+   * other signing in happens in the same tab, so `App` never unmounts and
+   * this hook never remounts - and a boolean here had already been set by the
+   * first of them, which left the second with whatever the phone was looking
+   * like instead of their own theme.
+   */
+  it("adopts the stored answer once per person, not once ever", () => {
+    expect(preferences).toContain("const adoptedForRef = useRef<string | null>(null);");
+    expect(preferences).toContain("if (adoptedForRef.current === userId) return;");
+    expect(preferences).toContain("adoptedForRef.current = userId;");
+    // And the id is in the dependencies, or the switch is never noticed.
+    expect(preferences).toContain("}, [enabled, userId, session.data]);");
   });
 
   /** Or the adopted value goes straight back up, and round again. */

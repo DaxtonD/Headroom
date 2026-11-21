@@ -130,17 +130,30 @@ export function useAppearanceSync(enabled: boolean): void {
 
   /** The last payload this device sent or accepted, so neither is echoed. */
   const settledRef = useRef<string | null>(null);
-  const adoptedRef = useRef(false);
+  /**
+   * Whose settings have been adopted, rather than whether any have.
+   *
+   * It was a boolean, which was wrong for the case that actually happens on a
+   * shared phone: one of them signs out and the other signs in, in the same
+   * tab, so `App` never unmounts and this hook never remounts. A boolean had
+   * already been set by the first person, so the second person's stored
+   * theme was ignored and they got whatever the phone was left looking like.
+   */
+  const adoptedForRef = useRef<string | null>(null);
+  const userId = session.data?.user.id ?? null;
 
-  /* ---- 1. Adopt what is stored, once, when the session arrives ---- */
+  /* ---- 1. Adopt what is stored, once per person, when the session arrives ---- */
   useEffect(() => {
-    if (!enabled || adoptedRef.current) return;
+    if (!enabled || userId === null) return;
+    if (adoptedForRef.current === userId) return;
 
     const stored = session.data?.preferences;
-    // Still loading, or signed out: nothing has been said either way yet.
+    // Still loading, or a response from a build that did not send them yet:
+    // nothing has been said either way, so nothing is done.
     if (stored === undefined) return;
 
-    adoptedRef.current = true;
+    adoptedForRef.current = userId;
+    settledRef.current = null;
 
     /*
      * Never chosen. `settledRef` stays null, so the effect below sends
@@ -152,12 +165,12 @@ export function useAppearanceSync(enabled: boolean): void {
     const next = appearanceFromWire(stored, getAppearance());
     settledRef.current = JSON.stringify(wireFromAppearance(next));
     setAppearance(next);
-  }, [enabled, session.data]);
+  }, [enabled, userId, session.data]);
 
   /* ---- 2. Send anything that changes after that ---- */
   const send = save.mutate;
   useEffect(() => {
-    if (!enabled || !adoptedRef.current) return;
+    if (!enabled || adoptedForRef.current === null) return;
 
     const payload = wireFromAppearance(appearance);
     const asText = JSON.stringify(payload);
