@@ -41,6 +41,10 @@ const payPeriods = readFileSync(
   resolve(import.meta.dirname, "../../../packages/core/src/payPeriods.ts"),
   "utf8",
 );
+const blocksEngine = readFileSync(
+  resolve(import.meta.dirname, "../../../packages/core/src/chequeBlocks.ts"),
+  "utf8",
+);
 
 function rule(css: string, selector: string): string {
   const at = css.indexOf(`${selector} {`);
@@ -53,12 +57,35 @@ function rule(css: string, selector: string): string {
 /* -------------------------------------------------------------------------- */
 
 describe("the balance-now line", () => {
-  it("is drawn once, under the last row whose money has gone", () => {
+  it("is drawn once, above the first row whose money has not gone", () => {
     expect(ledgerTsx).toContain('<li className="ledger__now">');
-    expect(ledgerTsx).toContain("{id === balanceAfterId ? (");
+    expect(ledgerTsx).toContain("{id === balanceBeforeId ? (");
     // The figure at the top of the page, not a second source for it.
     expect(ledgerTsx).toContain("balanceCents={data.balance.cents}");
     expect(ledgerTsx).toContain("{formatCents(balanceCents)}");
+  });
+
+  /**
+   * The bug this replaced, on 2026-11-21: the line was anchored to the LAST
+   * settled row, which is the same place only while settled and unsettled
+   * rows do not interleave - and they do. A bill dated last week that nobody
+   * has ticked is deliberately kept on the ledger, still to come, and it
+   * sorts above anything settled since. The line then printed the balance in
+   * the account below a row that had already taken a large transfer out of
+   * it, and the running column resumed underneath the line a long way under
+   * the figure on it.
+   *
+   * Anchored to the first UNSETTLED row, every row above the line moved
+   * nothing, so the figure on it is the balance the row below starts from by
+   * construction rather than by luck. The rendering order is half of that
+   * claim: the line has to be emitted before the row, not after it.
+   */
+  it("goes above the first row still to come, so the figure on it carries down", () => {
+    const rowsList = ledgerTsx.slice(ledgerTsx.indexOf('<ul className="ledger__rows">'));
+    const line = rowsList.indexOf("{id === balanceBeforeId ? (");
+    const firstRow = rowsList.indexOf('{entry.kind === "row" ? (');
+    expect(line, "the balance-now line should be in the row list").toBeGreaterThan(-1);
+    expect(line).toBeLessThan(firstRow);
   });
 
   /**
@@ -70,11 +97,11 @@ describe("the balance-now line", () => {
    */
   it("finds that row by the settled flag, not by its date", () => {
     const block = ledgerTsx.slice(
-      ledgerTsx.indexOf("const balanceAfterId = useMemo("),
+      ledgerTsx.indexOf("const balanceBeforeId = useMemo("),
       ledgerTsx.indexOf("const panelId ="),
     );
-    expect(block, "balanceAfterId should be findable").not.toBe("");
-    expect(block).toContain("if (row.settled) last = row.id;");
+    expect(block, "balanceBeforeId should be findable").not.toBe("");
+    expect(block).toContain("else if (firstUnsettled === null) firstUnsettled = row.id;");
     expect(block).not.toContain("today");
     expect(block).not.toContain("row.date");
   });
@@ -82,10 +109,10 @@ describe("the balance-now line", () => {
   /** Nothing ticked means no history to mark the end of. */
   it("is absent when nothing has settled yet", () => {
     const block = ledgerTsx.slice(
-      ledgerTsx.indexOf("const balanceAfterId = useMemo("),
+      ledgerTsx.indexOf("const balanceBeforeId = useMemo("),
       ledgerTsx.indexOf("const panelId ="),
     );
-    expect(block).toContain("let last: string | null = null;");
+    expect(block).toContain("return anySettled ? firstUnsettled : null;");
   });
 
   /**
@@ -160,6 +187,25 @@ describe("the per-cheque left-over", () => {
   it("spells a projected cheque's id the way the engine does", () => {
     expect(ledgerTsx).toContain("`${entry.cheque.scheduleId}|${entry.cheque.date}`");
     expect(payPeriods).toContain("`${schedule.id}|${payday}`");
+  });
+
+  /**
+   * The ledger showed one of these for a fortnight holding two cheques, with
+   * both cheques' money on it, because one of them was recorded as a dated
+   * deposit and the engine only opened a block at `kind === "paycheque"`.
+   * The fix is in the engine; this is the check that the screen keeps getting
+   * one line per cheque from it rather than deciding for itself.
+   */
+  it("gets one line per cheque from the engine, however the cheque was recorded", () => {
+    // The window hands its paydays over, and the splitter opens a block at
+    // the first money to arrive after one - so pay typed in as a deposit
+    // starts a block exactly as a paycheque row does.
+    expect(payPeriods).toContain("const paydayDates: PlainDate[] = [];");
+    expect(payPeriods).toContain("chequeBlocks(");
+    expect(payPeriods.slice(payPeriods.indexOf("const blocks = chequeBlocks("))).toContain("paydayDates,");
+    expect(blocksEngine).toContain("const afterAPayday = (");
+    // The screen draws one per block and does not group rows itself.
+    expect(ledgerTsx).toContain("for (const block of period.blocks)");
   });
 
   it("carries the blocks across the wire as the engine grouped them", () => {

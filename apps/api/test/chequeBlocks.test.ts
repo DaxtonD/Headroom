@@ -44,6 +44,7 @@ let harness: Harness;
 let cookie: string;
 let alexId: string;
 let jordanId: string;
+let householdId: string;
 
 beforeAll(async () => {
   migrateTestDatabase();
@@ -59,6 +60,7 @@ beforeEach(async () => {
   const seeded = await seedHousehold(harness);
   alexId = seeded.alex.id;
   jordanId = seeded.jordan.id;
+  householdId = seeded.household.id;
   cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
@@ -127,6 +129,20 @@ async function seedAlternatingSchedules() {
       defaultCents: 180_000n,
     },
   });
+}
+
+/**
+ * A payday through the API, which also creates the paycheque template that
+ * generates its rows - the arrangement a household gets by default.
+ */
+async function addSchedule(userId: string, daysOut: number, cents: string) {
+  const response = await post("/api/pay-schedules", {
+    userId,
+    anchorDate: inDays(daysOut),
+    defaultCents: cents,
+  });
+  expect(response.statusCode, response.body).toBe(201);
+  return response.json().paySchedule as { id: string };
 }
 
 /** An automatic bill on a given day, which leaves chequing. */
@@ -270,6 +286,89 @@ describe("what a cheque has to cover", () => {
     }
 
     expect(compared, "every cheque's left-over equalled a running balance").toBeGreaterThan(0);
+  });
+
+  /**
+   * Pay this engine cannot recognise for itself.
+   *
+   * Reported from the ledger on 2026-11-21: a fortnight holding two cheques
+   * printed ONE "left from this cheque", and the figure on it was both
+   * cheques added together. One person's pay is entered by hand - the
+   * paycheque archived, the money re-entered as a deposit - which is an
+   * arrangement this app supports and `restorePaycheque.test.ts` was written
+   * about. The block split was keyed on `kind === "paycheque"`, saw an
+   * ordinary deposit, opened nothing, and folded a whole cheque's stretch
+   * into the next one.
+   *
+   * Against the database because that is where the arrangement lives: a
+   * template archived, a deposit template in its place, and a pay schedule
+   * that still sets the cadence with nothing projecting from it.
+   */
+  it("is opened by pay entered by hand as a deposit", async () => {
+    const jordanSchedule = await addSchedule(jordanId, -1, "200000");
+    await addSchedule(alexId, 6, "180000");
+
+    // Archive the paycheque the schedule generated, as the household did.
+    const template = await harness.db.prisma.template.findFirstOrThrow({
+      where: { householdId, kind: "paycheque", deletedAt: null },
+      // The one bound to the schedule being turned off.
+    });
+    expect((template.scheduleJson as { payScheduleId?: string }).payScheduleId).toBe(
+      jordanSchedule.id,
+    );
+    const archived = await harness.app.inject({
+      method: "PATCH",
+      url: `/api/templates/${template.id}`,
+      headers: { ...headers(), "if-match": `"${template.version}"` },
+      payload: { active: false },
+    });
+    expect(archived.statusCode, archived.body).toBe(200);
+
+    // The same money, typed in the only way the app offers: a deposit.
+    const deposit = await post("/api/templates", {
+      name: "Pay",
+      kind: "deposit",
+      section: "income",
+      defaultCents: "211340",
+      withdrawal: "auto",
+      schedule: { type: "biweekly", anchorDate: inDays(13) },
+    });
+    expect(deposit.statusCode, deposit.body).toBe(201);
+
+    // A bill between the two cheques, so each block has something to cover.
+    await addBill("Mortgage", 15, "97450");
+
+    const windows = await periods();
+    const fortnight = windows.find((period) =>
+      period.rows.some((row) => row.kind === "deposit"),
+    );
+    expect(fortnight, "a window should hold the deposit").toBeDefined();
+
+    const byHand = fortnight?.rows.find((row) => row.kind === "deposit");
+    const cheque = fortnight?.rows.find((row) => row.kind === "paycheque");
+    const mortgage = fortnight?.rows.find((row) => row.name === "Mortgage");
+    expect(byHand, "the deposit").toBeDefined();
+    expect(cheque, "the other person's cheque").toBeDefined();
+    expect(mortgage, "the bill between them").toBeDefined();
+
+    // One block per cheque, not one for the pair of them.
+    const chequeBlocks = (fortnight?.blocks ?? []).filter((block) => block.kind === "cheque");
+    expect(chequeBlocks).toHaveLength(2);
+
+    const first = chequeBlocks.find((block) => block.entryIds.includes(byHand?.id ?? ""));
+    expect(first, "the deposit should open a block").toBeDefined();
+    expect(first?.openerId).toBe(byHand?.id);
+    // What that cheque has to cover, and nothing belonging to the next one.
+    expect(first?.entryIds).toContain(mortgage?.id);
+    expect(first?.entryIds).not.toContain(cheque?.id);
+    expect(BigInt(first?.leftCents ?? "0")).toBe(211_340n - 97_450n);
+
+    // And the window still reconciles with its own band.
+    for (const period of windows) {
+      expect(sum(period.blocks.map((block) => block.leftCents)), period.label).toBe(
+        BigInt(period.leftCents),
+      );
+    }
   });
 
   /**

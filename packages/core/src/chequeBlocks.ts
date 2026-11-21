@@ -58,7 +58,13 @@ export interface BlockEntry {
   /** What it did to the account being projected. Zero is common and correct. */
   readonly deltaCents: Cents;
   /**
-   * True for a paycheque whose money has not arrived yet.
+   * Known to be pay arriving: a paycheque row, or a cheque projected from a
+   * schedule.
+   *
+   * Only ever a reason to open a block, never a reason not to. Pay the
+   * caller cannot recognise - one person's entered by hand as a deposit - is
+   * caught by `paydays` instead, so this flag being wrong in that direction
+   * costs nothing.
    *
    * A cheque that has already landed must not open a block. It is history,
    * the opening balance has been past it, and a block opened on one would be
@@ -141,12 +147,37 @@ function seal(draft: Draft): ChequeBlock {
  * window has any: every later window starts on a payday, so its first cheque
  * is what opens it. Passing it for a later window would count the balance
  * twice, once here and once in the window it actually belongs to.
+ *
+ * `paydays` are the days somebody is due to be paid, inside this window. They
+ * are what makes the split work on pay the caller could not label: the first
+ * money to arrive once a payday has gone by is that payday's cheque, whether
+ * it was recorded as a paycheque, as a dated deposit, or as a deposit a day
+ * later because that is when the bank actually shows it. Leaving them out
+ * falls back to `opensBlock` alone.
  */
 export function chequeBlocks(
   entries: readonly BlockEntry[],
   opening: { readonly cents: Cents } | null,
+  paydays: readonly PlainDate[] = [],
 ): ChequeBlock[] {
   const blocks: ChequeBlock[] = [];
+
+  /**
+   * Has a payday gone by between the open block and this entry?
+   *
+   * `openedOn` of null is the start of the window - either nothing has
+   * opened yet, or the money already in the account did - so every payday in
+   * the list is still ahead of it. An undated entry is anchored to "now",
+   * which is before any payday the window holds, so it can never be the
+   * first money after one.
+   */
+  const afterAPayday = (openedOn: PlainDate | null, at: PlainDate | null): boolean => {
+    if (at === null) return false;
+    return paydays.some(
+      (payday) =>
+        compareDates(payday, at) <= 0 && (openedOn === null || compareDates(payday, openedOn) > 0),
+    );
+  };
 
   let current: Draft | null =
     opening === null
@@ -161,6 +192,35 @@ export function chequeBlocks(
         };
 
   for (const entry of ordered(entries)) {
+    /**
+     * Whether this entry is a cheque arriving.
+     *
+     * Two ways to be one, because there are two ways a household records
+     * pay. The flag is the direct answer and covers a paycheque row or a
+     * projected cheque. The payday test covers the rest: money arriving once
+     * a payday has gone by is that payday's pay, however it was entered.
+     *
+     * Both need money actually arriving in this account. A cheque already in
+     * the bank, or one paid into some other account, moved nothing here, and
+     * a block opened on it would head a run of rows with nothing to cover
+     * them.
+     */
+    const opens =
+      entry.deltaCents > 0n &&
+      (entry.opensBlock || afterAPayday(current?.date ?? null, entry.date));
+
+    /*
+     * More pay on a day a block has already opened on joins it instead.
+     *
+     * Two people paid the same Friday is one cheque-to-cheque stretch, not
+     * two, and the spreadsheet's own selection says so: it is dragged from
+     * the first row of that day. Without this, the second cheque would cut
+     * the block off after a single row and leave the bills it was meant to
+     * cover stranded under a heading with no money in it.
+     */
+    const sameDayAsOpener =
+      current !== null && current.date !== null && current.date === entry.date;
+
     /*
      * A cheque closes the block before it, unless that block is still waiting
      * for something to open it - in which case this cheque is what opens it,
@@ -169,7 +229,7 @@ export function chequeBlocks(
      * own whose "left over" would be a negative number with no cheque to
      * explain it.
      */
-    if (entry.opensBlock && current !== null && current.kind !== "unopened") {
+    if (opens && current !== null && current.kind !== "unopened" && !sameDayAsOpener) {
       blocks.push(seal(current));
       current = null;
     }
@@ -183,7 +243,7 @@ export function chequeBlocks(
       entryIds: [],
     };
 
-    if (entry.opensBlock && current.kind === "unopened") {
+    if (opens && current.kind === "unopened") {
       current.kind = "cheque";
       current.openerId = entry.id;
       current.date = entry.date;

@@ -19,6 +19,7 @@ import { describe, expect, it } from "vitest";
 import { chequeBlocks, type BlockEntry } from "../src/chequeBlocks.js";
 import { computePayPeriods } from "../src/payPeriods.js";
 import { computeTimeline } from "../src/timeline.js";
+import type { PaySchedule, TimelineInput } from "../src/types.js";
 import { availableSeeds, cents, paySchedules, timelineEvents, type NamedSeed } from "./helpers/seed.js";
 
 /** A bill, which moves money and opens nothing. */
@@ -126,6 +127,127 @@ describe("where a block begins", () => {
     expect(blocks[0]?.leftCents).toBe(191_000n);
   });
 
+  /**
+   * Two people paid the same Friday is one cheque-to-cheque stretch. The
+   * spreadsheet's own selection agrees: it is dragged from the first row of
+   * that day, through both cheques, down to the row above the next payday.
+   */
+  it("keeps pay arriving on one day in one block", () => {
+    const blocks = chequeBlocks(
+      [
+        cheque("pay-a", "2026-11-26", 200_000),
+        cheque("pay-b", "2026-11-26", 180_000),
+        bill("mortgage", "2026-11-27", -120_000),
+        cheque("pay-c", "2026-12-10", 200_000),
+      ],
+      null,
+    );
+
+    expect(blocks).toHaveLength(2);
+    expect(blocks[0]?.entryIds).toEqual(["pay-a", "pay-b", "mortgage"]);
+    expect(blocks[0]?.leftCents).toBe(260_000n);
+    expect(blocks[1]?.openerId).toBe("pay-c");
+  });
+
+  /**
+   * Anything else landing on a payday joins that payday's block rather than
+   * cutting it in two. The caller cannot always tell a cheque from a refund
+   * that happens to arrive beside one, so the split has to survive being
+   * told that both open a block.
+   */
+  it("does not cut a block in two for money landing beside the cheque", () => {
+    const blocks = chequeBlocks(
+      [
+        cheque("pay", "2026-12-04", 200_000),
+        cheque("refund", "2026-12-04", 4_180),
+        bill("water", "2026-12-05", -12_600),
+      ],
+      null,
+    );
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.openerId).toBe("pay");
+    expect(blocks[0]?.leftCents).toBe(191_580n);
+  });
+
+  /**
+   * The household's own pay, entered by hand.
+   *
+   * `opensBlock` is what the engine can label for itself, and it is narrower
+   * than being paid: one person's pay is a dated deposit, which looks like
+   * any other money arriving. The paydays are what close that gap - the
+   * first money in once a payday has gone by is that payday's cheque.
+   */
+  it("opens at the first money in after a payday, whatever it was called", () => {
+    const blocks = chequeBlocks(
+      [
+        bill("insurance", "2026-11-26", -8_400),
+        bill("pay-by-hand", "2026-11-26", 211_340),
+        bill("mortgage", "2026-11-27", -118_250),
+      ],
+      null,
+      ["2026-11-26"],
+    );
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.kind).toBe("cheque");
+    expect(blocks[0]?.openerId).toBe("pay-by-hand");
+    // The bill that sorted ahead of the cheque is covered by it, as ever.
+    expect(blocks[0]?.leftCents).toBe(84_690n);
+  });
+
+  /**
+   * Pay entered as arriving the day after the payday, because that is when
+   * the bank shows it - an arrangement this app supports and has already
+   * been bitten by once (see `restorePaycheque.test.ts`). Testing the date
+   * for equality with a payday would miss every one of these.
+   */
+  it("opens at pay that lands a day after the payday", () => {
+    const blocks = chequeBlocks(
+      [
+        { id: "pay-late", date: "2026-11-27", deltaCents: 211_340n, opensBlock: false },
+        bill("mortgage", "2026-11-28", -118_250),
+        cheque("pay-other", "2026-12-04", 198_460),
+      ],
+      null,
+      ["2026-11-26", "2026-12-04"],
+    );
+
+    expect(blocks.map((block) => block.openerId)).toEqual(["pay-late", "pay-other"]);
+    expect(blocks.map((block) => block.leftCents)).toEqual([93_090n, 198_460n]);
+  });
+
+  /** Money arriving with no payday behind it is just money arriving. */
+  it("is not opened by a refund in the middle of a cheque", () => {
+    const blocks = chequeBlocks(
+      [
+        cheque("pay", "2026-11-26", 200_000),
+        bill("refund", "2026-11-30", 4_180),
+        bill("water", "2026-12-01", -12_600),
+      ],
+      null,
+      ["2026-11-26"],
+    );
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.leftCents).toBe(191_580n);
+  });
+
+  /**
+   * The window that starts today opens on the money already in the account,
+   * and a payday behind it has already been counted into that balance.
+   */
+  it("does not reopen on a payday the opening balance has been past", () => {
+    const blocks = chequeBlocks(
+      [bill("overdue", "2026-11-20", 211_340), bill("licence", "2026-11-21", -6_250)],
+      { cents: 52_300n },
+      [],
+    );
+
+    expect(blocks).toHaveLength(1);
+    expect(blocks[0]?.kind).toBe("balance");
+  });
+
   it("reports a window with no cheque at all rather than dropping it", () => {
     const blocks = chequeBlocks([bill("licence", "2026-11-21", -6_250)], null);
 
@@ -211,6 +333,119 @@ describe("what a block counts", () => {
     );
 
     expect(blocks[0]?.entryIds).toEqual(["pay", "second", "first"]);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Which rows the ledger treats as a cheque                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Reported from the ledger on 2026-11-21: a fortnight holding two cheques
+ * printed ONE "left from this cheque", and the figure on it was both cheques
+ * added together.
+ *
+ * The cause was the test for what opens a block - `kind === "paycheque"` -
+ * being narrower than the household's own idea of being paid. One person's
+ * pay was recorded by hand as a dated deposit, with the projection for that
+ * schedule turned off, so the engine saw an ordinary deposit, opened no
+ * block at it, and folded its whole stretch into the next cheque.
+ *
+ * These run through `computePayPeriods` rather than `chequeBlocks` directly,
+ * because that decision is made there and a test of the splitter alone would
+ * have gone on passing throughout.
+ */
+describe("a cheque recorded as a deposit", () => {
+  const ASH: PaySchedule = {
+    id: "ash",
+    ownerId: "ash",
+    anchorDate: "2026-11-12",
+    defaultCents: 200_000n,
+  };
+  const RORY: PaySchedule = {
+    id: "rory",
+    ownerId: "rory",
+    anchorDate: "2026-11-20",
+    defaultCents: 180_000n,
+  };
+
+  const events: TimelineInput[] = [
+    // Ash's pay, typed in by hand: a dated deposit, not a paycheque.
+    { id: "ash-pay", name: "Pay", cents: 211_340n, kind: "deposit", placement: "auto", date: "2026-11-26" },
+    { id: "mortgage", name: "Mortgage", cents: -118_250n, kind: "bill", placement: "auto", date: "2026-11-27" },
+    {
+      id: "rory-pay",
+      name: "Pay",
+      cents: 198_460n,
+      kind: "paycheque",
+      placement: "auto",
+      date: "2026-12-04",
+      payScheduleId: "rory",
+    },
+    { id: "savings", name: "Savings", cents: -92_500n, kind: "transfer", placement: "auto", date: "2026-12-04" },
+  ];
+
+  const periods = computePayPeriods({
+    timeline: computeTimeline({ events, startBalanceCents: 63_820n }),
+    paySchedules: [ASH, RORY],
+    today: "2026-11-21",
+    periodCount: 2,
+    anchorScheduleId: "ash",
+    // Ash's pay is entered by hand, so nothing is projected for that schedule.
+    paydaysWithoutPay: ["ash"],
+  });
+
+  it("opens a block where the pay actually arrives", () => {
+    const second = periods[1];
+    expect(second?.label).toBe("Nov 26-Dec 9");
+    expect(second?.blocks.map((block) => block.openerId)).toEqual(["ash-pay", "rory-pay"]);
+  });
+
+  it("answers for one cheque at a time, not both at once", () => {
+    const blocks = periods[1]?.blocks ?? [];
+
+    expect(blocks.map((block) => block.leftCents)).toEqual([93_090n, 105_960n]);
+    // The merged block printed this, under the second cheque, as though it
+    // were what that cheque had left.
+    expect(periods[1]?.leftCents).toBe(199_050n);
+  });
+
+  /**
+   * The schedule whose pay is turned off is still the household's cadence -
+   * the windows are laid out on it. Reading `paydaysWithoutPay` as "this is
+   * not a payday" would put the split back where it was.
+   */
+  it("counts a payday whose projection is turned off", () => {
+    expect(periods[1]?.blocks[0]?.date).toBe("2026-11-26");
+    // And no second cheque was invented for it.
+    expect(periods[1]?.inCents).toBe(409_800n);
+  });
+
+  /**
+   * The other shape the same household has used: pay entered as arriving the
+   * day after the payday, because that is when the bank shows it.
+   */
+  it("opens at pay a day late as readily as pay on the day", () => {
+    const late = events.map((event) =>
+      event.id === "ash-pay" ? { ...event, date: "2026-11-27" } : event,
+    );
+
+    const periodsLate = computePayPeriods({
+      timeline: computeTimeline({ events: late, startBalanceCents: 63_820n }),
+      paySchedules: [ASH, RORY],
+      today: "2026-11-21",
+      periodCount: 2,
+      anchorScheduleId: "ash",
+      paydaysWithoutPay: ["ash"],
+    });
+
+    expect(periodsLate[1]?.blocks.map((block) => block.openerId)).toEqual(["ash-pay", "rory-pay"]);
+    expect(periodsLate[1]?.blocks.map((block) => block.leftCents)).toEqual([93_090n, 105_960n]);
+  });
+
+  it("leaves the window that starts today opening with the balance", () => {
+    expect(periods[0]?.blocks.map((block) => block.kind)).toEqual(["balance"]);
+    expect(periods[0]?.blocks[0]?.leftCents).toBe(63_820n);
   });
 });
 

@@ -128,25 +128,38 @@ export function Ledger({
   const spy = useSectionSpy(jumpTargets, JUMP_BAR_PX + (heroGone ? pinnedHeight : 0));
 
   /*
-   * The last row whose money has already moved, which is where today is.
+   * The first row whose money has NOT moved yet, which is where today is.
    *
-   * The "Balance now" line goes under it. Found by walking the windows in
-   * order and keeping the last settled row seen, rather than by comparing
-   * dates: `settled` is the flag the engine itself acted on when it stopped
-   * counting those rows, so the line lands exactly where the balance at the
-   * top stops being history and starts being a forecast.
+   * The "Balance now" line goes above it. Found by walking the windows in
+   * order, rather than by comparing dates: `settled` is the flag the engine
+   * itself acted on when it stopped counting those rows, so the line lands
+   * exactly where the balance at the top stops being history and starts
+   * being a forecast.
+   *
+   * It was the last SETTLED row until 2026-11-21, which is the same place
+   * only while the two groups do not interleave - and they do. A bill dated
+   * last week that nobody has ticked is deliberately kept on the ledger,
+   * still to come, and it sorts above anything settled since. The line then
+   * printed the balance in the account underneath a row that had already
+   * taken a large transfer out of it, so the running column resumed below
+   * the line a long way under the figure on it. Anchoring to the
+   * first unsettled row makes that impossible: every row above the line
+   * moved nothing, so the balance on it is by construction the balance the
+   * first row below it starts from.
    *
    * Null when nothing has been ticked yet. There is then no run of repeated
    * figures to break up and no history to mark the end of, so no line.
    */
-  const balanceAfterId = useMemo(() => {
-    let last: string | null = null;
+  const balanceBeforeId = useMemo(() => {
+    let firstUnsettled: string | null = null;
+    let anySettled = false;
     for (const period of payPeriods.data?.periods ?? []) {
       for (const row of period.rows) {
-        if (row.settled) last = row.id;
+        if (row.settled) anySettled = true;
+        else if (firstUnsettled === null) firstUnsettled = row.id;
       }
     }
-    return last;
+    return anySettled ? firstUnsettled : null;
   }, [payPeriods.data]);
 
   // An opened row is a step, so Android's Back closes it rather than leaving
@@ -562,7 +575,7 @@ export function Ledger({
               >
                 <PeriodGroup
                   period={period}
-                  balanceAfterId={balanceAfterId}
+                  balanceBeforeId={balanceBeforeId}
                   balanceCents={data.balance.cents}
                   moveTargets={moveTargets}
                   accountName={accountName}
@@ -638,17 +651,17 @@ function PeriodGroup({
   onRemove,
   accountName,
   accounts,
-  balanceAfterId,
+  balanceBeforeId,
   balanceCents,
 }: {
   period: PayPeriod;
   moveTargets: readonly MoveTarget[];
   /**
-   * The row the "Balance now" line goes under: the last one whose money has
-   * already moved. Null in every window that holds no such row, which is
-   * every window but the first.
+   * The row the "Balance now" line goes above: the first one whose money has
+   * not moved yet. Null in every window that holds no such row, which is
+   * every window but the one today falls in.
    */
-  balanceAfterId: string | null;
+  balanceBeforeId: string | null;
   balanceCents: Cents;
   /** Resolves an account id to its name, for the chip on a charge. */
   accountName: (id: string | null) => string | null;
@@ -786,6 +799,26 @@ function PeriodGroup({
 
           return (
             <Fragment key={id}>
+              {/*
+                ---- Where today is ----
+
+                The rows above this have happened: the money has gone, and the
+                figure at the top already counts it. Said once, here, instead
+                of repeating the same balance down a dozen rows - which is
+                what the ledger used to do and what read as a stuck counter.
+
+                Drawn above the row rather than below one, so the figure on it
+                is the balance the first row under it starts from. Every row
+                above moved nothing, which is what makes that true rather than
+                merely usually true.
+              */}
+              {id === balanceBeforeId ? (
+                <li className="ledger__now">
+                  <span className="ledger__now-label">Balance now</span>
+                  <span className="ledger__now-amount hr-amount">{formatCents(balanceCents)}</span>
+                </li>
+              ) : null}
+
               {entry.kind === "row" ? (
                 <OccurrenceRow
                   row={entry.row}
@@ -808,21 +841,6 @@ function PeriodGroup({
                   <Amount cents={entry.cheque.cents} signed />
                 </li>
               )}
-
-              {/*
-                ---- Where today is ----
-
-                The rows above this have happened: the money has gone, and the
-                figure at the top already counts it. Said once, here, instead
-                of repeating the same balance down a dozen rows - which is
-                what the ledger used to do and what read as a stuck counter.
-              */}
-              {id === balanceAfterId ? (
-                <li className="ledger__now">
-                  <span className="ledger__now-label">Balance now</span>
-                  <span className="ledger__now-amount hr-amount">{formatCents(balanceCents)}</span>
-                </li>
-              ) : null}
 
               {/*
                 ---- What this cheque leaves ----

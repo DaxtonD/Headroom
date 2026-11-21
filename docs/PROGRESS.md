@@ -114,6 +114,123 @@ producing bills.
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
 
+## Both halves of yesterday's ledger line were wrong (2026-11-21, reported from use)
+
+> "I think there is a problem with the math Claude. Look at the screenshot. I don't think the
+> totals are correct."
+
+*(Amounts redacted throughout: the report came with a screenshot of the real account, and this
+repo is public.)*
+
+Two separate defects, both shipped the day before in `d42b395`, both visible in the one
+screenshot. Neither was an arithmetic error - every running balance on the page added up - and
+that is what made them hard to see from the code.
+
+### "Balance now" was in the wrong place
+
+The line was anchored to the **last settled row**. That is the same place as "where history
+ends" only while settled and unsettled rows do not interleave, and in this household they do:
+a transfer dated the day before, never ticked, is deliberately kept on the ledger because the
+money has not moved - and it sorts above a one-off marked paid the next morning.
+
+So the line printed the balance in the account **below** a row that had already spent a large
+part of it, and the running column resumed underneath the line a long way under the figure on
+the line itself. Read down the page, the balance appeared to drop by a four-figure sum between
+two rows with nothing between them.
+
+Now anchored to the **first unsettled row**, and drawn above it rather than below its
+predecessor. Every row above the line is then settled, every settled row moves nothing, and so
+the figure on the line is the balance the first row below it starts from *by construction* -
+not merely in the common case. A settled row that sorts later still appears below the line,
+prints nothing, and is inert, which is the honest picture of an interleaved ledger.
+
+### "Left from this cheque" was both cheques added together
+
+The second window held two cheques and printed **one** left-over line, under the last row of
+the fortnight, carrying the sum of both.
+
+The cause is in `payPeriods.ts`: a block opened only at `kind === "paycheque"`. One person's
+pay is not recorded that way - the paycheque template is archived and the money is entered by
+hand as a dated deposit, which is the arrangement `restorePaycheque.test.ts` was written about
+and which this repo already documents as supported. The engine saw an ordinary deposit, opened
+nothing at it, and `chequeBlocks` then folded the whole first cheque into the second under the
+existing rule for rows that sort ahead of their own payday. That rule is right; it was being
+handed the wrong boundaries.
+
+**The fix is a different question.** Not "is this row a paycheque", which the engine cannot
+always answer, but "has a payday gone by since this block opened, and is money arriving now".
+`computePayPeriods` collects the window's paydays from every schedule and hands them to
+`chequeBlocks`, which opens a block at the first money in after each one. That covers all three
+shapes the app allows: a paycheque row, pay typed in as a deposit on the payday, and pay typed
+in as a deposit the day after, because that is when the bank shows it. `opensBlock` survives as
+the fast path for what the engine *can* label, and is now only ever a reason to open a block,
+never a reason not to.
+
+Two rules fell out of it rather than being added:
+
+- **Paydays are collected from silenced schedules too.** `paydaysWithoutPay` answers "should a
+  cheque be projected here", which is not "is this a payday". A household entering pay by hand
+  turns the projection off and is paid on exactly the old cadence - and the windows are already
+  laid out on such a schedule, so excluding it would have the ledger split its windows on a
+  payday it refused to split its blocks on.
+- **Only paydays inside the window.** The first window also absorbs older uncleared rows, and a
+  payday back there is already inside the balance the window opens with; a block started on one
+  would leave that money out of its own total.
+
+A same-day guard went in alongside: two people paid the same Friday is one cheque-to-cheque
+stretch, not two, which is also what the spreadsheet's own selection says - it is dragged from
+the first row of that day.
+
+### What was decided without asking
+
+1. **The line is still absent when nothing has been ticked.** It could now be drawn at the very
+   top of the ledger and still be true. It would be a header for a column rather than a
+   boundary between two halves, and the hero already carries the same figure two inches above
+   it, so it stays suppressed.
+2. **A settled row below the line is left where it sorts.** Moving it above the line would make
+   the line tidy and the dates wrong. It prints nothing either way.
+3. **`openerId` is still not displayed.** Which row the engine considers the opener now varies
+   with how pay was recorded; the boundaries do not. Keeping it out of the UI means that
+   difference cannot show up on screen as a wrong name over a correct figure.
+
+### Verified
+
+- `packages/core/test/chequeBlocks.test.ts` (+10, now 31): the first money in after a payday
+  opens a block whatever it was called; pay a day late opens one; a refund mid-cheque does not;
+  pay arriving twice on one day is one block; a payday behind the opening balance does not
+  reopen it; and, at the `computePayPeriods` level, the reported arrangement end to end - one
+  cheque as a deposit with its projection off, the other a paycheque - split into two blocks
+  with the right figure on each.
+- `apps/api/test/chequeBlocks.test.ts` (+1, now 8): the same arrangement built through the API
+  against real Postgres - a paycheque template archived, a biweekly deposit template in its
+  place - asserting two cheque blocks, the bill between them inside the first, the second
+  cheque outside it, and the window still reconciling.
+- `apps/web/test/balance-now.test.ts` (+2, now 13): the line found from the first unsettled row,
+  and emitted **before** its row rather than after one - the ordering is half the claim.
+- Full suite green: 443 engine, 610 web, 578 API.
+
+### Worth knowing for next time
+
+**The API suite runs against `packages/core/dist`, not the engine source.** An engine change
+with no `pnpm -F @headroom/core build` in front of it silently tests the previous version; it
+cost twenty minutes here chasing a test that failed for the right reason against the wrong
+code. CI gets this right (it builds core before `pnpm test`), so it only bites locally.
+
+**`pnpm check:figures` cannot see a figure that arrived in a screenshot.** It reads the
+git-ignored seed, so a typed balance, a derived sum, or an amount changed since the seed was
+written all pass straight through. Three of the "invented" amounts in the first draft of these
+tests were real figures copied out of the report, and one was the real transfer amount written
+out in words inside a comment. Found by hand, as last time. The scanner is a safety net under
+the rule, never the rule.
+
+### Still to do
+
+- Nothing outstanding.
+- **For the household to check:** the savings transfer dated the day before the report is still
+  sitting unticked, so every figure on the first window counts it as money still to go out. If
+  it has in fact gone, ticking it is what brings that window back in line - nothing in the code
+  can tell the difference.
+
 ## Where today is, and what each cheque leaves (2026-11-20, reported from use)
 
 > "Look at the running total. It says at [one figure] then moves to [another] despite all of
@@ -4451,6 +4568,12 @@ somebody has lived with it.
     cheque's last row. The spreadsheet has no label for it at all - it is whatever the sum bar
     says while a selection is held - so there is no existing phrase to match. If the household
     calls it something else out loud, it should be called that.
+29. **Is the savings transfer dated the day before the report still coming, or has it gone
+    unticked?** *Asked 2026-11-21.* Nothing in the code can tell the difference, and the whole
+    of the current window's figures turn on it: unticked, the money is still to leave, so the
+    window reads as short by that amount. If it has already gone, ticking it is what puts the
+    window right. Worth asking more generally whether a dated transfer that has passed should
+    prompt for a tick rather than wait to be found.
 
 ## Blocked / needs the owner
 

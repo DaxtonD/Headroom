@@ -323,6 +323,39 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
     }
 
     /*
+     * The days somebody is due to be paid, inside this window.
+     *
+     * What they are for is splitting the window into one block per cheque,
+     * and they have to be collected here because the engine's own idea of a
+     * cheque - `kind === "paycheque"` - is narrower than the household's. On
+     * 2026-11-21 the ledger showed a fortnight holding two cheques with a
+     * single "left from this cheque" under it, carrying both cheques' money,
+     * because one person's pay is recorded by hand as a dated deposit. A
+     * number under one cheque's rows that counts another cheque's is worse
+     * than no number at all.
+     *
+     * Deliberately including a schedule whose pay has been turned off. That
+     * flag answers "should a cheque be projected for this payday", which is
+     * not the same question as "is this a payday": the household that enters
+     * pay by hand switches the projection off and is still paid on exactly
+     * the old cadence. The windows themselves are already laid out on such a
+     * schedule - `anchorSchedule` above does not consult `silenced` either -
+     * so leaving it out here would have the ledger split its windows on a
+     * payday it refused to split its blocks on.
+     *
+     * Only paydays inside the window. The first window also absorbs older
+     * rows that have not cleared (see `belongsTo`), and a payday back there
+     * has already been counted by the balance the window opens with, so a
+     * block started on one would leave that money out of its own total.
+     */
+    const paydayDates: PlainDate[] = [];
+    for (const schedule of paySchedules) {
+      for (const payday of paydaysBetween(schedule.anchorDate, window.start, window.end)) {
+        if (!paydayDates.includes(payday)) paydayDates.push(payday);
+      }
+    }
+
+    /*
      * What each cheque in this window leaves behind.
      *
      * The opening balance is handed over only for the window that starts
@@ -336,11 +369,14 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
           id: row.event.id,
           date: row.effectiveDate,
           deltaCents: row.deltaCents,
-          opensBlock: row.event.kind === "paycheque" && row.event.settled !== true,
+          // What this engine can label for itself. Pay it cannot - a deposit
+          // typed in by hand - is found by `paydayDates` instead.
+          opensBlock: row.event.kind === "paycheque",
         })),
         ...projectedEntries,
       ],
       window.isCurrentPartial ? { cents: timeline.startBalanceCents } : null,
+      paydayDates,
     );
 
     const lowest = lowestInWindow(rows);
