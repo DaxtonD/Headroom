@@ -37,8 +37,11 @@ const dock = rule(budgetCss, ".budget__chart-dock");
 
 describe("the dock", () => {
   it("wraps the ring, and only the ring", () => {
-    expect(budgetTsx).toContain('<div className="budget__chart-dock">');
-    const at = budgetTsx.indexOf('<div className="budget__chart-dock">');
+    // The opening tag carries a ref as well now - the ring measures the dock
+    // to know how much of the screen it is covering when it scrolls a row
+    // into view - so this looks for the class rather than the whole tag.
+    const at = budgetTsx.indexOf('className="budget__chart-dock"');
+    expect(at, "no dock in Budget.tsx").toBeGreaterThan(-1);
     const inner = budgetTsx.slice(at, budgetTsx.indexOf("</div>", at));
     expect(inner).toContain("<BudgetDonut");
     // Not the list as well: the list is the thing that has to scroll.

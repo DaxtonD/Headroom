@@ -18,10 +18,12 @@
  */
 import { formatCents } from "@headroom/core";
 import type { Cents } from "@headroom/core";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { BudgetDonut } from "../components/BudgetDonut.js";
 import { Thumb } from "../components/Thumb.js";
 import { ringFor, slotOf, type DonutDatum } from "../lib/donut.js";
+import { useHeaderHeight } from "../lib/pinnedHeader.js";
+import { revealElement } from "../lib/reveal.js";
 import { useBudget, type BudgetLine, type BudgetSection } from "../lib/plannerQueries.js";
 import "./Budget.css";
 
@@ -181,6 +183,63 @@ export function Budget(): React.JSX.Element {
     /** Which ring is open: null for the whole section, or the folded wedge. */
     const [drillId, setDrillId] = useState<string | null>(null);
 
+    /*
+     * ---- Bringing a tapped wedge's row into view ----
+     *
+     * Asked for 2026-11-21: "when a pie is selected, scroll the matching item
+     * into view." Half the answer to tapping a wedge is the figures in the
+     * middle of the ring; the other half is the row in the list, with the
+     * name, the amount and the share. On a section with a dozen lines that
+     * half was usually off the bottom of the screen.
+     *
+     * The section and the dock are refs because the arithmetic needs two
+     * measurements: where the row is, and how much of the top of the screen
+     * the header and the pinned chart are sitting over. The rows themselves
+     * are found by `data-line`, which is cheaper than a ref per line and is
+     * what `querySelector` wants anyway.
+     */
+    const headerPx = useHeaderHeight();
+    const sectionRef = useRef<HTMLElement | null>(null);
+    const dockRef = useRef<HTMLDivElement | null>(null);
+
+    /**
+     * Choose a line from the ring, and show the row it belongs to.
+     *
+     * From the ring only. Pressing a row has the row in front of you already,
+     * and scrolling then would take it out from under the finger that pressed
+     * it - so the list's own buttons go on calling `setChosenId` directly.
+     */
+    const chooseFromRing = (id: string | null): void => {
+      setChosenId(id);
+      if (id === null) return;
+
+      // After the paint that highlights it, so the rect is of where the row
+      // actually ends up rather than where it was.
+      requestAnimationFrame(() => {
+        const row = sectionRef.current?.querySelector<HTMLElement>(
+          `[data-line="${CSS.escape(id)}"]`,
+        );
+        if (row) revealElement(row, headerPx + (dockRef.current?.offsetHeight ?? 0));
+      });
+    };
+
+    /**
+     * Open or close a folded wedge, and keep its section on screen.
+     *
+     * Opening "everything else" replaces a dozen rows with three, which can
+     * leave the whole section - the ring included - above the top of the
+     * screen with nothing on it to say what happened. `revealElement` does
+     * nothing when the section's head is already in view, which is most of
+     * the time.
+     */
+    const openRing = (id: string | null): void => {
+      setDrillId(id);
+      setChosenId(null);
+      requestAnimationFrame(() => {
+        if (sectionRef.current) revealElement(sectionRef.current, headerPx);
+      });
+    };
+
     const keyOf = (line: BudgetLine): string => line.id ?? line.name;
 
     const donutData = useMemo<DonutDatum[]>(
@@ -212,7 +271,7 @@ export function Budget(): React.JSX.Element {
       openIds === null ? section.lines : section.lines.filter((line) => openIds.has(keyOf(line)));
 
     return (
-      <section className="hr-card budget__section">
+      <section className="hr-card budget__section" ref={sectionRef}>
         <header className="budget__section-head">
           <h2 className="budget__section-title">{title}</h2>
           <span className="hr-amount budget__section-total">{formatCents(total)}</span>
@@ -226,15 +285,15 @@ export function Budget(): React.JSX.Element {
           out past its own box, and a sticky element with a background has to
           be the opaque rectangle, not the drawing inside it.
         */}
-        <div className="budget__chart-dock">
+        <div className="budget__chart-dock" ref={dockRef}>
           <BudgetDonut
             title={title}
             data={donutData}
             total={total}
             selectedId={chosenId}
-            onSelect={setChosenId}
+            onSelect={chooseFromRing}
             drillId={drillId}
-            onDrill={setDrillId}
+            onDrill={openRing}
           />
         </div>
 
@@ -248,7 +307,8 @@ export function Budget(): React.JSX.Element {
               const chosen = chosenId === id;
 
               return (
-                <li className="budget__line" key={id}>
+                /* `data-line` is how the ring finds this row to scroll to. */
+                <li className="budget__line" key={id} data-line={id}>
                   {/*
                     A real button, and the reason the wedges do not have to be
                     one: a 1.6% wedge is a few pixels of arc, and this is the

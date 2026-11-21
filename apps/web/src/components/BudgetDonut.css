@@ -51,12 +51,18 @@
 
 .donut__slice {
   /*
-   * A 2px gap in the surface colour between fills, so two wedges of similar
-   * hue still read as two. The stroke is the card rather than a line colour:
-   * it is a gap, not a border.
+   * A gap in the surface colour between fills, so two wedges of similar hue
+   * still read as two. The stroke is the card rather than a line colour: it
+   * is a gap, not a border.
+   *
+   * The WIDTH is set per wedge, in the component, and is deliberately not
+   * here. 2px is what the ring wants and what nearly every wedge gets, but a
+   * thin wedge is only a few units across at its inner radius and a stroke
+   * is centred on the path it follows - so on those the gap was covering most
+   * of the fill it was meant to be separating. `gapFor` in `donut.ts` works
+   * out what each wedge can spare.
    */
   stroke: var(--hr-card);
-  stroke-width: 2;
   stroke-linejoin: round;
   cursor: pointer;
   transition: opacity 180ms ease-out;
@@ -73,9 +79,13 @@
   }
 }
 
+/*
+ * The chosen wedge is outlined in ink rather than in the surface colour - and
+ * it lifts, grows, and is painted last so that nothing is over it. Its width
+ * comes from the component with everything else's; see above.
+ */
 .donut__slice--chosen {
   stroke: var(--hr-ink);
-  stroke-width: 1.5;
 }
 
 .donut__centre {

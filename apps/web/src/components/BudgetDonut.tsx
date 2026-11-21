@@ -35,7 +35,9 @@ import { formatCents, type Cents } from "@headroom/core";
 import {
   arcPath,
   buildSlices,
+  gapFor,
   liftOf,
+  paintOrder,
   ringFor,
   sharePctOf,
   tweenSlices,
@@ -55,6 +57,23 @@ const OUTER = 92;
 const INNER = 50;
 /** How far the chosen wedge lifts out of the ring. */
 const LIFT = 7;
+/**
+ * How much further out the chosen wedge reaches than the rest of the ring.
+ *
+ * Asked for 2026-11-21, of the thin wedges: "maybe zoom it a bit more?" The
+ * lift alone moves a five-pixel sliver five pixels and leaves it a sliver.
+ * Growing it outward as well gives it something to be seen as.
+ *
+ * Outward only, which is not a detail: a sector is narrowest at its inner
+ * radius, so pulling that radius in would make the thin end of a thin wedge
+ * thinner still. The angle - the only part of this that is data - never
+ * changes.
+ */
+const GROW = 7;
+/** The gap between two wedges, where the wedges can afford it. */
+const GAP = 2;
+/** The chosen wedge's outline, where it can afford it. */
+const CHOSEN_STROKE = 1.5;
 /** Long enough to follow, short enough not to be in the way. */
 const MORPH_MS = 420;
 
@@ -192,13 +211,18 @@ export function BudgetDonut({
           aria-hidden="true"
           focusable="false"
         >
-          {shown.map((slice) => {
+          {/*
+            Painted in the ring's own order except for the chosen wedge, which
+            goes last: svg has no z-index, and a lifted wedge drawn early
+            comes out from under the ring underneath its own neighbours.
+          */}
+          {paintOrder(shown, selectedId).map((slice) => {
             const isChosen = slice.id === selectedId;
             const lift = isChosen ? liftOf(slice, LIFT) : { x: 0, y: 0 };
             const path = arcPath({
               cx: CENTRE,
               cy: CENTRE,
-              outer: OUTER,
+              outer: isChosen ? OUTER + GROW : OUTER,
               inner: INNER,
               start: slice.start,
               end: slice.end,
@@ -214,7 +238,17 @@ export function BudgetDonut({
                 <path
                   d={path}
                   className={`donut__slice${isChosen ? " donut__slice--chosen" : ""}`}
-                  style={{ fill: `var(--hr-series-${slice.slot + 1})` }}
+                  style={{
+                    fill: `var(--hr-series-${slice.slot + 1})`,
+                    /*
+                      The gap between wedges and the chosen wedge's outline
+                      are the same stroke, and both have to fit inside the
+                      wedge they are drawn on. `gapFor` says what this one can
+                      spare; the colour stays in the stylesheet, where the
+                      theme is.
+                    */
+                    strokeWidth: gapFor(slice, INNER, isChosen ? CHOSEN_STROKE : GAP).toFixed(2),
+                  }}
                   onClick={() => {
                     if (slice.members.length > 0) {
                       onDrill(slice.id);

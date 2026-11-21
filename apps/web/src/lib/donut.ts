@@ -284,3 +284,64 @@ export function slotOf(slices: readonly DonutSlice[], id: string): number | null
   const folded = slices.find((slice) => slice.members.some((member) => member.id === id));
   return folded ? folded.slot : null;
 }
+
+/**
+ * How wide a gap one wedge can afford between itself and its neighbour.
+ *
+ * The 2px gap in the surface colour is what keeps two wedges of similar hue
+ * reading as two, and for most of the ring it costs nothing. On a thin wedge
+ * it is the whole wedge: the stroke is centred on the path, so it eats half
+ * its width inward from each of the two radial edges, and a 1.6% wedge is
+ * about five units across at the inner radius. Two units of stroke then
+ * covers two fifths of the only fill there was. That is what was reported -
+ * "small slices look like they're behind the other slices, and the thick
+ * white border is more than the slice" - and the fill was never behind
+ * anything. It was underneath its own gap.
+ *
+ * So the gap is a quarter of the wedge's narrowest crossing, capped at the
+ * full width it would otherwise have. Three quarters of the mark survives at
+ * every size, which is the one promise worth making here: a gap exists to
+ * separate two marks and must never become more of the mark than the fill is.
+ *
+ * Measured at the INNER radius because that is where a sector is narrowest.
+ */
+export function gapFor(
+  slice: Pick<DonutSlice, "start" | "end">,
+  inner: number,
+  max: number,
+): number {
+  const narrowest = (slice.end - slice.start) * inner;
+  if (narrowest <= 0) return 0;
+
+  const affordable = narrowest / 4;
+  return affordable >= max ? max : affordable;
+}
+
+/**
+ * The wedges in the order they should be painted, chosen one last.
+ *
+ * SVG has no z-index: the last sibling wins. The ring is built largest first,
+ * so the thin wedges at the end of it are already on top of everything - but
+ * the chosen wedge lifts out of the ring and grows past it, and a chosen
+ * wedge painted early does both of those things UNDERNEATH its smaller
+ * neighbours. Moving it to the end is the whole fix, and it leaves the order
+ * of every other wedge alone so nothing else changes depth as the selection
+ * moves.
+ *
+ * The slices keep their ids, so React moves the existing nodes rather than
+ * rebuilding them and the lift goes on animating through the reorder.
+ */
+export function paintOrder(
+  slices: readonly DonutSlice[],
+  chosenId: string | null,
+): DonutSlice[] {
+  const ordered = [...slices];
+  if (chosenId === null) return ordered;
+
+  const at = ordered.findIndex((slice) => slice.id === chosenId);
+  if (at < 0) return ordered;
+
+  const [chosen] = ordered.splice(at, 1);
+  if (chosen) ordered.push(chosen);
+  return ordered;
+}
