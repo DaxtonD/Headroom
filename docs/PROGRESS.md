@@ -42,6 +42,10 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | An expense that comes out once a year | done | | 2026-11-19, asked for from use. "Every year, on a date" on the expense form, for annual insurance and the yearly subscriptions. The whole amount lands on the ledger on its real date; the Budget page counts a twelfth of it a month, which it has always known how to do |
 | Which account a row moves between | done | | 2026-11-19, reported from use. The ledger row can say which account this one came out of and whether it pays into another; the one-off sheet sends a destination for savings as well as for a card; a scheduled expense can be a transfer at all. A transfer with nowhere to land is now refused by the API |
 | A picture beside a name | done | | 2026-11-19, at the owner's request. Expenses, accounts and budget-only categories; crop and zoom on the phone; bytes in Postgres so they are inside the existing backup. Cannot affect a figure - the engine does not know the table exists |
+| A thin wedge is a wedge | done | | 2026-11-21, reported from use. A small slice was mostly its own gap: the 2px stroke is centred on the path and a 1.6% wedge is five units across. The gap is now a quarter of each wedge's narrowest crossing, the chosen wedge is painted last and grows outward, and tapping one scrolls its row into view |
+| A compact ledger | done | | 2026-11-21, asked for from use. The same row squeezed to 44px - a stylesheet, not a second row component - keeping every figure and the date, losing the badge and two lines of chips. Toggled from the app header, where "Hi <name>" was |
+| Preferences stored against the person | done | | 2026-11-21, asked for from use: a browser that gets cleared daily took the theme, the text size and the density with it. On the server now and loaded at sign-in; the device keeps a copy for the pre-paint script. The one route in this app with no If-Match and no idempotency key, reasoned beside it |
+| A tab shows something the moment it is pressed | done | | 2026-11-21, reported from use. The query cache was emptied five minutes after a screen was left, nothing warmed the tabs, and five screens waited against an empty div. In memory only - no figure is written to a phone |
 
 ## Last session
 
@@ -113,6 +117,212 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## Three things from a day's use (2026-11-21, asked for and reported from use)
+
+The pie charts, a compact ledger, and tabs that felt stuck. One of the three turned out to
+need the database.
+
+### Small slices were underneath their own gap
+
+Reported: "small slices don't appear well. They look like they're behind the other slices, and
+the thick white border is more than the slice. Can we make sure they're brought to the front?
+Maybe zoom it a bit more?"
+
+Both halves of that were right, and the first one is not a drawing-order problem at all. The
+ring is built largest first, so the thin wedges at the end of it are already painted last and
+already on top of everything. What was covering them was **their own gap**: the 2px stroke in
+the card colour that separates one fill from the next is centred on the path it follows, so it
+eats a unit inward from each of the two radial edges - and a 1.6% wedge is about five units
+across at its inner radius. Two of those five were border.
+
+`gapFor` now gives each wedge a quarter of its narrowest crossing, capped at the 2 the ring
+wants. Three quarters of the fill survives at every size, and nothing above about two and a
+half per cent of the turn changes at all. The threshold is arithmetic rather than a taste: a
+quarter of the crossing reaches 2 when the crossing reaches 8 units, which at an inner radius
+of 50 is a sweep of 0.16 radians.
+
+There *was* one real depth bug, and it is the one the report was describing the other way
+round. The chosen wedge lifts out of the ring, and now grows outward past it as well - and svg
+has no z-index, so a chosen wedge painted in rank order did both of those **underneath** its
+smaller neighbours. `paintOrder` moves the chosen one to the end and leaves every other wedge
+where it was.
+
+The grow is outward only, which is not a detail. A sector is narrowest at its inner radius, so
+pulling that radius in would make a thin wedge's thin end thinner - the opposite of the point.
+**No angle changes anywhere.** The angle is the only part of a pie chart that is data.
+
+### Tapping a wedge now shows its row
+
+Asked for: "when a pie is selected, scroll the matching item into view."
+
+Half the answer to tapping a wedge is the figures in the middle of the ring; the other half is
+the row in the list, with the name, the amount and the share. On a section with a dozen lines
+the second half was usually off the bottom of the screen.
+
+`revealTopFor` is a pure function and the reason it is one is the null it returns. A row that
+is already on screen must not move: the ring is pinned above the list and the list is operated
+by tapping it, so a page that re-centres on every tap takes the row out from under the finger
+using it. Three cases, and the third is the one that makes it honest - an element taller than
+the free strip of screen, with its start already visible, is left exactly where it is.
+Otherwise opening a folded wedge would scroll on every tap.
+
+Only from the ring. The list's own buttons go on setting the selection and nothing else.
+
+### A compact ledger, as a stylesheet
+
+Asked for: "I like the current UI. She might appreciate seeing more at a glance, like her
+spreadsheet. This view needs to make more appear on the screen, so we'll need to make some
+sacrifices on what and how things are displayed. We probably lose the badge and the chips might
+need to be removed or abbreviated." Offered a four-column table, the answer was "one column
+like it is now. We just compact the rows."
+
+So it is the same row, squeezed - a stylesheet keyed off `data-density` on `<html>`, not a
+second row component. That choice is the whole of the design risk here. A compact row written
+separately would be two components to keep in step on every future change to a row, with no
+symptom until they disagreed, and the first thing to drift between them would be the money.
+
+**Given up:** the paid/verified badge, the second line of chips (One-off, which card), the line
+saying whose bill it is, and the first of the two chips on the top line - "Received" or "Paid",
+which a settled row already says by being dimmed and by printing no running balance. The name
+takes one line with an ellipsis instead of two.
+
+**Kept:** every figure, untouched. The amount, the running balance, the per-cheque left-over,
+the window subtotals and the prose note under them. A denser view that showed fewer numbers
+would be a different ledger rather than a tighter one. Kept as well: the date and the kind of
+row, as the one chip left on the line, because "is this flexible" is the household's main lever
+on a tight week.
+
+**Hidden, not removed.** Everything dropped is hidden visually - the same treatment
+`.hr-visually-hidden` uses - and stays in the accessibility tree. The badges carry `role="img"`
+and a real label; the chips are text. A screen reader is told exactly the same thing in both
+views, which is what makes compact a way of looking at the ledger rather than a second one.
+
+**44px, and not a pixel under.** The brief's floor for anything a thumb has to hit, and the
+whole row is the tap target. A comfortable row runs 76-102px depending on what it carries, so
+this is still about twice as many rows on a screen. An expanded row goes back to being roomy:
+the panel is where an amount is typed and a conflict resolved, and none of that is improved by
+being 20% smaller.
+
+The hero, the cards and the coverage warning are deliberately untouched - "I like the current
+UI", and those three are the instant answer the top of the screen exists for.
+
+#### The toggle is in the header
+
+Asked for mid-session: move the compact view button to the app header, and remove the greeting
+line that was beside it. Done, and the greeting is gone. It is a way of looking at the screen
+you are already on, so it belongs where you can see what it does to it; Settings would have
+meant leaving the ledger to change how the ledger looks and coming back to find out.
+
+The glyph draws the density it is showing - three rows or five - because the one thing a
+density toggle must not be is a mystery icon that rearranges the screen. Drawn here rather
+than taken from Lucide, which is the opposite of the decision made for the gear beside it and
+for the opposite reason: a gear is a shape everybody recognises and there is nothing to gain
+from having our own slightly wrong one, whereas this is not a standard icon at all. The number
+of lines in it is the content, not the styling.
+
+### How the app looks is stored against the person now
+
+Asked for in the same breath as the toggle, and it is the part that needed a migration: one of
+the two clears their browser every day, so a choice kept only in the browser had to be made
+again every morning. "I'd like to store the user preferences in the server and load on login.
+Then we don't lose the theme, font size or view settings."
+
+The theme and the text size have been in `localStorage` since they were built, on the reasoning
+that they are per-eye and per-screen rather than household facts. That reasoning still holds
+for *which device* they apply to. What it got wrong is durability: `localStorage` is per
+browser, and a browser that gets cleared takes all of it.
+
+`user_preference` is one row per person - theme, the text size step's **name**, and the
+density. Per user rather than per household, because two people share the money and not their
+eyes.
+
+**Two representations of the text size, on purpose.** The device stores the multiplier, because
+`index.html` applies it before the first paint and a name there would mean that inline script
+carrying its own copy of the table. The server stores the step's name, because a multiplier is
+a float and nothing in this repository stores a float if a name will do. `TEXT_SIZES` is the
+only source of either, and a test round-trips every step.
+
+**`preferences: null` is not the defaults, and that difference is load-bearing.** The server
+answers null for somebody who has never chosen, and the device then sends up whatever it
+already had. Without it, the first load after this shipped would have reset a phone set to
+Night at the smallest size back to Daylight at the largest - the exact failure the feature
+exists to prevent. The server wins on arrival, the device wins on every change after that; two
+devices disagreeing resolves to last-one-wins, which is the only honest answer when each of
+them did choose.
+
+**The server validates a shape, not a list of names.** A short lowercase token, at most 16
+characters. The themes, the sizes and the densities are tables in `appearance.ts`, which
+already ignores a value it does not recognise. A second list on the server would be a copy that
+lags behind the first new theme, and the symptom would be the server refusing a choice the app
+offers. An unrecognised value falls back to **what the device already has** rather than to the
+global default, so a phone that has not updated yet is not punished for being behind.
+
+**One frame of the wrong theme survives**, on a browser that was cleared: `index.html` finds
+nothing in `localStorage`, applies Daylight, and the session lands a moment later with the real
+answer. That is the cost of keeping no figures on the device and it is one frame. The density
+has no such frame - it is applied in `main.tsx` before React renders, because the ledger does
+not exist until React builds it.
+
+#### The one mutation with no version and no idempotency key
+
+Recorded deliberately, because somebody applying `CLAUDE.md`'s rule by rote would make this
+worse rather than better.
+
+Every other write in this app refuses without `If-Match` and `Idempotency-Key`. Those rules
+exist so two people editing the same money fact cannot silently overwrite each other, and so a
+change that lost a race says so instead of vanishing. This row holds no money and has exactly
+one writer by construction: your own display settings, which only you can sign in as and which
+the other person is never shown. There is no race to detect, and a 409 on a theme would be a
+question nobody could answer - the honest resolution of "this phone just chose Night" against
+"that phone just chose Slate" is that each of them did, last one wins, and both are right. It
+needs no idempotency key for the plainer reason that setting a value *is* idempotent.
+
+`push_subscription` is the existing precedent: a per-person device fact written with a plain
+upsert, no version, no activity entry and no change ping. No ping here either - a ping makes
+every mounted query on the other phone refetch, and nothing about how this screen looks is any
+of its business. Nothing goes in the activity log either; two people's theme-fiddling would
+bury what the log is for.
+
+`apps/api/test/preferences.test.ts` asserts the route works with **neither** header, so the
+deviation is held rather than left to be "fixed".
+
+### Tabs that felt stuck
+
+Reported: "we might need to revisit the cache idea. Often, when I click on a tab the UI gets
+stuck... like it's waiting for the data to load before it's displayed."
+
+It was. Every screen here gates its first render on `isPending`, which is right - a budget page
+drawn before the budget has arrived is a page of zeroes, and a confident wrong number about
+money is worse than an honest wait. So the fix is in how often that wait happens and what it
+looks like when it does. Three causes:
+
+1. **The cache outlived nothing.** TanStack throws a query's data away five minutes after the
+   last screen using it unmounts. Every revisit after that was a cold fetch against a blank
+   page, which on a phone is most revisits. `gcTime` is now `Infinity`, which is in memory
+   only. It is not a licence to show old numbers: `staleTime` is still 30 seconds, a ping from
+   the other phone still invalidates, coming back to the app still refetches everything, and
+   `queryClient.clear()` on sign-out still takes the lot. What changed is only whether there is
+   something on screen **while** that happens. The two reads whose keys carry a typed number -
+   a savings what-if, a different number of months - keep a five-minute lifetime of their own,
+   because otherwise a number being typed into a box piles up a key per keystroke.
+2. **Nothing warmed the tabs.** The first visit of a session has nothing cached however long
+   the cache lives, because nothing has ever asked. The four tab screens are now fetched once
+   while the browser is idle - after the ledger, never in front of it, not at all while offline
+   or signed out, and through `prefetchQuery`, which leaves a fresh entry alone and never
+   throws. This is what the five reads being split into `queryOptions` is for.
+3. **A wait looked like a fault.** An empty page and a broken page are the same page. The five
+   screens that returned an empty `<div>` now show the bones of what is coming. No placeholder
+   figure anywhere in it, not even a greyed-out one: a number nobody has fetched is a lie in
+   the one place this app cannot afford one, and a block cannot be misread as an amount.
+
+**Asked before changing it, because the cold open needed a decision rather than a default.**
+Painting the last figures on a cold start means writing them to the phone, which the household
+turned down on 2026-11-14. Offered both, the answer was "memory only, for now". So a cold open
+still waits for the server - against a skeleton rather than a blank screen - and nothing of
+theirs is on the device. `apps/web/test/waiting.test.ts` asserts that too: no persister, no
+`localStorage`, no IndexedDB, in case a later session fixes the same symptom the other way
+without noticing that it is a decision.
 
 ## A row with no way to remove it (2026-11-21, reported from use)
 
@@ -4418,6 +4628,58 @@ the repository as public" still holds, and it is.
 
 ## Decisions made without asking
 
+- 2026-11-21: **The preferences route takes neither `If-Match` nor an `Idempotency-Key`**, which
+  is the only place in this app that is true and which contradicts the `CLAUDE.md`
+  non-negotiable as written. The reasoning, in full, is in "The one mutation with no version and
+  no idempotency key" above; the short version is that the row holds no money, has one writer by
+  construction, and a 409 on a theme is a question nobody could answer. `push_subscription` is
+  the existing precedent for a per-person device fact written the plain way. The route's
+  behaviour is held by a test so it cannot be quietly "fixed" either way.
+
+  **`CLAUDE.md` still states the rule without the exception, and needs one line adding to it.**
+  I tried to narrow that bullet to "every **money** mutation" with a pointer to here, and the
+  edit was refused - correctly: rewriting the file that holds the working rules is not something
+  to do unasked, however small and however well-meant the change. So it is **a question for the
+  owner** rather than a decision made: the shipped code and that bullet disagree, and the risk is
+  a later session reading the bullet, "fixing" this route by rote, and making it worse. The test
+  is what stops that silently happening; the line in `CLAUDE.md` is what would stop it being
+  attempted.
+- 2026-11-21: **Compact is a stylesheet, not a second row component.** A separate compact row
+  would be two components to keep in step on every future change to a row, with no symptom until
+  they disagreed - and the first thing to drift between them would be the money. The cost of the
+  choice is that the compact view can only hide and resize what the comfortable one renders; it
+  cannot rearrange the markup. That turned out to be exactly what was asked for anyway ("one
+  column like it is now").
+- 2026-11-21: **The compact view hides visually and never with `display: none`**, so the badge
+  and both chip lines stay in the accessibility tree. A screen reader hears the same ledger in
+  both views. Held by a test, because the shorter wrong version is invisible on screen.
+- 2026-11-21: **Compact keeps every figure, including the prose note under each window's
+  subtotal.** It was tempting to drop that note - four windows of it is the single biggest block
+  of height on the screen - but it carries the lowest balance inside the window, which is a
+  figure. Tightened instead.
+- 2026-11-21: **The density toggle applies to the ledger only.** `data-density` is on `<html>`
+  and every rule is scoped to `.ledger`, held by a test that checks the selector of every compact
+  rule. The request was for a compact ledger; making Manage and Budget denser at the same time
+  would be answering a question nobody asked, and each of those screens has its own reasons for
+  the space it uses.
+- 2026-11-21: **An unrecognised stored preference falls back to the device, except for the text
+  size, which falls back to the default.** The asymmetry is deliberate. A theme or a density this
+  build has never heard of means the other phone updated first, and leaving this one looking as
+  it already did is the only answer that does not punish it for being behind. A text SIZE is the
+  one of the three that can leave the app unusable, so an unknown one goes to a size that has a
+  button, which is the rule `readAppearance` has always followed.
+- 2026-11-21: **`gcTime: Infinity` rather than a long finite lifetime.** An hour would have
+  covered the reported case and would have failed the one after it - the app is opened several
+  times a day with gaps of hours, and a cache that expires between two of those opens is the same
+  blank screen a few hours later. In memory, cleared on sign-out, and gone on reload. The two
+  reads whose keys carry a typed number set their own five minutes, because those keys multiply
+  with what is typed into them and none of them answers a question twice.
+- 2026-11-21: **The tabs are warmed without being asked about it.** Five GETs, on idle, against
+  a server on the same network, of the household's own data, by somebody already signed in. It
+  felt worth a moment's thought because it is the app doing something nobody asked for - but it
+  is strictly less work than the alternative, which was the same five requests a moment later
+  with somebody waiting on them.
+
 - ~~2026-11-19: **A row with no picture draws nothing** - no placeholder and no grey initial.~~
   **Reversed by the owner the same day, on sight:** "to ensure visual continuity on the ledger,
   items with no image should still show the image placeholder. Perhaps with the first letter of
@@ -4664,6 +4926,34 @@ somebody has lived with it.
     same amount on the same cadence, would have caught this one; it would also fire on two
     genuinely separate payments to the same place, which is a real arrangement. Worth deciding
     only if it happens again.
+31. **Does the compact ledger give up the right things?** *Built:* the badge, the second chip
+    line, the owner line and the Received/Paid chip go; the date, the kind of row and every
+    figure stay. Those four were chosen because each is said somewhere else on the row already -
+    paid is said by the dimming and by the missing running balance, which card it went on is in
+    the expanded row - but "said somewhere else" is a judgement about reading a screen at a
+    glance, and the person this view is for is the one who can settle it. The obvious next
+    candidates if it is still not dense enough: the picture, and the prose note under each
+    window's subtotal.
+32. **Should the compact view be the default for a new device?** *Built:* no. Comfortable is
+    what the app was designed around and what a person who has never chosen gets. If the denser
+    one turns out to be what both of them use, the default is one line.
+33. **Should anything else get a density of its own?** *Built:* nothing - `data-density` is on
+    `<html>` but every rule is scoped to the ledger. Manage and the Budget list are the other
+    two long lists in the app. Nobody has asked, and each has its own reasons for the space it
+    uses.
+34. **Is one frame of the wrong theme worth fixing?** A browser that has just been cleared finds
+    nothing in `localStorage`, so `index.html` applies Daylight at the largest size and the real
+    answer arrives a moment later with the session. On the phone this matters for - cleared every
+    day - that is a visible flicker every morning. Fixing it properly means the server rendering
+    the theme into the page, which is a real change to how the app is served and to the
+    Content-Security-Policy that hashes it. Worth asking whether the flicker is actually
+    noticeable before building that.
+35. **Should a cold open paint the last figures?** *Asked 2026-11-21 and answered "memory only,
+    for now",* which is where it stands: a cold open waits for the server against a skeleton. The
+    only way to make it instant is to write the figures to the phone, which was turned down on
+    2026-11-14 for a reason that has not changed. Recorded here because the answer included "for
+    now", and because the next person to notice the cold open will reach for the same fix without
+    knowing it is a decision.
 
 ## Blocked / needs the owner
 
