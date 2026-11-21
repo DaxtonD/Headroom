@@ -28,6 +28,7 @@ import { Link } from "react-router";
 import { Amount, InitialBubble } from "../components/Badges.js";
 import { BankedHoursForm } from "../components/BankedHoursForm.js";
 import { GoalForm } from "../components/GoalForm.js";
+import { Loading } from "../components/Loading.js";
 import { LumpSumForm } from "../components/LumpSumForm.js";
 import { MortgageForm } from "../components/MortgageForm.js";
 import { ReimbursementForm } from "../components/ReimbursementForm.js";
@@ -101,11 +102,7 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const [showEntries, setShowEntries] = useState(false);
 
   if (savings.isPending) {
-    return (
-      <div className="savings" aria-busy="true">
-        <p className="hr-visually-hidden">Loading savings</p>
-      </div>
-    );
+    return <Loading className="savings" label="Loading savings" cards={2} />;
   }
 
   if (savings.isError || !savings.data) {

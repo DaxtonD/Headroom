@@ -26,6 +26,7 @@ import { Year } from "./pages/Year.js";
 import { useAppearanceSync } from "./lib/preferences.js";
 import { useLogout, useSession } from "./lib/session.js";
 import { useLiveUpdates } from "./lib/useLiveUpdates.js";
+import { useWarmTabs } from "./lib/warmTabs.js";
 import { Login } from "./pages/Login.js";
 import "./styles/app.css";
 
@@ -63,6 +64,13 @@ export function App(): React.JSX.Element {
    * copies of it would race each other to send the same thing twice.
    */
   useAppearanceSync(Boolean(session.data));
+
+  /*
+   * Fetch the other four tabs while nothing is happening, so pressing one is
+   * not a blank screen waiting on a request. `warmTabs.ts` has the whole of
+   * the reasoning, including why it waits for the ledger first.
+   */
+  useWarmTabs(Boolean(session.data));
 
   if (session.isPending) {
     return (

@@ -31,6 +31,7 @@ import { BillForm } from "../components/BillForm.js";
 import { CategoryForm } from "../components/CategoryForm.js";
 import { GoalForm } from "../components/GoalForm.js";
 import { ImagePicker } from "../components/ImagePicker.js";
+import { Loading } from "../components/Loading.js";
 import { Thumb } from "../components/Thumb.js";
 import { PaydayForm } from "../components/PaydayForm.js";
 import { ApiError, OfflineError } from "../lib/api.js";
@@ -121,11 +122,8 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   const spy = useSectionSpy(targets);
 
   if (setup.isPending || bills.isPending) {
-    return (
-      <div className="manage" aria-busy="true">
-        <p className="hr-visually-hidden">Loading</p>
-      </div>
-    );
+    // No hero on this screen, so no hero in its bones either.
+    return <Loading className="manage" label="Loading the household's setup" hero={false} cards={4} />;
   }
 
   if (setup.isError || !setup.data || bills.isError || !bills.data) {

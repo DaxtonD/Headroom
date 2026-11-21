@@ -22,10 +22,16 @@ const yearTsx = source("src/pages/Year.tsx");
 const yearCss = source("src/pages/Year.css");
 const queries = source("src/lib/plannerQueries.ts");
 
-/** The body of the `useYear` query function. */
+/**
+ * The body of the year query's own function.
+ *
+ * `yearOptions`, not `useYear`: the read was split into options and a hook so
+ * the tabs can be prefetched (`warmTabs.ts`), and the parsing - which is what
+ * these checks are about - went with the options.
+ */
 const useYear = queries.slice(
-  queries.indexOf("export function useYear("),
-  queries.indexOf("export function useYear(") + 4000,
+  queries.indexOf("export function yearOptions("),
+  queries.indexOf("export function yearOptions(") + 4000,
 );
 
 function rule(css: string, selector: string): string {

@@ -4,7 +4,7 @@
  * This is where expenses, paydays, goals, what you own and owe, and the
  * settings that change every calculation are entered and maintained.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Cents } from "@headroom/core";
 import { api, newIdempotencyKey } from "./api.js";
 import { budgetKey, goalsKey, netWorthKey, yearKey } from "./plannerQueries.js";
@@ -147,8 +147,9 @@ export const categoriesKey = ["budget-lines"] as const;
 /* Reads                                                                      */
 /* -------------------------------------------------------------------------- */
 
-export function useSetup() {
-  return useQuery({
+/** The household's setup, as options, so it can be warmed. */
+export function setupOptions() {
+  return queryOptions({
     queryKey: setupKey,
     queryFn: async (): Promise<Setup> => {
       const wire = await api.get<{
@@ -188,8 +189,13 @@ export function useSetup() {
   });
 }
 
-export function useBills() {
-  return useQuery({
+export function useSetup() {
+  return useQuery(setupOptions());
+}
+
+/** Every recurring bill, as options, so it can be warmed. */
+export function billsOptions() {
+  return queryOptions({
     queryKey: billsKey,
     queryFn: async (): Promise<readonly Bill[]> => {
       const wire = await api.get<{
@@ -210,6 +216,10 @@ export function useBills() {
       }));
     },
   });
+}
+
+export function useBills() {
+  return useQuery(billsOptions());
 }
 
 export function useCategories() {

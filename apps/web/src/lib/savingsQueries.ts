@@ -19,7 +19,7 @@
  *    `error` says why. The terms are validated on the way in, so this is the
  *    "data from before that check" case rather than something a user can do.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Cents } from "@headroom/core";
 import { api, newIdempotencyKey } from "./api.js";
 import { goalsKey, netWorthKey, yearKey } from "./plannerQueries.js";
@@ -236,11 +236,28 @@ const parseMove = (wire: MoveWire): PayoffMove => ({
  * do to the payoff date. Without it the server answers for whatever is
  * earmarked for the mortgage, which is the question the household usually has.
  */
-export function useSavings(lumpSumCents?: Cents) {
+/**
+ * The Savings screen's read, as options, so it can be warmed.
+ *
+ * `lumpSumCents` asks the server a what-if; prefetching asks it without one,
+ * which is the question the household usually has and the only one worth
+ * warming. See `budgetOptions` in `plannerQueries.ts`.
+ */
+export function savingsOptions(lumpSumCents?: Cents) {
   const query = lumpSumCents === undefined ? null : lumpSumCents.toString();
 
-  return useQuery({
+  return queryOptions({
     queryKey: [...savingsKey, query],
+    /*
+     * Five minutes, against the app-wide `Infinity`.
+     *
+     * The key carries the what-if amount, so a number being typed into the
+     * lump-sum box makes a fresh key per keystroke. Kept forever those would
+     * pile up for the life of the tab, every one of them answering a question
+     * nobody will ask again. The one that matters - no lump sum at all - is
+     * asked on every visit to the screen and so never goes cold.
+     */
+    gcTime: query === null ? Infinity : 5 * 60_000,
     queryFn: async (): Promise<Savings> => {
       const wire = await api.get<SavingsWire>(
         query === null ? "/api/savings" : `/api/savings?lumpSumCents=${query}`,
@@ -306,6 +323,10 @@ export function useSavings(lumpSumCents?: Cents) {
       };
     },
   });
+}
+
+export function useSavings(lumpSumCents?: Cents) {
+  return useQuery(savingsOptions(lumpSumCents));
 }
 
 /* -------------------------------------------------------------------------- */

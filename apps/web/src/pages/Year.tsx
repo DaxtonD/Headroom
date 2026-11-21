@@ -41,6 +41,7 @@
  */
 import { formatCents, formatDayAndMonth, formatDayMonthAndYear } from "@headroom/core";
 import { useYear, type YearMonth, type YearOverview } from "../lib/plannerQueries.js";
+import { Loading } from "../components/Loading.js";
 import "./Year.css";
 
 /** What a month is, at a glance. */
@@ -66,11 +67,7 @@ export function Year(): React.JSX.Element {
   const year = useYear();
 
   if (year.isPending) {
-    return (
-      <div className="year" aria-busy="true">
-        <p className="hr-visually-hidden">Loading the year ahead</p>
-      </div>
-    );
+    return <Loading className="year" label="Loading the year ahead" cards={3} />;
   }
 
   if (year.isError || !year.data) {

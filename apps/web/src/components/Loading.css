@@ -1,0 +1,84 @@
+/*
+ * The bones of a screen that has not arrived yet.
+ *
+ * Built out of the neutral token and nothing else, so it is the same quiet
+ * grey in all five themes and adds no colour anybody has to check. Nothing
+ * here carries text, so the 4.5:1 rule has nothing to say about it - these
+ * are blocks, and a block cannot be misread as an amount.
+ */
+
+.loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-4);
+}
+
+.loading__block {
+  background: var(--hr-neutral-bg);
+  /*
+   * The same shimmer as it comes in, left to right, slowly. Slow on purpose:
+   * a fast one reads as urgency, and nothing is wrong here - something is
+   * simply on its way.
+   */
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    var(--hr-card) 50%,
+    transparent 100%
+  );
+  background-repeat: no-repeat;
+  background-size: 60% 100%;
+  background-position: -120% 0;
+  animation: loading-sweep 1600ms ease-in-out infinite;
+}
+
+/* Roughly where the real hero's figures end up, so nothing jumps far. */
+.loading__block--hero {
+  min-height: 190px;
+  border-radius: var(--hr-radius-hero);
+}
+
+.loading__block--card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-3);
+  padding: var(--hr-space-5);
+  border-radius: var(--hr-radius-card);
+}
+
+.loading__line {
+  display: block;
+  height: 12px;
+  width: 100%;
+  border-radius: var(--hr-radius-pill);
+  /* A shade of the card over the block, rather than a sixth grey token. */
+  background: var(--hr-card);
+  opacity: 0.55;
+}
+
+.loading__line--title {
+  height: 18px;
+  width: 45%;
+}
+
+.loading__line--short {
+  width: 70%;
+}
+
+@keyframes loading-sweep {
+  to {
+    background-position: 220% 0;
+  }
+}
+
+/*
+ * Still a shape, just a still one. Somebody who has asked for no motion
+ * should see the page's bones and not a moving gradient; the shape is the
+ * part that was doing the work.
+ */
+@media (prefers-reduced-motion: reduce) {
+  .loading__block {
+    animation: none;
+    background-image: none;
+  }
+}

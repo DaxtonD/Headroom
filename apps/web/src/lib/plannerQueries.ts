@@ -9,7 +9,7 @@
  * Amounts arrive as integer-cents strings and become `bigint` here, at the
  * edge, so no component handles money as a `number`.
  */
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { queryOptions, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Cents } from "@headroom/core";
 import { api, newIdempotencyKey } from "./api.js";
 
@@ -94,8 +94,17 @@ function parseSection(wire: BudgetWire["fixed"]): BudgetSection {
   };
 }
 
-export function useBudget() {
-  return useQuery({
+/**
+ * The Budget screen's read, as options rather than only as a hook.
+ *
+ * Split out so it can be prefetched. `warmTabs.ts` asks for the four tab
+ * screens while the app is idle, which is what stops the first visit to each
+ * one in a session being a blank screen with a spinner - reported as "when I
+ * click on a tab the UI gets stuck... like it's waiting for the data to load
+ * before it's displayed", which is exactly what it was doing.
+ */
+export function budgetOptions() {
+  return queryOptions({
     queryKey: budgetKey,
     queryFn: async (): Promise<Budget> => {
       const wire = await api.get<BudgetWire>("/api/budget");
@@ -114,6 +123,10 @@ export function useBudget() {
       };
     },
   });
+}
+
+export function useBudget() {
+  return useQuery(budgetOptions());
 }
 
 /* -------------------------------------------------------------------------- */
@@ -543,9 +556,13 @@ export const yearKey = ["year"] as const;
  * it stays accurate much further out than the timeline does. That is why it is
  * its own screen rather than a longer ledger.
  */
-export function useYear(months?: number) {
-  return useQuery({
+/** The year ahead, as options, so it can be warmed. See `budgetOptions`. */
+export function yearOptions(months?: number) {
+  return queryOptions({
     queryKey: [...yearKey, months ?? null],
+    // Same reasoning as `savingsOptions`: the key carries how many months
+    // were asked for, and only the default is worth keeping for the session.
+    gcTime: months === undefined ? Infinity : 5 * 60_000,
     queryFn: async (): Promise<YearOverview> => {
       /*
        * Every amount crosses the wire as a decimal string, because JSON has
@@ -633,4 +650,8 @@ export function useYear(months?: number) {
       };
     },
   });
+}
+
+export function useYear(months?: number) {
+  return useQuery(yearOptions(months));
 }

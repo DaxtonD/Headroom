@@ -20,6 +20,7 @@ import { formatCents } from "@headroom/core";
 import type { Cents } from "@headroom/core";
 import { useMemo, useRef, useState } from "react";
 import { BudgetDonut } from "../components/BudgetDonut.js";
+import { Loading } from "../components/Loading.js";
 import { Thumb } from "../components/Thumb.js";
 import { ringFor, slotOf, type DonutDatum } from "../lib/donut.js";
 import { useHeaderHeight } from "../lib/pinnedHeader.js";
@@ -34,11 +35,13 @@ export function Budget(): React.JSX.Element {
   const [view, setView] = useState<View>("monthly");
 
   if (budget.isPending) {
-    return (
-      <div className="budget" aria-busy="true">
-        <p className="hr-visually-hidden">Loading the budget</p>
-      </div>
-    );
+    /*
+     * The bones of the page rather than an empty one. An empty page and a
+     * broken page look the same, which is what "the UI gets stuck" was
+     * describing; `Loading.tsx` has the reasoning, including why there is
+     * never a placeholder figure in it.
+     */
+    return <Loading className="budget" label="Loading the budget" cards={3} />;
   }
 
   if (budget.isError || !budget.data) {

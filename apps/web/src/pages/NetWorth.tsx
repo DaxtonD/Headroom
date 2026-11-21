@@ -16,6 +16,7 @@ import { useState } from "react";
 import { Link } from "react-router";
 import { AssetForm } from "../components/AssetForm.js";
 import { Amount } from "../components/Badges.js";
+import { Loading } from "../components/Loading.js";
 import { ApiError, OfflineError } from "../lib/api.js";
 import { useOverlayDismissal } from "../lib/overlayDismissal.js";
 import {
@@ -36,11 +37,7 @@ export function NetWorth({ canEdit }: { canEdit: boolean }): React.JSX.Element {
   } | null>(null);
 
   if (netWorth.isPending) {
-    return (
-      <div className="networth" aria-busy="true">
-        <p className="hr-visually-hidden">Loading net worth</p>
-      </div>
-    );
+    return <Loading className="networth" label="Loading net worth" cards={2} />;
   }
 
   if (netWorth.isError || !netWorth.data) {

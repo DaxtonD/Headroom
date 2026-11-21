@@ -17,6 +17,32 @@ const queryClient = new QueryClient({
       refetchOnWindowFocus: true,
       refetchOnReconnect: true,
       staleTime: 30_000,
+      /*
+       * Keep what has been fetched for as long as the app is open.
+       *
+       * Reported from use on 2026-11-21: "often, when I click on a tab the UI
+       * gets stuck... like it's waiting for the data to load before it's
+       * displayed." It was. TanStack's default is to throw a query's data
+       * away five minutes after the last screen using it unmounts, and every
+       * screen in this app gates its first render on `isPending` - so any tab
+       * revisited after five minutes was a cold fetch against a blank page,
+       * which on a phone is most revisits.
+       *
+       * `Infinity` is in memory only. Nothing is written to the device, which
+       * is the 2026-11-14 decision and still stands; a reload starts empty
+       * and `queryClient.clear()` on sign-out takes the lot. What it costs is
+       * a few hundred kilobytes of JSON for the life of a tab.
+       *
+       * It is not a licence to show old numbers. `staleTime` is still 30
+       * seconds, a ping from the other phone still invalidates, and coming
+       * back to the app still refetches everything - so what this changes is
+       * only whether there is something on screen WHILE that happens.
+       *
+       * The two reads that take a parameter - a savings what-if, a different
+       * number of months - set their own shorter `gcTime`, because their keys
+       * multiply with what is typed into them.
+       */
+      gcTime: Infinity,
       retry: (failureCount, error) => {
         // Never retry a refusal; retrying a 401 or a 409 cannot help.
         if (error instanceof ApiError && error.status < 500) return false;
