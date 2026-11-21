@@ -177,6 +177,22 @@ describe("what a compact row keeps", () => {
   });
 
   /**
+   * And nothing takes a target below the floor by zeroing it instead of
+   * writing a small number, which is the way round that slips through the
+   * check above. The one rule that does this is the info mark in the hero,
+   * and it grows the hit area back with a transparent `::after`; anything
+   * else doing it is a 44px rule quietly broken.
+   */
+  it("never zeroes a target without growing the hit area back", () => {
+    for (const rule of compactRules) {
+      if (!/min-height:\s*0(?![.\d])/.test(rule)) continue;
+      const selector = rule.slice(0, rule.indexOf("{"));
+      expect(selector, rule.slice(0, 80)).toContain("explain__button");
+      expect(compactRules.some((other) => other.includes(`${selector.trim()}::after`))).toBe(true);
+    }
+  });
+
+  /**
    * An expanded row goes back to being roomy: the panel is where an amount is
    * typed and a conflict resolved, and none of that is improved by being 20%
    * smaller.
@@ -185,12 +201,95 @@ describe("what a compact row keeps", () => {
     expect(rowCss).toContain('[data-density="compact"] .ledger__rows .row--expanded .row__summary');
   });
 
-  /** The hero is the instant answer this screen exists for. "I like the current UI." */
-  it("leaves the top of the ledger alone", () => {
+  /**
+   * The pinned line is already one 52px row carrying the balance, what is
+   * safe to spend and two buttons. There is nothing in it to compact, and it
+   * is the thing that replaces the hero once the hero scrolls away.
+   */
+  it("leaves the pinned balance line alone", () => {
     for (const rule of compactRules) {
       const selector = rule.slice(0, rule.indexOf("{"));
-      expect(selector).not.toMatch(/ledger__hero|ledger__pinned|ledger__cards|ledger__warning/);
+      expect(selector).not.toMatch(/ledger__pinned/);
     }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* The top of the screen                                                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The hero was left alone in the first pass, on the strength of "I like the
+ * current UI" - and that was wrong in a way only using it showed. The rows
+ * became about twice as dense and the hero did not move, so on a 334px-wide
+ * phone the first actual row of the ledger was below the fold. Reported the
+ * next day: "I'd suggest compacting everything there too."
+ */
+describe("the hero, in compact", () => {
+  const heroRules = compactRules.filter((rule) => rule.includes("ledger__hero"));
+
+  it("is compacted, which it was not at first", () => {
+    expect(heroRules.length).toBeGreaterThan(5);
+  });
+
+  /**
+   * Where the height actually was. Three `ⓘ` buttons - in chequing, safe to
+   * spend, left this cycle - are each a 44px target around a 20px mark, each
+   * sitting inline in a label, so each made its label line 44px tall. That
+   * is 144px of a 425px hero spent on whitespace around three small circles.
+   *
+   * The target stays 44px. It stops being 44px of LAYOUT.
+   */
+  it("keeps a 44px target around the info mark while shrinking its box", () => {
+    const shrunk = heroRules.find((rule) => rule.includes(".explain__button {")) as string;
+    expect(shrunk, "the button's box is not shrunk").toBeDefined();
+    expect(shrunk).toContain("min-height: 0");
+    expect(shrunk).toContain("position: relative");
+
+    const target = heroRules.find((rule) => rule.includes(".explain__button::after"));
+    expect(target, "shrinking the box without growing the hit area back").toBeDefined();
+    // 20px mark + 12px each side is the 44px the brief asks for.
+    expect(target).toContain("inset: -12px");
+  });
+
+  /** And only in the hero: the comfortable view keeps what it always had. */
+  it("does not touch the info button anywhere else", () => {
+    for (const rule of compactRules) {
+      if (!rule.includes("explain__button")) continue;
+      expect(rule.slice(0, rule.indexOf("{"))).toContain("ledger__hero");
+    }
+  });
+
+  /**
+   * Nothing is dropped from it. The balance, what is safe to spend, what is
+   * left this cycle, the lowest point and when the balance was last typed in
+   * are all still on the screen - about 240px of it instead of 425.
+   */
+  it("gives up no figure to get there", () => {
+    const hidden = compactRules.find((rule) => rule.includes("clip-path: inset(50%)")) as string;
+    for (const part of [
+      "ledger__hero-amount",
+      "ledger__hero-subamount",
+      "ledger__hero-note",
+      "ledger__hero-meta",
+      "ledger__hero-split",
+      "ledger__card-owed",
+    ]) {
+      expect(hidden, `${part} must not be hidden`).not.toContain(part);
+    }
+    const ledgerTsx = source("src/pages/Ledger.tsx");
+    expect(ledgerTsx).toContain("ledger__hero-note");
+    expect(ledgerTsx).toContain("ledger__hero-meta");
+  });
+
+  /**
+   * Both buttons on one line at a narrower phone than the comfortable view
+   * manages, and still `auto-fit` - so a narrower phone again, or a larger
+   * text size, gets one column rather than two clipped labels.
+   */
+  it("fits both buttons on one line without forcing them", () => {
+    const actions = heroRules.find((rule) => rule.includes("ledger__hero-actions")) as string;
+    expect(actions).toContain("repeat(auto-fit, minmax(110px, 1fr))");
   });
 });
 

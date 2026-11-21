@@ -846,3 +846,191 @@
 [data-density="compact"] .ledger__subtotal-row--strong {
   font-size: 1rem;
 }
+
+/* ---- The compact ledger: the top of the screen ---------------------------
+ *
+ * Asked for on 2026-11-21, after a day of the compact rows: "the one thing
+ * I'd change in compact view is the large card at the top showing the
+ * chequing balance, safe to spend, left this cycle, etc. I'd suggest
+ * compacting everything there too. Show the balances of all accounts in a
+ * compact view too."
+ *
+ * Fair: the rows had become about twice as dense and the hero had not moved,
+ * so on a 334px-wide phone the first actual row of the ledger was below the
+ * fold. Measured, the hero was about 425px, and a third of that was not
+ * figures at all.
+ *
+ * **Where the height was.** Three `ⓘ` buttons - in chequing, safe to spend,
+ * left this cycle - are each a 44px touch target wrapped around a 20px mark,
+ * and each sits inline in a label, so each one makes its label line 44px
+ * tall. 144px of the hero was whitespace around three small circles.
+ *
+ * The target stays 44px. What changes is that it stops being 44px of
+ * LAYOUT: the button shrinks to its mark and grows the hit area back with a
+ * transparent `::after`, which is the ordinary way to keep a small glyph
+ * tappable. Nothing else on the hero is interactive, so the expanded area
+ * can overlap its neighbours without taking a tap from anything.
+ *
+ * Everything else here is the same shrink applied to type, padding and the
+ * gaps between. Nothing is removed and no figure goes: the balance, safe to
+ * spend, left this cycle, the lowest-point note and the "updated" line are
+ * all still there, about 240px instead of 425.
+ */
+
+[data-density="compact"] .ledger {
+  gap: var(--hr-space-3);
+}
+
+[data-density="compact"] .ledger__hero {
+  padding: var(--hr-space-3) var(--hr-space-4);
+}
+
+/*
+ * The hit area, kept, while the box stops being 44px tall.
+ *
+ * `inset: -12px` around a 20px mark is 44px square. It is only applied
+ * inside the compact hero, so the comfortable view - which nobody complained
+ * about - keeps the simpler arrangement it has always had.
+ */
+[data-density="compact"] .ledger__hero .explain__button {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+  margin-left: var(--hr-space-1);
+  /* Keeps the mark on the text's baseline rather than hanging below it. */
+  vertical-align: middle;
+}
+
+[data-density="compact"] .ledger__hero .explain__button::after {
+  content: "";
+  position: absolute;
+  inset: -12px;
+}
+
+[data-density="compact"] .ledger__hero-label {
+  font-size: 0.8125rem;
+}
+
+[data-density="compact"] .ledger__hero-amount {
+  margin: 0 0 2px;
+  font-size: clamp(28px, 9vw, 36px);
+}
+
+[data-density="compact"] .ledger__hero-meta {
+  font-size: 0.75rem;
+}
+
+/*
+ * Both buttons on one line at a narrower phone than the comfortable view
+ * manages. 150px each needs 308px of hero, which a 334px phone at this
+ * text scale does not have - so they were stacking, and two stacked buttons
+ * is 100px of a screen somebody asked to be shorter. Still `auto-fit`, so a
+ * phone narrower again, or a larger text size, still gets one column rather
+ * than two clipped labels.
+ */
+[data-density="compact"] .ledger__hero-actions {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  margin-top: var(--hr-space-3);
+}
+
+[data-density="compact"] .ledger__hero-action {
+  padding-inline: var(--hr-space-3);
+  font-size: 0.875rem;
+}
+
+[data-density="compact"] .ledger__hero-split {
+  margin-top: var(--hr-space-3);
+  padding-top: var(--hr-space-3);
+  gap: var(--hr-space-3);
+}
+
+[data-density="compact"] .ledger__hero-sublabel {
+  font-size: 0.75rem;
+}
+
+[data-density="compact"] .ledger__hero-subamount {
+  font-size: 1.25rem;
+}
+
+[data-density="compact"] .ledger__hero-note {
+  margin-top: var(--hr-space-2);
+  font-size: 0.75rem;
+}
+
+/* ---- The accounts under it ---- */
+
+[data-density="compact"] .ledger__cards {
+  padding: var(--hr-space-3);
+}
+
+[data-density="compact"] .ledger__cards-label {
+  font-size: 0.8125rem;
+}
+
+[data-density="compact"] .ledger__cards-list {
+  margin-top: var(--hr-space-1);
+  gap: var(--hr-space-1);
+}
+
+/*
+ * One account per line still, rather than two columns.
+ *
+ * Two columns was the obvious denser answer and it is the wrong one. It
+ * saves about one row of height on a household with three accounts, and it
+ * costs the thing a column of figures is for: these amounts line up with the
+ * running-balance column the rest of the screen is read down, which was
+ * itself a fix for a report that "the figures did not line up". Density is
+ * not worth un-fixing that.
+ */
+[data-density="compact"] .ledger__card .thumb--row {
+  width: 20px;
+}
+
+[data-density="compact"] .ledger__card .thumb--row .thumb__initial {
+  font-size: 0.6875rem;
+}
+
+[data-density="compact"] .ledger__card-name {
+  font-size: 0.875rem;
+}
+
+[data-density="compact"] .ledger__card-ahead {
+  font-size: 0.6875rem;
+}
+
+[data-density="compact"] .ledger__cards-warning {
+  margin-top: var(--hr-space-2);
+  font-size: 0.75rem;
+}
+
+/* ---- And the rest of the furniture at the top and bottom ---- */
+
+[data-density="compact"] .ledger__covered {
+  padding: var(--hr-space-2) var(--hr-space-3);
+  font-size: 0.8125rem;
+}
+
+[data-density="compact"] .ledger__warning {
+  padding: var(--hr-space-3) var(--hr-space-4);
+}
+
+[data-density="compact"] .ledger__warning-title {
+  font-size: 0.9375rem;
+}
+
+[data-density="compact"] .ledger__warning-detail,
+[data-density="compact"] .ledger__estimates {
+  font-size: 0.8125rem;
+}
+
+[data-density="compact"] .ledger__footer {
+  padding: var(--hr-space-3) var(--hr-space-4);
+}
+
+[data-density="compact"] .ledger__footer-amount {
+  font-size: clamp(24px, 8vw, 30px);
+}
+
+[data-density="compact"] .ledger__footer-note {
+  font-size: 0.75rem;
+}

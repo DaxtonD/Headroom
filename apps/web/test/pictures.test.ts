@@ -335,9 +335,10 @@ describe("where the square shows up", () => {
     expect(row).toMatch(/isPaycheque \? null/);
   });
 
-  it("on the card strip in the hero", () => {
+  /** Now the account strip: savings joins the cards in the compact view. */
+  it("on the account strip under the hero", () => {
     expect(ledger).toMatch(
-      /<Thumb imageId=\{card\.imageId\} size="row" fallback=\{card\.name\} \/>/,
+      /<Thumb imageId=\{account\.imageId\} size="row" fallback=\{account\.name\} \/>/,
     );
   });
 });

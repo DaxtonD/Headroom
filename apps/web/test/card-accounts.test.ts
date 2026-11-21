@@ -134,10 +134,20 @@ describe("the warning about a card nobody is paying", () => {
   });
 });
 
-describe("the card strip", () => {
-  it("shows what each card owes now and where it is heading", () => {
+describe("the account strip", () => {
+  it("shows what each account holds now and where it is heading", () => {
     expect(ledger).toMatch(/ledger__card-owed/);
-    expect(ledger).toMatch(/card\.horizonCents/);
+    expect(ledger).toMatch(/account\.horizonCents === account\.cents/);
+  });
+
+  /**
+   * A card's balance is what it OWES. Without the word, a number beside Visa
+   * reads as money you have - which is the opposite of the truth and the one
+   * misreading this strip exists to prevent. Savings gets the parallel word
+   * so the two read down the column as one list.
+   */
+  it("says which way round each figure is", () => {
+    expect(ledger).toContain('const word = account.kind === "credit_card" ? "owed" : "saved";');
   });
 
   it("is a strip rather than a sixth tab", () => {
@@ -145,8 +155,39 @@ describe("the card strip", () => {
     expect(ledger).toMatch(/ledger__cards" aria-labelledby/);
   });
 
-  it("is not rendered at all by a household with no cards", () => {
-    expect(ledger).toMatch(/\{cards\.length > 0 \?/);
+  it("is not rendered at all by a household with nothing to put in it", () => {
+    expect(ledger).toMatch(/\{strip\.length > 0 \?/);
+  });
+
+  /**
+   * Comfortable lists the cards; compact lists savings as well, asked for
+   * from use on 2026-11-21 - the point of that view is everything at a
+   * glance, and "everything" with one account quietly missing is the version
+   * that gets trusted and is wrong.
+   *
+   * Chequing is in neither. It is the figure at the top of this screen in
+   * 34px type, and saying it twice within an inch is not a summary.
+   */
+  it("lists savings as well, but only in the compact view", () => {
+    expect(ledger).toContain(
+      "const strip = compact ? [...savingsAccounts, ...cards] : cards;",
+    );
+    expect(ledger).toContain(
+      'data.accounts.filter((account) => account.kind === "savings")',
+    );
+    expect(ledger).toContain('{compact ? "Accounts" : "On cards"}');
+  });
+
+  /**
+   * Done in the component rather than by hiding a row in CSS, which is the
+   * opposite of how the compact ROWS work and is deliberate. Hiding the
+   * savings row in the comfortable view would leave it in the accessibility
+   * tree, so a screen reader would be read an account the screen does not
+   * show.
+   */
+  it("decides this in the component, not in a stylesheet", () => {
+    expect(ledger).toContain('const compact = useAppearanceValue().density === "compact";');
+    expect(ledgerCss).not.toMatch(/\[data-density="compact"\][^{]*\.ledger__card \{[^}]*display:\s*none/);
   });
 });
 

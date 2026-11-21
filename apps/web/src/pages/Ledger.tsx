@@ -42,6 +42,7 @@ import {
   explainLeftThisCycle,
   explainSafeToSpend,
 } from "../lib/explain.js";
+import { useAppearanceValue } from "../lib/appearance.js";
 import { useBackDismiss } from "../lib/backDismiss.js";
 import { useLaunchedBy } from "../lib/launchAction.js";
 import { JumpBar } from "../components/JumpBar.js";
@@ -72,6 +73,21 @@ export function Ledger({
 
   const patch = usePatchOccurrence();
   const removeOneOff = useRemoveOneOff();
+
+  /*
+   * Compact changes one thing this component decides for itself: WHICH
+   * accounts the strip under the hero lists.
+   *
+   * Everything else about the compact ledger is a stylesheet - see the long
+   * note in `OccurrenceRow.css` for why the rows must stay one component.
+   * This is not that. "Show the balances of all accounts in a compact view
+   * too" (2026-11-21) is a question about what is on the screen, not how it
+   * is laid out, and no stylesheet can answer it: the savings account is not
+   * rendered at all in the comfortable view, and hiding a row in CSS would
+   * leave it being read out by a screen reader on a screen that does not
+   * show it.
+   */
+  const compact = useAppearanceValue().density === "compact";
 
   // No page-level error state: each row reports its own save, including a
   // conflict with the other phone, and the one-off form reports its own. An
@@ -228,6 +244,22 @@ export function Ledger({
    */
   const cards = data.accounts.filter((account) => account.kind === "credit_card");
   const unpaidCards = cards.filter((account) => account.needsPayment);
+
+  /**
+   * The accounts the strip lists.
+   *
+   * Comfortable: the cards, because savings has a screen of its own and the
+   * ledger is about chequing. Compact: savings as well, asked for from use -
+   * the point of that view is everything at a glance, and "everything" with
+   * one account quietly missing is the version that gets trusted and is
+   * wrong.
+   *
+   * Chequing is in neither, in both views. It is the figure at the top of
+   * this screen in 34px type; saying it twice in the space of an inch is not
+   * a summary, it is a doubt about which one is right.
+   */
+  const savingsAccounts = data.accounts.filter((account) => account.kind === "savings");
+  const strip = compact ? [...savingsAccounts, ...cards] : cards;
 
   /**
    * An account id as a name, or null for chequing.
@@ -447,16 +479,16 @@ export function Ledger({
         So a card with nothing paying it is an alert, in the hero, above the
         scroll. Not a line at the bottom nobody reaches.
       */}
-      {cards.length > 0 ? (
+      {strip.length > 0 ? (
         <section className="ledger__cards" aria-labelledby="ledger-cards-label">
           <p className="ledger__cards-label" id="ledger-cards-label">
-            On cards
+            {compact ? "Accounts" : "On cards"}
           </p>
           <ul className="ledger__cards-list">
-            {cards.map((card) => (
-              <li className="ledger__card" key={card.id}>
-                <Thumb imageId={card.imageId} size="row" fallback={card.name} />
-                <span className="ledger__card-name">{card.name}</span>
+            {strip.map((account) => (
+              <li className="ledger__card" key={account.id}>
+                <Thumb imageId={account.imageId} size="row" fallback={account.name} />
+                <span className="ledger__card-name">{account.name}</span>
                 {/*
                   The amount and its tail are one column, so the amount lands
                   on the same edge on every card. Side by side, a longer tail
@@ -464,11 +496,9 @@ export function Ledger({
                   lining up with each other - which is what was reported.
                 */}
                 <span className="ledger__card-figures">
-                  <span className="ledger__card-owed hr-amount">{formatCents(card.cents)}</span>
+                  <span className="ledger__card-owed hr-amount">{formatCents(account.cents)}</span>
                   <span className="ledger__card-ahead">
-                    {card.horizonCents === card.cents
-                      ? "owed"
-                      : `owed, ${formatCents(card.horizonCents)} by ${formatDateShort(data.horizonEnd)}`}
+                    {tailFor(account, data.horizonEnd)}
                   </span>
                 </span>
               </li>
@@ -903,6 +933,27 @@ function PeriodGroup({
       </div>
     </>
   );
+}
+
+/**
+ * The line under an account's balance: what the figure is, and where it is going.
+ *
+ * A card's balance is what it OWES, so it says so - without that word a
+ * number beside Visa reads as money you have. Savings is the other way round
+ * and needs no word for it, so it gets the plainer "saved", which keeps the
+ * two lines parallel down the column.
+ *
+ * Both say where the figure lands by the end of the horizon when that is
+ * somewhere else, because a card at zero today with a payment scheduled and a
+ * card at zero today with nothing scheduled are not the same card.
+ */
+function tailFor(
+  account: { kind: Account["kind"]; cents: Cents; horizonCents: Cents },
+  horizonEnd: string,
+): string {
+  const word = account.kind === "credit_card" ? "owed" : "saved";
+  if (account.horizonCents === account.cents) return word;
+  return `${word}, ${formatCents(account.horizonCents)} by ${formatDateShort(horizonEnd)}`;
 }
 
 /**
