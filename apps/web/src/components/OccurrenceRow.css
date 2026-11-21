@@ -414,9 +414,12 @@
   font-size: 0.6875rem;
 }
 
-/* ---- Smaller type, asked for on 2026-11-21 after a day in compact ----
+/* ---- Smaller type on the rows, asked for 2026-11-21 ----
  *
- * "Make the text smaller in compact mode."
+ * "Make the text smaller in compact mode", narrowed the next day to the part
+ * that was meant: "the ledger items". The rows - a name, a chip and two
+ * figures - and not the hero, the account strip, the window headings or the
+ * bands under them, all of which keep the sizes the compact pass gave them.
  *
  * Worth being clear about what this buys, because it is not what the rest of
  * the compact view buys: it does NOT fit more rows on the screen. Every row
@@ -426,8 +429,7 @@
  * where it used to be cut off with an ellipsis, and type that looks the size
  * of the layout it is in rather than the size of the roomier one.
  *
- * One step down, consistently: 1rem becomes 0.875rem, 0.875 becomes 0.8125,
- * and so on. Nothing in the compact ledger goes below 0.6875rem, which is 11px
+ * Nothing in the compact ledger goes below 0.6875rem, which is 11px
  * at the app's own largest setting - held by a test, because the floor is the
  * part that matters. These multiply with the household's text-size setting,
  * so compact at the smallest size is 11 x 0.76 = 8px; the dial that goes the

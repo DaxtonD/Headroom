@@ -343,11 +343,21 @@ the single misreading this strip exists to prevent. Chequing is in neither
 view's strip: it is the figure at the top of the same screen in 34px type,
 and saying it twice within an inch is not a summary.
 
-#### And then smaller type, a day later
+#### And then smaller type on the rows, a day later
 
-"Make the text smaller in compact mode." One step down, consistently, through
-the whole compact ledger: 1rem becomes 0.875, 0.875 becomes 0.8125, and so on,
-in about two dozen places.
+"Make the text smaller in compact mode" - and then, when I reported having
+applied it to about two dozen places across the hero, the account strip, the
+window headings and the bands under them: the text to make smaller was the
+ledger items - a pay row was the example given.
+
+So that went back. The rows carry it - the name, the amount, the chip and an
+expected cheque's line, which is a ledger item that happens to live among the
+furniture - and everything else keeps the size the compact pass gave it. Worth
+recording as a small lesson rather than a correction: "make the text smaller
+in compact mode" read as a statement about a mode, and it was a statement
+about the thing being read. The owner had not seen the wider version, so
+nothing was lost by it; had this been reported after a deploy rather than
+after a description, it would have cost a round trip.
 
 Worth recording what this buys, because it is not what the rest of the compact
 view buys and it would be easy to assume otherwise. It does **not** fit more
