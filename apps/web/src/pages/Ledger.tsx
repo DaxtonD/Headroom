@@ -44,7 +44,9 @@ import {
 } from "../lib/explain.js";
 import { useBackDismiss } from "../lib/backDismiss.js";
 import { useLaunchedBy } from "../lib/launchAction.js";
-import { useScrolledPast } from "../lib/pinnedHeader.js";
+import { JumpBar } from "../components/JumpBar.js";
+import { usePublishedHeight, useScrolledPast } from "../lib/pinnedHeader.js";
+import { JUMP_BAR_PX, useSectionSpy, type JumpTarget } from "../lib/sectionNav.js";
 import {
   useDashboard,
   usePatchOccurrence,
@@ -87,6 +89,43 @@ export function Ledger({
    * bar that appears from nowhere.
    */
   const [heroEndRef, heroGone] = useScrolledPast();
+
+  /*
+   * How tall the pinned balance line is, published for the stylesheet and
+   * returned for the scroll-spy below.
+   *
+   * Measured rather than written down, for the reason the whole of
+   * `pinnedHeader.ts` exists: it is a figure, two buttons and whichever of
+   * the five text sizes the household has chosen.
+   */
+  const [pinnedRef, pinnedHeight] = usePublishedHeight("--hr-ledger-pinned-h");
+
+  /*
+   * The chips that jump between pay periods, asked for on 2026-11-20 after
+   * the same thing landed on Manage: "let's do the same thing on the ledger
+   * to navigate the weeks."
+   *
+   * Above the early returns because hooks have to be, which means reading
+   * the periods before the guard that proves they arrived.
+   */
+  const jumpTargets = useMemo<JumpTarget[]>(
+    () =>
+      (payPeriods.data?.periods ?? []).map((period, index) => ({
+        id: `ledger-period-${String(index)}`,
+        // The window's own label, so a chip and the heading it scrolls to
+        // say the same thing. They are short already - "Now-Dec 9".
+        label: period.label,
+      })),
+    [payPeriods.data],
+  );
+
+  /*
+   * What is pinned above the chips: the bar itself, plus the balance line
+   * once the hero has gone. The chips can only ever be stuck when the hero
+   * IS gone - they sit below it on the page - so the second term is what
+   * holds in every case that matters.
+   */
+  const spy = useSectionSpy(jumpTargets, JUMP_BAR_PX + (heroGone ? pinnedHeight : 0));
 
   // An opened row is a step, so Android's Back closes it rather than leaving
   // the ledger.
@@ -321,6 +360,7 @@ export function Ledger({
       <div
         className={`ledger__pinned${heroGone ? " ledger__pinned--shown" : ""}`}
         inert={!heroGone}
+        ref={pinnedRef}
       >
         <div className="ledger__pinned-inner">
           <p className="ledger__pinned-figures" aria-hidden="true">
@@ -474,23 +514,45 @@ export function Ledger({
           </p>
         </div>
       ) : (
-        <ol className="ledger__periods">
-          {periods.map((period) => (
-            <li className="ledger__period" key={period.label}>
-              <PeriodGroup
-                period={period}
-                moveTargets={moveTargets}
-                accountName={accountName}
-                accounts={data.accounts}
-                canEdit={canEdit}
-                expandedId={expandedId}
-                onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
-                onSave={(input) => patch.mutateAsync(input)}
-                onRemove={(input) => removeOneOff.mutateAsync(input)}
-              />
-            </li>
-          ))}
-        </ol>
+        <>
+          {/*
+            Nested under the balance line rather than beside it: both are
+            pinned, and the chips are the thing you came back up the page to
+            use. `Ledger.css` has the one declaration that does it.
+          */}
+          {periods.length > 1 ? (
+            <JumpBar
+              className={`ledger__jump${heroGone ? " ledger__jump--under-balance" : ""}`}
+              label="Jump to a pay period"
+              targets={jumpTargets}
+              activeId={spy.activeId}
+              onJump={spy.jumpTo}
+              barRef={spy.barRef}
+            />
+          ) : null}
+
+          <ol className="ledger__periods">
+            {periods.map((period, index) => (
+              <li
+                className="ledger__period"
+                id={`ledger-period-${String(index)}`}
+                key={period.label}
+              >
+                <PeriodGroup
+                  period={period}
+                  moveTargets={moveTargets}
+                  accountName={accountName}
+                  accounts={data.accounts}
+                  canEdit={canEdit}
+                  expandedId={expandedId}
+                  onToggle={(id) => setExpandedId(expandedId === id ? null : id)}
+                  onSave={(input) => patch.mutateAsync(input)}
+                  onRemove={(input) => removeOneOff.mutateAsync(input)}
+                />
+              </li>
+            ))}
+          </ol>
+        </>
       )}
 
       {/* ---- The bottom line ---- */}

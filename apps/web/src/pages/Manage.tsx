@@ -34,6 +34,7 @@ import { ImagePicker } from "../components/ImagePicker.js";
 import { Thumb } from "../components/Thumb.js";
 import { PaydayForm } from "../components/PaydayForm.js";
 import { ApiError, OfflineError } from "../lib/api.js";
+import { JumpBar } from "../components/JumpBar.js";
 import { useSectionSpy, type JumpTarget } from "../lib/sectionNav.js";
 import {
   useBills,
@@ -92,48 +93,6 @@ function jumpTargets(hasArchived: boolean): JumpTarget[] {
     { id: "manage-income", label: "Net income" },
     { id: "manage-settings", label: "How things work" },
   ];
-}
-
-/**
- * The pinned row of chips.
- *
- * A `nav` of real buttons, not a tablist: nothing here is a tab, because
- * nothing is hidden. Each chip scrolls the page to a heading that was always
- * on it, so `aria-current="location"` is what marks the one you are in -
- * `aria-selected` would be claiming a tab panel that does not exist.
- */
-function JumpBar({
-  targets,
-  activeId,
-  onJump,
-  barRef,
-}: {
-  targets: readonly JumpTarget[];
-  activeId: string | null;
-  onJump: (id: string) => void;
-  barRef: (node: HTMLElement | null) => void;
-}): React.JSX.Element {
-  return (
-    <nav className="manage__jump" aria-label="Jump to a section">
-      <ul className="manage__jump-list" ref={barRef}>
-        {targets.map((target) => (
-          <li key={target.id}>
-            <button
-              className={`manage__jump-chip${
-                target.id === activeId ? " manage__jump-chip--here" : ""
-              }`}
-              type="button"
-              data-jump={target.id}
-              aria-current={target.id === activeId ? "location" : undefined}
-              onClick={() => onJump(target.id)}
-            >
-              {target.label}
-            </button>
-          </li>
-        ))}
-      </ul>
-    </nav>
-  );
 }
 
 export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
@@ -223,7 +182,14 @@ export function Manage({ canEdit }: { canEdit: boolean }): React.JSX.Element {
         when the last setup task was finished would be a bar nobody could
         learn the position of.
       */}
-      <JumpBar targets={targets} activeId={spy.activeId} onJump={spy.jumpTo} barRef={spy.barRef} />
+      <JumpBar
+        className="manage__jump"
+        label="Jump to a section"
+        targets={targets}
+        activeId={spy.activeId}
+        onJump={spy.jumpTo}
+        barRef={spy.barRef}
+      />
 
       {data.missing.length > 0 ? (
         <section className="manage__checklist" role="status">

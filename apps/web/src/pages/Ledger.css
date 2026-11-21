@@ -140,6 +140,55 @@
   margin-top: calc(var(--hr-space-4) * -1);
 }
 
+/* ---- The chips that jump between pay periods ---- */
+
+/*
+ * Pinned under the app header, and under the balance line as well once that
+ * has slid in.
+ *
+ * Asked for in those words on 2026-11-20: "when the screen scrolls, the chips
+ * can nest under the cross-faded balance/balance/one-off buttons."
+ *
+ * The balance line is `position: fixed` and takes up no space in the scroll -
+ * which is the whole reason it is fixed, see below - so nothing moves these
+ * chips out of its way on its own. They have to be told, and the figure they
+ * are told is measured: `usePublishedHeight` writes the line's real height
+ * into `--hr-ledger-pinned-h` every time it changes, because it is a figure,
+ * two buttons and whichever of the five text sizes is set.
+ *
+ * Sticky rather than fixed, unlike the line above it. These belong to the
+ * list they navigate: they should arrive when the periods do and leave with
+ * them, and taking up space in the scroll is correct for that.
+ */
+.ledger__jump {
+  position: sticky;
+  top: var(--hr-header-h);
+  /* Over the rows, under the balance line (9) and the app header (10). */
+  z-index: 8;
+  /*
+   * In step with the balance line's own 200ms, so the two move together
+   * rather than the chips jumping the moment it starts sliding.
+   */
+  transition: top 200ms ease;
+}
+
+/*
+ * The hero has gone, so the balance line is there and the chips sit below it.
+ *
+ * A class rather than always leaving the gap: with the line away, a gap the
+ * height of it would be a strip of scrolling content between the header and
+ * the chips, which reads as broken.
+ */
+.ledger__jump--under-balance {
+  top: calc(var(--hr-header-h) + var(--hr-ledger-pinned-h, 0px));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ledger__jump {
+    transition: none;
+  }
+}
+
 /* ---- The pinned line, once the hero has gone ---- */
 
 /*
@@ -340,6 +389,15 @@
  * read as a mistake rather than as a design.
  */
 .ledger__period {
+  /*
+   * Where a chip lands you: clear of the header, the balance line and the
+   * chips themselves, all three of which are drawn over the top of the page.
+   * Without this the heading you asked for arrives underneath them, which is
+   * the one thing it must not do.
+   */
+  scroll-margin-top: calc(
+    var(--hr-header-h) + var(--hr-ledger-pinned-h, 0px) + var(--hr-jump-h) + var(--hr-space-2)
+  );
   margin-inline: calc(var(--hr-space-4) * -1);
   padding: var(--hr-space-4) var(--hr-space-3) var(--hr-space-3);
   border-block: 1px solid var(--hr-card-border);

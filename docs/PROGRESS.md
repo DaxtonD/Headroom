@@ -30,6 +30,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| The same chips on the ledger | done | | 2026-11-20, asked for from use. A jump bar for the pay periods, nesting under the balance line once the hero has gone. One component now, shared with Manage |
 | A sentence laid out as columns | done | | 2026-11-20, reported from use. The pairing line on the Year screen read as clipped text. It was a flex container treating each word of a sentence as a column |
 | A charge wears the card it went on | done | | 2026-11-20, reported from use. A purchase charged to a card had no picture at all. It wears the card's now - which reverses a decision recorded the day before |
 | A lump sum off the mortgage, on the ledger | done | | 2026-11-20, reported from use. It could only be recorded on the Savings screen, where it moved no money and never asked which account it came out of. It is a one-off on the ledger now, and that row is the whole record |
@@ -112,6 +113,61 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## The same chips on the ledger (2026-11-20, asked for from use)
+
+> "You just implemented amazing inline chips on the manage screen to help navigate it. I love it.
+> Let's do the same thing on the ledger to navigate the weeks. When the screen scrolls, the chips
+> can nest under the cross-faded balance/balance/one-off buttons."
+
+### One control, so it was made one component
+
+The Manage bar was written inline on that page a few hours earlier. Building a second copy for
+the ledger is how `routing.ts` came to exist in the first place - three screens answering the
+same question inline, and one of them answering it wrongly - so the bar moved to
+`components/JumpBar.tsx` and both pages use it.
+
+**The look is shared and the position deliberately is not.** The two screens pin it to different
+things: Manage hangs it straight off the app header, and the ledger has to clear the balance line
+that slides in over the top. So each page passes a class of its own and owns that one
+declaration, and a test asserts the shared stylesheet says nothing at all about `position` or
+`top`.
+
+### Nesting under the balance line, which is the whole of the hard part
+
+The balance line is `position: fixed`, and that is load-bearing rather than incidental - the
+comment on it explains that sticky would make the page change height as it arrives, which scrolls
+the page, which can bring the hero back, which hides the line again. Fixed takes it out of the
+flow entirely.
+
+Which means **it occupies no space, so nothing moves the chips out of its way on its own.** They
+have to be told, and the figure they are told cannot be written down: the line is a figure, two
+buttons and whichever of the five text sizes the household has set. So `usePublishedHeight`
+measures it and writes it into `--hr-ledger-pinned-h`, the same argument `pinnedHeader.ts` makes
+at length about the header.
+
+The gap is applied by a class rather than always being there. With the line away, a gap its
+height would be a strip of content scrolling between the header and the chips, which reads as
+broken. And the chips transition `top` over the same 200ms the line uses, so the two move
+together instead of the chips jumping the moment it starts sliding.
+
+### The scroll-spy needed the same figure, and for a different reason
+
+`useSectionSpy` now takes how much is pinned above it. The band it picks the lit chip from has to
+start below everything drawn over the page, or a chip lights while its own period is still hidden
+behind the header and the balance line. Unlike the stylesheet, this one tolerates being a few
+pixels out - it moves where the highlight flips by a few pixels of scroll - which is why the
+default is still the bar's own height and only the ledger passes anything else.
+
+### Verified
+
+1578 tests green - 411 engine, 597 web, 570 API, up from 1564. 14 new for the ledger bar and four
+rewritten on Manage's, which now point at the shared component.
+
+### Still to do
+
+- Nothing asked for. The chips are drawn only when there is more than one period, since a bar
+  with one chip navigates nothing.
 
 ## A sentence laid out as columns (2026-11-20, reported from use)
 

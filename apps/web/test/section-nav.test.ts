@@ -24,6 +24,10 @@ function source(path: string): string {
 const manageTsx = source("src/pages/Manage.tsx");
 const manageCss = source("src/pages/Manage.css");
 const navTs = source("src/lib/sectionNav.ts");
+// The look and the markup are shared with the ledger's bar; only where it
+// sticks belongs to Manage. See `JumpBar.tsx`.
+const jumpBarTsx = source("src/components/JumpBar.tsx");
+const jumpBarCss = source("src/components/JumpBar.css");
 
 function rule(css: string, selector: string): string {
   const at = css.indexOf(`${selector} {`);
@@ -144,9 +148,9 @@ describe("the bar", () => {
    * the hairline underneath.
    */
   it("is as tall as the stylesheet draws it", () => {
-    expect(rule(manageCss, ".manage__jump-chip")).toContain("min-height: var(--hr-touch-min)");
-    expect(rule(manageCss, ".manage__jump-list")).toContain("padding: var(--hr-space-1)");
-    expect(rule(manageCss, ".manage__jump")).toContain("border-bottom: 1px solid");
+    expect(rule(jumpBarCss, ".jump-bar__chip")).toContain("min-height: var(--hr-touch-min)");
+    expect(rule(jumpBarCss, ".jump-bar__list")).toContain("padding: var(--hr-space-1)");
+    expect(rule(jumpBarCss, ".jump-bar")).toContain("border-bottom: 1px solid");
 
     const tokens = source("src/styles/tokens.css");
     const px = (name: string): number =>
@@ -158,7 +162,7 @@ describe("the bar", () => {
 
   /** 44px chips, like every other control on a phone. */
   it("has targets a thumb can hit", () => {
-    expect(rule(manageCss, ".manage__jump-chip")).toContain("min-height: var(--hr-touch-min)");
+    expect(rule(jumpBarCss, ".jump-bar__chip")).toContain("min-height: var(--hr-touch-min)");
   });
 
   /**
@@ -174,10 +178,13 @@ describe("the bar", () => {
 
   /** Not colour alone, and not a tablist, because nothing here is hidden. */
   it("marks where you are in words as well as in fill", () => {
-    expect(manageTsx).toContain('aria-current={target.id === activeId ? "location" : undefined}');
-    expect(manageTsx).toContain('aria-label="Jump to a section"');
-    expect(manageTsx).not.toContain('role="tablist"');
-    expect(rule(manageCss, ".manage__jump-chip--here")).toContain("background: var(--hr-primary)");
+    expect(jumpBarTsx).toContain(
+      'aria-current={target.id === activeId ? "location" : undefined}',
+    );
+    expect(jumpBarTsx).not.toContain('role="tablist"');
+    // The label is the page's, because the two bars navigate different things.
+    expect(manageTsx).toContain('label="Jump to a section"');
+    expect(rule(jumpBarCss, ".jump-bar__chip--here")).toContain("background: var(--hr-primary)");
   });
 });
 
@@ -222,7 +229,7 @@ describe("the observer", () => {
 
   /** A fractional `rootMargin` is the one length that throws rather than being ignored. */
   it("gives it a whole number of pixels", () => {
-    expect(navTs).toContain("Math.trunc(headerPx + JUMP_BAR_PX)");
+    expect(navTs).toContain("Math.trunc(headerPx + offsetPx)");
   });
 
   /** Anyone who asked for less motion gets a jump, not a glide. */

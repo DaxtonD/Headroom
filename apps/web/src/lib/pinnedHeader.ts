@@ -110,6 +110,58 @@ export function trackHeaderHeight(header: HTMLElement): () => void {
 }
 
 /**
+ * Publish one element's height as a CSS custom property, and keep it current.
+ *
+ * The cut-down half of {@link trackHeaderHeight}: no module-level cache and
+ * no listener set, because only ONE component wants each of these and it is
+ * the one that owns the element.
+ *
+ * Written for the ledger, where the chips that jump between pay periods have
+ * to sit under the balance line that slides in once the hero has gone - and
+ * that line is a figure, two buttons and whatever text size the household has
+ * chosen, so its height is exactly the kind of number this file exists to
+ * refuse to write down.
+ *
+ * The height is returned as well as published, because the scroll-spy needs
+ * it in JavaScript and `rootMargin` cannot read a stylesheet.
+ *
+ * A callback ref rather than `useRef`, for the reason {@link useScrolledPast}
+ * gives: the element appears on a later render than the first, and an effect
+ * with an empty dependency list would still be looking at null.
+ */
+export function usePublishedHeight(
+  property: string,
+): readonly [(node: HTMLElement | null) => void, number] {
+  const [node, setNode] = useState<HTMLElement | null>(null);
+  const [height, setHeight] = useState(0);
+
+  useEffect(() => {
+    if (node === null) return undefined;
+
+    const publish = (): void => {
+      // `getBoundingClientRect`, not `offsetHeight`: this is measured while
+      // the element may be translated out of view, and a transform does not
+      // change a height.
+      const next = node.getBoundingClientRect().height;
+      document.documentElement.style.setProperty(property, `${next}px`);
+      setHeight(next);
+    };
+
+    publish();
+
+    // Without one the single measurement above still stands, and the only
+    // cost is an offset a few pixels out after a rotation.
+    if (typeof ResizeObserver === "undefined") return () => {};
+
+    const observer = new ResizeObserver(publish);
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [node, property]);
+
+  return [setNode, height];
+}
+
+/**
  * Has the marker gone above the header's bottom edge?
  *
  * Pure, exported and tested, because this is the one line with real geometry

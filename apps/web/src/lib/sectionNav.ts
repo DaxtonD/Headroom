@@ -133,7 +133,21 @@ function scrollBehaviour(): ScrollBehavior {
  * needed - they are what `scroll-margin-top` is applied to - so this adds
  * nothing to carry around.
  */
-export function useSectionSpy(targets: readonly JumpTarget[]): {
+export function useSectionSpy(
+  targets: readonly JumpTarget[],
+  /**
+   * How much is pinned below the app header, in pixels.
+   *
+   * The bar's own height on Manage, where it hangs straight off the header.
+   * On the ledger it is that plus the balance line that slides in once the
+   * hero has gone, which is measured rather than written down.
+   *
+   * Only the band the highlight is chosen in depends on this, so being a few
+   * pixels out moves where a chip lights by a few pixels of scroll and
+   * nothing else. The stylesheet needs the exact figure; this does not.
+   */
+  offsetPx: number = JUMP_BAR_PX,
+): {
   readonly activeId: string | null;
   readonly jumpTo: (id: string) => void;
   readonly barRef: (node: HTMLElement | null) => void;
@@ -176,14 +190,14 @@ export function useSectionSpy(targets: readonly JumpTarget[]): {
         // fractional length is the one thing `rootMargin` throws on, and this
         // is a scroll offset rather than money - the rule that forbids
         // rounding is about the latter.
-        rootMargin: `-${Math.trunc(headerPx + JUMP_BAR_PX)}px 0px -${BAND_BOTTOM_PCT}% 0px`,
+        rootMargin: `-${Math.trunc(headerPx + offsetPx)}px 0px -${BAND_BOTTOM_PCT}% 0px`,
         threshold: 0,
       },
     );
 
     for (const element of elements) observer.observe(element);
     return () => observer.disconnect();
-  }, [key, headerPx]);
+  }, [key, headerPx, offsetPx]);
 
   /* Keep the lit chip on screen, without ever moving the page itself. */
   useEffect(() => {

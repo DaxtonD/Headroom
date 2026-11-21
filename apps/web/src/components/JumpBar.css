@@ -1,0 +1,68 @@
+/*
+ * The chips themselves: the look, shared by Manage and the ledger.
+ *
+ * `JumpBar.tsx` says why this is one control rather than two, and why where
+ * it sticks is deliberately NOT in here - the two screens pin it to different
+ * things.
+ */
+
+/*
+ * Out through the shell's gutter to the edge of the screen. A horizontal
+ * scroller has to start and end at the edge, because a chip cut off by the
+ * edge is the only thing telling you there are more of them.
+ */
+.jump-bar {
+  margin-inline: calc(var(--hr-space-4) * -1);
+  background: var(--hr-ground);
+  border-bottom: 1px solid var(--hr-card-border);
+}
+
+.jump-bar__list {
+  display: flex;
+  gap: var(--hr-space-2);
+  margin: 0;
+  /* The 4px above and below is half of what makes `--hr-jump-h`. */
+  padding: var(--hr-space-1) var(--hr-space-4);
+  list-style: none;
+  overflow-x: auto;
+  /* A flick along the chips must not start scrolling the page behind them. */
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+
+.jump-bar__list::-webkit-scrollbar {
+  display: none;
+}
+
+.jump-bar__chip {
+  display: inline-flex;
+  align-items: center;
+  /* The M5 minimum, and the other half of `--hr-jump-h`. */
+  min-height: var(--hr-touch-min);
+  padding: 0 var(--hr-space-3);
+  border: 1px solid var(--hr-card-border);
+  border-radius: var(--hr-radius-pill);
+  background: var(--hr-card);
+  color: var(--hr-text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  /* As wide as they need, however many there are: the strip scrolls. */
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.jump-bar__chip:hover {
+  color: var(--hr-ink);
+}
+
+/*
+ * Where you are. Filled rather than tinted, and `aria-current="location"` in
+ * the markup says the same thing in words - the fill is never the only way to
+ * know which chip is live.
+ */
+.jump-bar__chip--here {
+  background: var(--hr-primary);
+  border-color: var(--hr-primary);
+  color: var(--hr-on-primary);
+}
+
