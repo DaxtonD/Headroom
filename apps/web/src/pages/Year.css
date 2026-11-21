@@ -156,6 +156,15 @@
   color: var(--hr-warning-fg);
 }
 
+/*
+ * A sentence on the left, its amount on the right.
+ *
+ * Exactly two flex items, and that is load-bearing: the sentence has to be
+ * wrapped in one span of its own, or every `strong` and every run of text
+ * between them becomes an item and `space-between` lays the sentence out as
+ * columns. That is what it did until 2026-11-20, and it read as text that
+ * had been cut off.
+ */
 .year__pair-line {
   display: flex;
   align-items: baseline;
@@ -163,6 +172,16 @@
   gap: var(--hr-space-3);
   font-size: 0.875rem;
   line-height: 1.45;
+}
+
+/*
+ * The sentence. `min-width: 0` so it can be narrower than its longest word
+ * allows and wrap instead of pushing the amount off the card - a flex item's
+ * floor is its min-content width unless it is told otherwise, which is the
+ * same trap `Shell.css` describes at length for the whole page.
+ */
+.year__pair-text {
+  min-width: 0;
 }
 
 .year__pair-amount {

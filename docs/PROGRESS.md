@@ -30,6 +30,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| A sentence laid out as columns | done | | 2026-11-20, reported from use. The pairing line on the Year screen read as clipped text. It was a flex container treating each word of a sentence as a column |
 | A charge wears the card it went on | done | | 2026-11-20, reported from use. A purchase charged to a card had no picture at all. It wears the card's now - which reverses a decision recorded the day before |
 | A lump sum off the mortgage, on the ledger | done | | 2026-11-20, reported from use. It could only be recorded on the Savings screen, where it moved no money and never asked which account it came out of. It is a one-off on the ledger now, and that row is the whole record |
 | Five things from a day's use | done | | 2026-11-20. A jump bar on Manage, the budget ring pinned while its list scrolls, a real badge on a payday, `dev` kept level with `main`, and four new sections on the Year screen |
@@ -111,6 +112,43 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## A sentence laid out as columns (2026-11-20, reported from use)
+
+> "In the 'what pays for what' section, it looks like there is text that's clipped."
+
+Nothing was clipped, and that is the useful part of this one. `.year__pair-line` is a flex
+container, so every element inside it became a flex ITEM - the `strong` holding the first month,
+the bare run of text after it, the `strong` holding the second, and the amount. `space-between`
+then spread those four apart and each wrapped on its own, so the sentence came out as
+
+    Dec 2026 | 's extra cheque covers | Oct 2027 | $1,158.87
+
+with `'s` orphaned at the top of its own column, which is exactly what a cut-off string looks
+like.
+
+The fix is one wrapper span, so the row has the two items it was always meant to have: the
+sentence, and its amount. `min-width: 0` on the sentence as well, because a flex item's floor is
+its min-content width unless it is told otherwise - the same trap `Shell.css` describes at length
+for the whole page, which once made the entire app wider than the phone.
+
+### The class of mistake, since it will come up again
+
+A flex container turns **every child** into a column, including bare text. That is fine for a row
+of self-contained things - a name and an amount - and wrong for a sentence with emphasis in it.
+Every other flex container on this screen was checked: `.year__highlight-head`, `.year__lump`,
+`.year__month-main`, `.year__count` and `.year__month-lump` all hold element children that are
+each a unit, and none of them has the problem.
+
+### Verified
+
+1564 tests green - 583 web, up from 581. Two added: one that the sentence is a single flex item
+with the amount beside it, and one that it is allowed to wrap rather than shoving the amount off
+the card.
+
+### Still to do
+
+- Nothing.
 
 ## A charge wears the card it went on (2026-11-20, reported from use)
 

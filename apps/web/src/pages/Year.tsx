@@ -268,8 +268,19 @@ function WhatPaysForWhat({ data }: { data: YearOverview }): React.JSX.Element | 
             key={`${pair.windfallStart}-${pair.squeezeStart}`}
           >
             <p className="year__pair-line">
-              <strong>{pair.windfallLabel}</strong>&rsquo;s extra cheque covers{" "}
-              <strong>{pair.squeezeLabel}</strong>
+              {/*
+                The whole sentence in ONE span, which is the entire point of
+                the wrapper. Without it the flex container took each of these
+                as a separate item and `space-between` spread them into
+                columns: "Dec 2026" | "'s extra cheque covers" | "Oct 2027",
+                each wrapping on its own. Reported from use as text that
+                looked clipped - nothing was missing, it had been laid out as
+                four things rather than one.
+              */}
+              <span className="year__pair-text">
+                <strong>{pair.windfallLabel}</strong>&rsquo;s extra cheque covers{" "}
+                <strong>{pair.squeezeLabel}</strong>
+              </span>
               <span className="year__pair-amount hr-amount">{formatCents(pair.coveredCents)}</span>
             </p>
             {pair.squeezeFirst ? (

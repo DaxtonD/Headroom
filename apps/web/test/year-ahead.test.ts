@@ -119,6 +119,53 @@ describe("what pays for what", () => {
 /* What to put aside                                                          */
 /* -------------------------------------------------------------------------- */
 
+/* -------------------------------------------------------------------------- */
+/* The sentence is a sentence                                                 */
+/* -------------------------------------------------------------------------- */
+
+describe("a pairing's line", () => {
+  /**
+   * Reported from use on 2026-11-20 as text that looked clipped. Nothing was
+   * missing: `.year__pair-line` is a flex container, so every `strong` and
+   * every run of text between them had become its own flex item, and
+   * `space-between` spread the sentence into columns -
+   * "Dec 2026" | "'s extra cheque covers" | "Oct 2027" - each wrapping
+   * separately.
+   *
+   * The fix is one wrapper, so the row has exactly two items: the sentence,
+   * and its amount.
+   */
+  it("is one flex item, not one per word", () => {
+    const at = yearTsx.indexOf('<p className="year__pair-line">');
+    expect(at).toBeGreaterThan(-1);
+    const line = yearTsx.slice(at, yearTsx.indexOf("</p>", at));
+
+    // The whole sentence lives inside the wrapper...
+    const text = line.slice(
+      line.indexOf('<span className="year__pair-text">'),
+      line.indexOf("</span>", line.indexOf('<span className="year__pair-text">')),
+    );
+    expect(text).toContain("pair.windfallLabel");
+    expect(text).toContain("extra cheque covers");
+    expect(text).toContain("pair.squeezeLabel");
+
+    // ...and the amount is the only other thing in the row.
+    expect(line).toContain('<span className="year__pair-amount hr-amount">');
+  });
+
+  /**
+   * A flex item's floor is its min-content width unless it is told otherwise,
+   * which is the trap `Shell.css` describes for the whole page. Without this
+   * the sentence would push the amount off the edge of the card rather than
+   * wrapping.
+   */
+  it("lets the sentence wrap instead of shoving the amount off the card", () => {
+    expect(rule(yearCss, ".year__pair-text")).toContain("min-width: 0");
+    expect(rule(yearCss, ".year__pair-amount")).toContain("flex: 0 0 auto");
+    expect(rule(yearCss, ".year__pair-amount")).toContain("white-space: nowrap");
+  });
+});
+
 describe("what to put aside", () => {
   /**
    * The level figure is the headline and the even share is the explanation.
