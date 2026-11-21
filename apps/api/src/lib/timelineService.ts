@@ -667,6 +667,7 @@ export async function loadOccurrenceDecorations(
       templateId: true,
       template: { select: { imageId: true } },
       transferToAccount: { select: { imageId: true } },
+      paidFromAccount: { select: { imageId: true } },
       verifiedAt: true,
       paidAt: true,
       paidFromAccountId: true,
@@ -684,21 +685,43 @@ export async function loadOccurrenceDecorations(
         version: row.version,
         templateId: row.templateId,
         /*
-         * The template's picture, or the picture of the account the money
-         * lands in.
+         * The picture a row wears, in order of how specific it is: the one
+         * somebody chose for the thing itself, then the account the money
+         * landed in, then the account it came out of.
          *
          * A one-off has no template, so a payment toward the Visa showed a
          * lettered square beside a row whose whole subject is the Visa -
-         * which has a picture, two inches further up the same screen, in
-         * "On cards". Reported from use.
+         * which has a picture, two inches up the same screen, in "On cards".
+         * Reported from use on 2026-11-19 and fixed by the second fallback.
          *
-         * Only the DESTINATION. A charge paid FROM a card is a purchase, not
-         * the card: it already names the card in a chip, and giving it the
-         * card's logo would say the row IS the card. The template still wins
-         * where there is one, because a picture somebody chose beats one
-         * derived from where the money went.
+         * ## The third one reverses what this comment used to say
+         *
+         * It read: "Only the DESTINATION. A charge paid FROM a card is a
+         * purchase, not the card: it already names the card in a chip, and
+         * giving it the card's logo would say the row IS the card." That was
+         * a real argument and the household has now used it and disagreed,
+         * 2026-11-20: "I just made a purchase on Amazon today. It was charged
+         * to our Visa... now, on the ledger, there is no picture."
+         *
+         * They are right, and the argument was weighing the wrong risk. A
+         * charge on a card is still a row ABOUT that card more than it is
+         * about nothing, and nothing is what it was showing. The confusion
+         * the old reasoning feared is handled where it belongs: a payment
+         * toward the Visa carries a "Pays Visa" chip and a charge carries a
+         * plain "Visa" one, so the two are told apart by words rather than by
+         * the absence of a picture.
+         *
+         * This can only ever fire for a card or a savings account. Chequing
+         * is stored as a NULL source - `routing.ts` keeps it out of every
+         * source picker for that reason - so an ordinary chequing bill with
+         * no picture of its own still gets a lettered square, and the ledger
+         * does not turn into a column of the same chequing logo.
          */
-        imageId: row.template?.imageId ?? row.transferToAccount?.imageId ?? null,
+        imageId:
+          row.template?.imageId ??
+          row.transferToAccount?.imageId ??
+          row.paidFromAccount?.imageId ??
+          null,
         paidFromAccountId: row.paidFromAccountId,
         transferToAccountId: row.transferToAccountId,
         owner: row.owner,

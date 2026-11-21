@@ -30,6 +30,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Credit cards and account routing | done | | 2026-11-18, decided with the owner. Every row says which account it leaves; a charge moves the card, not chequing, and a payment moves both. Safe to spend stays a chequing figure, with a warning that cannot be missed |
 | A one-off arrives already ticked | done | | 2026-11-18, reported from use. "Has it happened?" defaults to yes, so the balance moves from the one request. Same field and same audit entry as a tick on the row |
 | Both ledger actions at the top, and a line that stays | done | | 2026-11-18, reported from use. Update balance and Add a one-off side by side in the hero; once the hero goes behind the header a fixed single line carries the balance, safe to spend and both buttons. Bugs 24 and 25 the same evening, one class in both directions: the line never appeared, then would not go away. The arithmetic is a tested pure function now, not a grep |
+| A charge wears the card it went on | done | | 2026-11-20, reported from use. A purchase charged to a card had no picture at all. It wears the card's now - which reverses a decision recorded the day before |
 | A lump sum off the mortgage, on the ledger | done | | 2026-11-20, reported from use. It could only be recorded on the Savings screen, where it moved no money and never asked which account it came out of. It is a one-off on the ledger now, and that row is the whole record |
 | Five things from a day's use | done | | 2026-11-20. A jump bar on Manage, the budget ring pinned while its list scrolls, a real badge on a payday, `dev` kept level with `main`, and four new sections on the Year screen |
 | The Year screen earns its place | done | | 2026-11-20, asked for from use: "some more genius ideas... really intelligent stuff that adapts to the data". What pays for what, what to put aside, the bills that skip months, and where the balance ends each month |
@@ -110,6 +111,52 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## A charge wears the card it went on (2026-11-20, reported from use)
+
+> "When I add a one-off payment I'd like the picture/icon to be associated with the account it
+> came out of. For example, I just made a purchase on Amazon today. It was charged to our Visa.
+> I added a one-off payment for it. I chose Visa as the account it came out of. Now, on the
+> ledger, there is no picture."
+
+### This reverses a decision from the day before
+
+`timelineService.ts` said, in a comment written on 2026-11-19: *"Only the DESTINATION. A charge
+paid FROM a card is a purchase, not the card: it already names the card in a chip, and giving it
+the card's logo would say the row IS the card."*
+
+That was a real argument, and it weighed the wrong risk. It was worried that a Visa payment and a
+coffee bought on the Visa would look alike; what it produced instead was a row about a card
+showing **nothing at all**. A row about a card beats a row about nothing, and the distinction the
+old reasoning was protecting is carried by the chips anyway - a payment reads "Pays Visa" and a
+charge reads a plain "Visa", which is words rather than the absence of a picture.
+
+The picture now falls back in order of how specific it is: **the template's own**, then **the
+account the money landed in**, then **the account it came out of**.
+
+### Why this does not fill the ledger with the chequing logo
+
+The obvious failure of a source fallback would be every ordinary bill wearing the chequing
+account's picture, at which point the column stops telling anybody anything.
+
+It cannot happen, and not by luck: **chequing is stored as a NULL source.** `routing.ts` keeps it
+out of every source picker for exactly that reason, and `accountIdOf` turns the empty option into
+null on the way out. So the third fallback can only ever fire for a card or a savings account -
+the two things a row genuinely is "on". There is a test for the chequing case, because the day
+somebody resolves that null to the real account id before the picture is looked up, this breaks
+silently and the ledger becomes a column of one logo.
+
+### Verified
+
+1562 tests green - 411 engine, 581 web, 570 API. Three tests in `rowPicture.test.ts` changed or
+added: the one that asserted the old behaviour now asserts the new, plus the chequing guard above
+and one proving the destination still beats the source (a Visa payment made out of savings is a
+row about the Visa).
+
+### Still to do
+
+- Nothing. A one-off still has no picture of its own to choose - only the fallbacks - and nobody
+  has asked for one.
 
 ## A lump sum off the mortgage, on the ledger (2026-11-20, reported from use)
 

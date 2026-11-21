@@ -136,14 +136,19 @@ describe("a one-off that pays an account", () => {
   });
 
   /**
-   * A charge is a purchase, not the card.
+   * A charge wears the picture of the card it went on.
    *
-   * It names the card in a chip already. Wearing the card's logo would claim
-   * the row IS the card, and then a Visa payment and a coffee bought on the
-   * Visa would be indistinguishable at a glance - which is the opposite of
-   * what the picture is there for.
+   * This test used to assert the opposite, on the argument that a charge is a
+   * purchase rather than the card and that the card's logo would claim the
+   * row IS the card. The household used it and disagreed, 2026-11-20: "I just
+   * made a purchase on Amazon today. It was charged to our Visa... now, on
+   * the ledger, there is no picture."
+   *
+   * A row about a card beats a row about nothing, and the distinction the old
+   * argument was protecting is carried by the chips - "Pays Visa" against a
+   * plain "Visa" - rather than by one row having no picture at all.
    */
-  it("does not wear the picture of the card it is charged to", async () => {
+  it("wears the picture of the card it is charged to", async () => {
     const picture = await uploadPicture(3);
     const visaId = await addAccount("Visa", "credit_card", picture);
 
@@ -156,7 +161,52 @@ describe("a one-off that pays an account", () => {
     });
     expect(created.statusCode, created.body).toBe(201);
 
-    expect((await rowNamed("Groceries"))?.imageId).toBeNull();
+    expect((await rowNamed("Groceries"))?.imageId).toBe(picture);
+  });
+
+  /**
+   * The case the old reasoning was really protecting, and the one that keeps
+   * the ledger readable: chequing is stored as a NULL source, so an ordinary
+   * bill paid from it is not given the chequing account's picture. Without
+   * that, every row on the screen would wear the same logo and the picture
+   * would stop telling anybody anything.
+   */
+  it("does not give an ordinary chequing bill the chequing picture", async () => {
+    const picture = await uploadPicture(6);
+    await addAccount("Everyday chequing", "chequing", picture);
+
+    const created = await post("/api/occurrences", {
+      name: "Dentist",
+      kind: "bill",
+      cents: "12000",
+      date: inDays(1),
+    });
+    expect(created.statusCode, created.body).toBe(201);
+
+    expect((await rowNamed("Dentist"))?.imageId).toBeNull();
+  });
+
+  /**
+   * Where the money LANDED beats where it came from: a Visa payment made out
+   * of savings is a row about the Visa, not about savings.
+   */
+  it("keeps the destination ahead of the source", async () => {
+    const visaPicture = await uploadPicture(7);
+    const savingsPicture = await uploadPicture(8);
+    const visaId = await addAccount("Visa", "credit_card", visaPicture);
+    const savingsId = await addAccount("Savings", "savings", savingsPicture);
+
+    const created = await post("/api/occurrences", {
+      name: "Visa payment",
+      kind: "transfer",
+      cents: "25000",
+      date: inDays(1),
+      paidFromAccountId: savingsId,
+      transferToAccountId: visaId,
+    });
+    expect(created.statusCode, created.body).toBe(201);
+
+    expect((await rowNamed("Visa payment"))?.imageId).toBe(visaPicture);
   });
 
   /**
