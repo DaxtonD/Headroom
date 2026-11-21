@@ -19,13 +19,22 @@ standing instructions from them override what follows:
 2. **No real financial data in git, ever** - broader than the private-repo allowance below.
    See `docs/PROGRESS.md` for what is git-ignored as a result.
 
-The rest of this section still describes the intended rhythm: build the whole app, milestone by
-milestone (HANDOFF section 13), keeping each one green before starting the next.
+**Superseded again on 2026-11-21: the milestone plan is finished.** "We're pretty much ad-lib
+now." M0-M5 are done and tagged, M6 is empty, and the app has been in daily use since
+2026-11-13. Work now arrives one piece at a time, from using it - a bug noticed on a phone, a
+screen somebody wants denser - and HANDOFF is history rather than a plan: still the authority on
+what a figure means and why, no longer a list of what to build next. `docs/PROGRESS.md`,
+newest-first, is where the work actually is.
 
-- Unclear? Use the default in HANDOFF section 14, or the most conservative reasonable choice. Make it an editable household setting where that makes sense. Record it in `docs/PROGRESS.md` under "Decisions made without asking" (and under "Questions for the household" if it needs confirming). Keep going.
+What has not changed: each piece is finished before the next one starts, and finished means
+tests green, `docs/PROGRESS.md` updated, and committed. Pushing still waits for an explicit OK.
+
+- Unclear? Ask - the owner is answering. Where asking would be slower than it is worth, use the
+  default in HANDOFF section 14, or the most conservative reasonable choice. Make it an editable household setting where that makes sense. Record it in `docs/PROGRESS.md` under "Decisions made without asking" (and under "Questions for the household" if it needs confirming). Keep going.
 - Only stop work on an item if it needs a credential you don't have, touches the owner's Unraid server or any machine other than this one, or is irreversible outside this repo. Log it under "Blocked / needs the owner" and move on to other work.
 - Never weaken the integrity rules or the money rules below to get something working.
-- Finish each milestone fully (tests green, PROGRESS.md updated, committed, pushed, tagged) before starting the next.
+- Finish each piece fully (tests green, PROGRESS.md updated, committed) before starting the
+  next. Tags were per milestone and there are no milestones left to tag.
 
 ## Git
 
@@ -60,7 +69,18 @@ pnpm workspaces: `apps/web` (React 19, TypeScript, Vite, vite-plugin-pwa, React 
   it refuses a row without one for a reason (see `docs/PROGRESS.md`). A charge on a card keeps
   its budget section; a template that **pays** a card must not have one, or the same money is
   budgeted twice.
-- Every mutation: field-level PATCH + `If-Match` version + `Idempotency-Key`. Same-field conflict returns 409; different fields auto-merge. Balance snapshots and activity are append-only. Writes are online-only; offline is a read-only cache; no Background Sync. (HANDOFF section 16.)
+- Every mutation that touches a **household fact**: field-level PATCH + `If-Match` version +
+  `Idempotency-Key`. Same-field conflict returns 409; different fields auto-merge. Balance
+  snapshots and activity are append-only. Writes are online-only; offline is a read-only cache;
+  no Background Sync. (HANDOFF section 16.)
+  - **The one exception, and do not extend it without asking:** `PATCH /api/me/preferences` -
+    one person's own theme, text size and row density. No version, no idempotency key, no
+    activity entry, no change ping. That row holds no money and has exactly one writer by
+    construction, so there is no race to detect and a 409 on a theme would be a question nobody
+    could answer. `push_subscription` is the older precedent for the same shape of thing.
+    Reasoned beside the route in `apps/api/src/routes/auth.ts` and held by
+    `apps/api/test/preferences.test.ts`, which asserts it works with **neither** header - so
+    "fixing" it by rote turns a test red rather than quietly making the app worse.
 - `packages/core` must reproduce every expected value in the seed (golden tests). The section 16 integrity tests must run against a real Postgres (docker service, local install, or the `embedded-postgres` package), not mocks.
 - Config only via environment variables validated at startup. Every new variable goes into `.env.example` with a comment in the same commit.
 - Accessibility: 44 px touch targets, 4.5:1 text contrast, real `<button>`/`<input>`/`<label>`.

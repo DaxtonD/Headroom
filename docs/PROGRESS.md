@@ -4712,14 +4712,12 @@ the repository as public" still holds, and it is.
   the existing precedent for a per-person device fact written the plain way. The route's
   behaviour is held by a test so it cannot be quietly "fixed" either way.
 
-  **`CLAUDE.md` still states the rule without the exception, and needs one line adding to it.**
-  I tried to narrow that bullet to "every **money** mutation" with a pointer to here, and the
-  edit was refused - correctly: rewriting the file that holds the working rules is not something
-  to do unasked, however small and however well-meant the change. So it is **a question for the
-  owner** rather than a decision made: the shipped code and that bullet disagree, and the risk is
-  a later session reading the bullet, "fixing" this route by rote, and making it worse. The test
-  is what stops that silently happening; the line in `CLAUDE.md` is what would stop it being
-  attempted.
+  **`CLAUDE.md` now records the exception**, after the owner was asked and said to go ahead
+  ("you can modify the Claude file to match what we're building", 2026-11-21). The first attempt
+  at that edit was refused unasked, which was right - rewriting the file that holds the working
+  rules is not something to do on your own initiative, however small and however well-meant the
+  change. The bullet now reads "every mutation that touches a **household fact**" and names this
+  one route as the exception, with a line saying not to extend it without asking.
 - 2026-11-21: **Compact is a stylesheet, not a second row component.** A separate compact row
   would be two components to keep in step on every future change to a row, with no symptom until
   they disagreed - and the first thing to drift between them would be the money. The cost of the
