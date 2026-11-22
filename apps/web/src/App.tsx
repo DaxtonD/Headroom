@@ -24,6 +24,7 @@ import { Savings } from "./pages/Savings.js";
 import { Settings } from "./pages/Settings.js";
 import { Year } from "./pages/Year.js";
 import { useAppearanceSync } from "./lib/preferences.js";
+import { usePushResync } from "./lib/pushNotifications.js";
 import { useLogout, useSession } from "./lib/session.js";
 import { useLiveUpdates } from "./lib/useLiveUpdates.js";
 import { useWarmTabs } from "./lib/warmTabs.js";
@@ -71,6 +72,18 @@ export function App(): React.JSX.Element {
    * the reasoning, including why it waits for the ledger first.
    */
   useWarmTabs(Boolean(session.data));
+
+  /*
+   * Hand this browser's push subscription back to the server on every load.
+   *
+   * The server drops a subscription as soon as its push service rejects one,
+   * and the browser is never told - so the notifications screen went on
+   * saying "On for this device" for a device that had been forgotten weeks
+   * earlier. `pushNotifications.ts` has the whole of it. Here because it has
+   * to run whether or not anybody opens Settings, which is the screen the
+   * problem was invisible from.
+   */
+  usePushResync(session.data?.user.id ?? null);
 
   if (session.isPending) {
     return (

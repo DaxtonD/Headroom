@@ -47,6 +47,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Preferences stored against the person | done | | 2026-11-21, asked for from use: a browser that gets cleared daily took the theme, the text size and the density with it. On the server now and loaded at sign-in; the device keeps a copy for the pre-paint script. The one route in this app with no If-Match and no idempotency key, reasoned beside it |
 | The top of the compact ledger | done | | 2026-11-21, reported after a day of the compact rows. The hero was about 425px and a third of it was whitespace around three 44px info targets. The targets survive as hit areas rather than as layout; the strip under it now lists savings as well as the cards |
 | A tab shows something the moment it is pressed | done | | 2026-11-21, reported from use. The query cache was emptied five minutes after a screen was left, nothing warmed the tabs, and five screens waited against an empty div. In memory only - no figure is written to a phone |
+| A device the server had forgotten | done | | 2026-11-22, reported from use. The screen read "On for this device" from the browser alone and never asked whether the server still had the row, so a subscription dropped at send time was invisible forever. The page hands its subscription back on every load, the worker hands over a rotated one, and a refusal no longer reports itself as an expiry |
 
 ## Last session
 
@@ -118,6 +119,86 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## A device the server had forgotten (2026-11-22, reported from use)
+
+"Notifications stopped working." The notifications card said **On for this device**, and
+underneath it the result of a test: *this device's subscription had expired, so it has been
+forgotten.*
+
+Both sentences were true at once, and that was the bug.
+
+### Two halves that cannot tell each other anything
+
+A push subscription exists twice: as a row on the server, and as a `PushSubscription` object in
+the browser. The server deletes its half the moment the push service rejects a send - that is
+correct and deliberate, and `push.ts` explains why at length. What it cannot do is tell the
+browser. There is no event for it. The browser's object carries on existing, unchanged, pointing
+at an endpoint the server no longer knows about.
+
+`currentPushState` decided the toggle from the browser's half only:
+
+```ts
+const existing = await worker?.pushManager.getSubscription();
+return existing ? "on" : "off";
+```
+
+Its own doc comment said "three systems have to agree - the browser, the server and the person",
+and listed site data being cleared and VAPID keys being removed. It checked the person
+(`Notification.permission`) and it checked whether the server had keys **at all**
+(`key.configured`). It never checked whether the server still had *this endpoint*. So the one
+drift it could not see is the one that happens by itself, every time a send fails.
+
+The effect is a screen that says notifications are on, for a device that will never be sent
+anything again, with nothing anywhere to suggest otherwise. The only thing that surfaced it was
+pressing "Send a test" on purpose - which is to say, already suspecting.
+
+### What was done
+
+**The page hands its subscription back on every load.** `resyncSubscription` posts whatever this
+browser has to `POST /api/push/subscriptions`, which is an upsert keyed on the endpoint: a no-op
+when the server agrees, a repair when it does not. It also clears the server's failure counter
+for that row, which is right rather than incidental - the counter exists to reap a device that
+cannot be reached, and a device whose owner is opening the app is not that device.
+
+Mounted in `App`, not in Settings. The drift is invisible from inside the app, so waiting for
+somebody to open the notifications screen would mean waiting until they already knew. Keyed on
+who is signed in rather than run once, for the same reason the appearance sync is: `App` never
+unmounts, and the subscribe route deliberately moves a browser's row to whoever is signed in on
+it now.
+
+**The worker hands over a rotated subscription straight away.** There was no
+`pushsubscriptionchange` listener, so when a browser swapped a subscription by itself - a push
+service retiring an endpoint, Chrome reissuing one - the server kept an endpoint that was already
+dead while the browser held a live one it had never heard of. The page's repair would catch it on
+the next load; the worker now catches it immediately, and swallows every failure because the
+slower path still exists behind it.
+
+**A refusal no longer reports itself as an expiry.** `sendToAll` deletes a row for two different
+reasons: the service said 404/410, or five consecutive failures of some other kind. Both
+incremented `gone`, and `describeTest` checked `gone` first - so a subscription killed by repeated
+403s, which in practice means a VAPID pair that no longer matches, was reported as having
+*expired*, with the advice to turn notifications off and on again. That advice cannot work: the
+new subscription is refused exactly like the old one. The two are counted apart now (`gone` and
+`abandoned`), the message for the second one names the likely cause and says plainly that the
+toggle will not help, and the server logs it at warn rather than info.
+
+### What this did not turn out to be
+
+Not the VAPID keys, and not a bad deploy. The subscription had been dropped at some point by the
+push service - which is ordinary - and nothing ever put it back. Worth recording because the
+first instinct was to go looking at the server's environment, and the answer was in the client.
+
+### Held by tests
+
+`apps/web/test/push-resync.test.ts`, 13 of them, source-level like the rest of the web suite:
+that the repair re-posts rather than subscribes afresh, that it is mounted in `App` and keyed on
+the user, that the worker's handler sends the session cookie and prefers the subscription the
+event already carries, and that the `abandoned` branch is checked before `gone` - the ordering
+being the whole of that fix. `apps/api/test/push.test.ts` now asserts the give-up path reports
+`abandoned: 1, gone: 0`.
+
+443 engine, 721 web, 603 API. Lint, typecheck, build and `check:figures` clean.
 
 ## Three things from a day's use (2026-11-21, asked for and reported from use)
 

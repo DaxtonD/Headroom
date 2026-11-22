@@ -222,6 +222,19 @@ export async function notifyForPing(deps: PushNotifierDeps, ping: ChangePing): P
   if (result.gone > 0) {
     deps.log.info({ gone: result.gone }, "dropped push subscriptions the service says are gone");
   }
+
+  /*
+   * Louder than `gone`, and deliberately. A subscription the service says is
+   * finished is housekeeping; one we gave up on after repeated refusals is a
+   * symptom, and the usual cause is a VAPID pair that no longer matches the
+   * one the browsers subscribed with. That is worth finding in a log.
+   */
+  if (result.abandoned > 0) {
+    deps.log.warn(
+      { abandoned: result.abandoned },
+      "dropped push subscriptions the service kept refusing - check the VAPID keys",
+    );
+  }
 }
 
 /** The name as the household says it, matching every other screen. */

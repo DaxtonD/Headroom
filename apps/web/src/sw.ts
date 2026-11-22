@@ -215,6 +215,56 @@ self.addEventListener("push", (event: PushEvent) => {
  * being opened, which on Android is the difference between going back to the
  * app and ending up with two of it.
  */
+/**
+ * The browser swapped this subscription for a different one.
+ *
+ * Browsers do this on their own - a push service retiring an endpoint, Chrome
+ * reissuing one - and the page is usually not open when it happens. The
+ * server is left holding an endpoint that is already dead while this browser
+ * quietly holds a live one it has never heard of, and nothing notices until a
+ * send fails. At that point the server drops the row and the screen says the
+ * subscription "had expired", which reads as something the person did.
+ *
+ * `oldSubscription` is already gone by the time this fires, so there is
+ * nothing to unsubscribe; the stale row dies on its next send. All that is
+ * needed is to hand over the new one straight away.
+ *
+ * The page does the same repair on its next load, so this is the fast path
+ * rather than the only one - which is why every failure here is swallowed.
+ */
+interface PushSubscriptionChangeEvent extends ExtendableEvent {
+  readonly newSubscription?: PushSubscription | null;
+}
+
+self.addEventListener("pushsubscriptionchange", ((event: PushSubscriptionChangeEvent) => {
+  event.waitUntil(
+    (async () => {
+      try {
+        const response = await fetch("/api/push/key", { credentials: "same-origin" });
+        if (!response.ok) return;
+        const key = (await response.json()) as { configured?: unknown; publicKey?: unknown };
+        if (key.configured !== true || typeof key.publicKey !== "string") return;
+
+        const fresh =
+          event.newSubscription ??
+          (await self.registration.pushManager.subscribe({
+            userVisibleOnly: true,
+            applicationServerKey: key.publicKey,
+          }));
+
+        await fetch("/api/push/subscriptions", {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(fresh.toJSON()),
+        });
+      } catch {
+        // Offline, signed out, or refused. The page repairs it on next load.
+      }
+    })(),
+  );
+}) as EventListener);
+
 self.addEventListener("notificationclick", (event: NotificationEvent) => {
   event.notification.close();
 

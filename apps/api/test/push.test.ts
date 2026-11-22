@@ -282,13 +282,25 @@ describe("browsers that have stopped listening", () => {
 
     for (let attempt = 1; attempt <= 4; attempt += 1) {
       const result = await sendToAll(harness.db.prisma, [one], { body: "x", url: "/" });
-      expect(result, `attempt ${String(attempt)}`).toMatchObject({ sent: 0, gone: 0, failed: 1 });
+      expect(result, `attempt ${String(attempt)}`).toMatchObject({
+        sent: 0,
+        gone: 0,
+        abandoned: 0,
+        failed: 1,
+      });
       expect(await harness.db.prisma.pushSubscription.count()).toBe(1);
     }
 
-    // The fifth consecutive failure is indistinguishable from gone.
+    /*
+     * The fifth consecutive failure is indistinguishable from gone, so the
+     * row goes - but it is counted as `abandoned`, not `gone`. The screen
+     * tells the two apart: "it expired, subscribe again" is right for one and
+     * useless for the other, which is usually a VAPID pair that stopped
+     * matching and will refuse the next subscription exactly as it refused
+     * this one.
+     */
     const last = await sendToAll(harness.db.prisma, [one], { body: "x", url: "/" });
-    expect(last).toMatchObject({ gone: 1 });
+    expect(last).toMatchObject({ sent: 0, gone: 0, abandoned: 1, failed: 1 });
     expect(await harness.db.prisma.pushSubscription.count()).toBe(0);
   });
 
@@ -622,7 +634,13 @@ describe("sending one to yourself on purpose", () => {
     });
 
     expect(response.statusCode, response.body).toBe(200);
-    expect(response.json()).toEqual({ subscriptions: 2, sent: 2, gone: 0, failed: 0 });
+    expect(response.json()).toEqual({
+      subscriptions: 2,
+      sent: 2,
+      gone: 0,
+      abandoned: 0,
+      failed: 0,
+    });
     expect(sent.map((item) => item.endpoint).sort()).toEqual([
       "https://fcm.googleapis.com/fcm/send/mine-1",
       "https://fcm.googleapis.com/fcm/send/mine-2",

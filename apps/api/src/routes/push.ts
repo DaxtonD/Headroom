@@ -170,7 +170,7 @@ export async function registerPushRoutes(app: FastifyInstance): Promise<void> {
     });
 
     if (mine.length === 0) {
-      return reply.send({ subscriptions: 0, sent: 0, gone: 0, failed: 0 });
+      return reply.send({ subscriptions: 0, sent: 0, gone: 0, abandoned: 0, failed: 0 });
     }
 
     const result = await sendToAll(

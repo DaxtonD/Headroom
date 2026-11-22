@@ -23,7 +23,7 @@
  * does nothing when pressed, with no explanation. Each gets its own state
  * and its own sentence.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "./api.js";
 import { BUILD_ID, isStamped, shortBuild } from "./buildId.js";
 import { workerStatus } from "./serverBuild.js";
@@ -119,10 +119,77 @@ async function currentPushState(): Promise<PushState> {
   return existing ? "on" : "off";
 }
 
+/**
+ * Tell the server about this browser's subscription again.
+ *
+ * ## The drift this exists to repair
+ *
+ * The server deletes a subscription the moment its push service rejects one,
+ * and there is no way to tell the browser that happened - no event, nothing
+ * to listen for. The browser's own `PushSubscription` object is untouched and
+ * goes on existing exactly as before. So the two halves drift apart in
+ * silence, and `currentPushState` - which can only see the browser's half -
+ * goes on reporting "on" for a device the server has forgotten and will never
+ * send anything to again.
+ *
+ * Reported from use on 2026-11-22: notifications had stopped arriving while
+ * the screen still said "On for this device", and the only thing that
+ * surfaced it was sending a test on purpose. Nothing short of that would
+ * have, which is what made it a bug rather than a nuisance.
+ *
+ * Re-posting what this browser already has closes the gap. The route is an
+ * upsert keyed on the endpoint, so this is a no-op when the server agrees and
+ * a repair when it does not.
+ *
+ * It also clears the server's failure counter for this row, which is the
+ * right call rather than an accident: that counter exists to reap a device
+ * that cannot be reached, and a device whose owner is opening the app in
+ * front of us is not that device.
+ */
+export async function resyncSubscription(): Promise<void> {
+  try {
+    const worker = await registration();
+    const existing = await worker?.pushManager.getSubscription();
+    if (!existing) return;
+    await api.post("/api/push/subscriptions", existing.toJSON());
+  } catch {
+    /*
+     * Offline, signed out, or push switched off on the server. None of those
+     * is news, none is actionable by the person, and the next load tries
+     * again - so this stays quiet rather than putting an error on a screen
+     * nobody asked to look at.
+     */
+  }
+}
+
+/**
+ * Repair the server's record of this browser, once per person per load.
+ *
+ * Mounted in `App`, not in Settings. The drift is invisible from inside the
+ * app, so waiting until somebody opened the notifications screen would mean
+ * waiting until they already suspected something was wrong.
+ *
+ * Keyed on who is signed in rather than run once, because `App` never
+ * unmounts and the subscribe route deliberately moves a browser's row to
+ * whoever is signed in on it now. On a shared phone, the second person to
+ * sign in should get the notifications.
+ */
+export function usePushResync(userId: string | null): void {
+  const doneForRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (userId === null || doneForRef.current === userId) return;
+    if (!pushIsSupported()) return;
+    doneForRef.current = userId;
+    void resyncSubscription();
+  }, [userId]);
+}
+
 interface TestResult {
   readonly subscriptions: number;
   readonly sent: number;
   readonly gone: number;
+  readonly abandoned: number;
   readonly failed: number;
 }
 
@@ -291,6 +358,16 @@ export function usePushNotifications(): PushControls {
 function describeTest(result: TestResult, worker: WorkerStatus): string {
   if (result.subscriptions === 0) {
     return "This device is not signed up. Turn notifications on first.";
+  }
+  /*
+   * Checked before `gone`, because a subscription dropped after repeated
+   * refusals sets both and the two call for opposite things. Saying "it
+   * expired, turn it off and on again" to somebody whose VAPID pair no
+   * longer matches is advice that cannot work however many times they take
+   * it - the new subscription is refused exactly like the old one.
+   */
+  if (result.abandoned > 0 && result.sent === 0) {
+    return "The push service kept refusing this device, so it has been forgotten. Turning it off and on again will not help until that is fixed - the server log says what was refused, and the VAPID keys are the usual cause.";
   }
   if (result.gone > 0 && result.sent === 0) {
     return "This device's subscription had expired, so it has been forgotten. Turn notifications off and on again.";

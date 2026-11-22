@@ -79,6 +79,17 @@ export interface SendResult {
   readonly sent: number;
   /** Rows deleted because the push service said they no longer exist. */
   readonly gone: number;
+  /**
+   * Rows deleted after `GIVE_UP_AFTER` failures of some other kind.
+   *
+   * Counted apart from `gone` because the two mean opposite things to
+   * whoever has to fix it. "The service says this endpoint is finished" is
+   * ordinary and self-correcting - subscribe again and it works. "The
+   * service kept refusing us" is usually the VAPID pair, and reporting that
+   * one as an expiry sends somebody off to turn notifications off and on
+   * again forever, which cannot possibly help.
+   */
+  readonly abandoned: number;
   readonly failed: number;
 }
 
@@ -97,6 +108,7 @@ export async function sendToAll(
 ): Promise<SendResult> {
   let sent = 0;
   let gone = 0;
+  let abandoned = 0;
   let failed = 0;
 
   const body = JSON.stringify(payload);
@@ -146,7 +158,7 @@ export async function sendToAll(
         // that can never be delivered to is worth no more than one that says
         // so outright.
         if (row !== null && row.failures >= GIVE_UP_AFTER) {
-          gone += 1;
+          abandoned += 1;
           await prisma.pushSubscription
             .delete({ where: { id: subscription.id } })
             .catch(() => undefined);
@@ -155,7 +167,7 @@ export async function sendToAll(
     }),
   );
 
-  return { sent, gone, failed };
+  return { sent, gone, abandoned, failed };
 }
 
 /** The push service's host, for a log line that names no endpoint secret. */
