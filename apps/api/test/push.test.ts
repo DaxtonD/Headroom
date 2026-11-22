@@ -266,6 +266,62 @@ describe("browsers that have stopped listening", () => {
     const left = await harness.db.prisma.pushSubscription.findMany();
     expect(left.map((row) => row.endpoint)).toEqual([live.endpoint]);
     expect(sent.map((item) => item.endpoint)).toEqual([live.endpoint]);
+
+    /*
+     * The status comes back, which it did not until 2026-11-22. Dropping a
+     * subscription was the one outcome that left no trace anywhere, so
+     * "notifications stopped working" had nothing behind it to read.
+     */
+    expect(result.rejections).toEqual([{ host: "push.example.test", status: 410 }]);
+  });
+
+  it("reports a 404 apart from a 410, because they are opposite news", async () => {
+    /*
+     * Both drop the row. 410 is the service retiring a subscription and
+     * subscribing again fixes it; 404 from FCM usually means the VAPID pair
+     * signing the request is not the pair the browser subscribed with, and
+     * then every fresh subscription is rejected exactly like this one. The
+     * screen tells them apart, so it must be able to see the difference.
+     */
+    const { alex } = await seedHousehold(harness);
+    const unknown = await subscribeRow(alex.id, "https://push.example.test/unknown");
+    rejectWith.set(unknown.endpoint, 404);
+
+    const result = await sendToAll(
+      harness.db.prisma,
+      [
+        {
+          id: unknown.id,
+          endpoint: unknown.endpoint,
+          p256dh: unknown.p256dh,
+          auth: unknown.auth,
+        },
+      ],
+      { body: "x", url: "/" },
+    );
+
+    expect(result).toMatchObject({ sent: 0, gone: 1, abandoned: 0, failed: 0 });
+    expect(result.rejections).toEqual([{ host: "push.example.test", status: 404 }]);
+    expect(await harness.db.prisma.pushSubscription.count()).toBe(0);
+  });
+
+  it("never puts the endpoint itself in a rejection", async () => {
+    /*
+     * That URL is a capability: anybody holding it can send this browser a
+     * notification. The host says which service answered, which is the only
+     * thing the host is ever needed for.
+     */
+    const { alex } = await seedHousehold(harness);
+    const row = await subscribeRow(alex.id, "https://push.example.test/secret-token-abc");
+    rejectWith.set(row.endpoint, 410);
+
+    const result = await sendToAll(
+      harness.db.prisma,
+      [{ id: row.id, endpoint: row.endpoint, p256dh: row.p256dh, auth: row.auth }],
+      { body: "x", url: "/" },
+    );
+
+    expect(JSON.stringify(result.rejections)).not.toContain("secret-token-abc");
   });
 
   it("keeps one the service merely could not reach, until it gives up", async () => {
@@ -640,6 +696,7 @@ describe("sending one to yourself on purpose", () => {
       gone: 0,
       abandoned: 0,
       failed: 0,
+      rejections: [],
     });
     expect(sent.map((item) => item.endpoint).sort()).toEqual([
       "https://fcm.googleapis.com/fcm/send/mine-1",

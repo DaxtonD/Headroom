@@ -185,12 +185,32 @@ export function usePushResync(userId: string | null): void {
   }, [userId]);
 }
 
+interface SendFailure {
+  readonly host: string;
+  readonly status: number;
+}
+
 interface TestResult {
   readonly subscriptions: number;
   readonly sent: number;
   readonly gone: number;
   readonly abandoned: number;
   readonly failed: number;
+  readonly rejections?: readonly SendFailure[];
+}
+
+/**
+ * The status the push service answered with, when every attempt agreed.
+ *
+ * Disagreement means two devices failing for two reasons, and no single
+ * sentence is honest about that - so it returns null and the caller falls
+ * back to saying only what it knows.
+ */
+function oneStatus(result: TestResult): number | null {
+  const statuses = new Set((result.rejections ?? []).map((rejection) => rejection.status));
+  if (statuses.size !== 1) return null;
+  const [only] = [...statuses];
+  return only ?? null;
 }
 
 export interface PushControls {
@@ -370,10 +390,29 @@ function describeTest(result: TestResult, worker: WorkerStatus): string {
     return "The push service kept refusing this device, so it has been forgotten. Turning it off and on again will not help until that is fixed - the server log says what was refused, and the VAPID keys are the usual cause.";
   }
   if (result.gone > 0 && result.sent === 0) {
-    return "This device's subscription had expired, so it has been forgotten. Turn notifications off and on again.";
+    /*
+     * 404 and 410 both mean the row is dropped, and they are opposite news.
+     *
+     * 410 is the push service retiring a subscription: ordinary, and
+     * subscribing again is the whole fix. 404 from FCM almost always means
+     * the VAPID pair the server signs with is not the pair this browser
+     * subscribed with - and then a fresh subscription is rejected exactly
+     * like the last one. Reported on 2026-11-22 by someone who had turned
+     * notifications off and on again and been told the same thing twice.
+     */
+    if (oneStatus(result) === 404) {
+      return "The push service does not recognise this device (404). That almost always means the server's VAPID keys are not the pair this browser signed up with - turning notifications off and on again will keep giving this same answer until they match. Check VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY on the server, then sign every device up again.";
+    }
+    return "This device's subscription had expired (410), so it has been forgotten. Turn notifications off and on again.";
   }
   if (result.failed > 0 && result.sent === 0) {
-    return "The push service would not take it. The server log says why.";
+    const status = oneStatus(result);
+    if (status === 401 || status === 403) {
+      return `The push service refused the server's credentials (${String(status)}). That is the VAPID pair itself - the public and private keys are not a matching pair, or VAPID_SUBJECT is not a mailto: or https: address.`;
+    }
+    return status === null
+      ? "The push service would not take it. The server log says why."
+      : `The push service would not take it (${String(status)}). The server log has the rest.`;
   }
   if (result.sent === 0) {
     return "Nothing was sent.";

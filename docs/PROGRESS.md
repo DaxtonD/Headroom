@@ -183,11 +183,42 @@ new subscription is refused exactly like the old one. The two are counted apart 
 `abandoned`), the message for the second one names the likely cause and says plainly that the
 toggle will not help, and the server logs it at warn rather than info.
 
-### What this did not turn out to be
+### A second fault underneath the first
 
-Not the VAPID keys, and not a bad deploy. The subscription had been dropped at some point by the
-push service - which is ordinary - and nothing ever put it back. Worth recording because the
-first instinct was to go looking at the server's environment, and the answer was in the client.
+The above was written, committed and wrong about the cause. The owner then said what the first
+report had already implied and should not have had to repeat: **turning it off and on again did
+not resolve it.** The test says the same sentence afterwards as before, on an Android installed
+PWA, which is to say Chrome and FCM.
+
+That is a different fault. A subscription created seconds ago cannot have expired. FCM is
+rejecting a brand-new one, and the app had no way to show which rejection it was, because:
+
+- `sendToAll` returned early on 404/410 **without logging anything at all** - the one outcome
+  that drops a row was the only one that left no trace, so "the server log says why", the
+  sentence the screen offers, pointed at a log with nothing in it;
+- and 404 and 410 were collapsed into a single message. They are opposite news. **410** is the
+  service retiring a subscription, which subscribing again fixes. **404** from FCM usually means
+  the VAPID pair the server signs with is not the pair the browser subscribed with - and then
+  every fresh subscription is refused exactly like the last one, which is precisely the loop the
+  owner was in.
+
+So the second piece of work was to make the fault legible rather than to guess at it:
+
+- `SendResult` carries `rejections: { host, status }[]`. The host, never the endpoint - that URL
+  is a capability, and anybody holding it can send the browser a notification. A test asserts
+  the endpoint cannot reach a rejection.
+- Both 404 and 410 are logged now, at warn, with the status and the service's host.
+- The test button names the status, and says different things for 404, 410, and 401/403. The
+  404 sentence says in as many words that turning notifications off and on again will keep
+  giving the same answer until the keys match, because that is the sentence that was missing.
+- `scripts/check_vapid.mjs` answers the question offline. A P-256 scalar has exactly one public
+  key, so a pair can be checked arithmetically with no network and no push service. It prints a
+  verdict and short fingerprints and **never a key**, so it is safe to run against production
+  values and safe to paste the output of. Exit 0 pair, 1 not a pair, 2 could not tell.
+
+The cause itself is still with the owner at the time of writing: the keys live in the container's
+environment on Unraid, which is not this machine. What is no longer true is that the app cannot
+say what happened.
 
 ### Held by tests
 
@@ -198,7 +229,15 @@ event already carries, and that the `abandoned` branch is checked before `gone` 
 being the whole of that fix. `apps/api/test/push.test.ts` now asserts the give-up path reports
 `abandoned: 1, gone: 0`.
 
-443 engine, 721 web, 603 API. Lint, typecheck, build and `check:figures` clean.
+443 engine, 726 web, 605 API. Lint, typecheck, build and `check:figures` clean.
+
+### Open question for the household
+
+**Question 30.** What does `node scripts/check_vapid.mjs` say about the pair in the container's
+environment, and what status is in the log once this build is deployed? If the pair does not
+match, the fix is one `npx web-push generate-vapid-keys`, both values set from that single
+output, a restart, and each device signed up again. Nothing is lost by regenerating: every
+subscription is already being rejected.
 
 ## Three things from a day's use (2026-11-21, asked for and reported from use)
 

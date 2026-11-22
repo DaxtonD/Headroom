@@ -75,6 +75,20 @@ export interface Sendable {
   readonly auth: string;
 }
 
+/**
+ * One push service rejection, in the only two terms worth reporting.
+ *
+ * Never the endpoint. That URL is a capability - anybody holding it can send
+ * this browser a notification - so it does not go in a log or over the wire
+ * to a screen. The host says which service answered, which is all the host
+ * is ever needed for.
+ */
+export interface SendFailure {
+  readonly host: string;
+  /** What the push service answered. 0 when it never answered at all. */
+  readonly status: number;
+}
+
 export interface SendResult {
   readonly sent: number;
   /** Rows deleted because the push service said they no longer exist. */
@@ -91,6 +105,16 @@ export interface SendResult {
    */
   readonly abandoned: number;
   readonly failed: number;
+  /**
+   * Every rejection, so the test button can say what actually happened.
+   *
+   * Added on 2026-11-22, when "notifications stopped working" could not be
+   * diagnosed from the outside at all: the 404/410 branch below returned
+   * without logging anything, so the one message the screen offered - "the
+   * server log says why" - pointed at a log that said nothing. The status is
+   * the whole diagnosis here, and 404 and 410 are not the same news.
+   */
+  readonly rejections: readonly SendFailure[];
 }
 
 /**
@@ -110,6 +134,7 @@ export async function sendToAll(
   let gone = 0;
   let abandoned = 0;
   let failed = 0;
+  const rejections: SendFailure[] = [];
 
   const body = JSON.stringify(payload);
 
@@ -135,8 +160,30 @@ export async function sendToAll(
          * expired. It is the only signal there is, and it is final.
          */
         const status = error instanceof WebPushError ? error.statusCode : 0;
+        const host = hostOf(subscription.endpoint);
+        rejections.push({ host, status });
+
         if (status === 404 || status === 410) {
           gone += 1;
+          /*
+           * Logged, which it was not until 2026-11-22. Dropping a
+           * subscription is the most consequential thing this function does
+           * and it was the only outcome that left no trace, so "notifications
+           * stopped working" had nothing behind it to read.
+           *
+           * The two statuses are worth telling apart. 410 is a subscription
+           * the service has retired, which is ordinary and self-correcting.
+           * 404 from FCM usually means the VAPID pair signing this request is
+           * not the pair the browser subscribed with - in which case every
+           * fresh subscription is rejected exactly like this one, and no
+           * amount of turning it off and on again will change that.
+           */
+          log?.warn(
+            { status, host },
+            status === 404
+              ? "push subscription rejected as unknown - check the VAPID pair matches the one browsers subscribed with"
+              : "push subscription has expired, dropping it",
+          );
           await prisma.pushSubscription
             .delete({ where: { id: subscription.id } })
             .catch(() => undefined);
@@ -144,7 +191,7 @@ export async function sendToAll(
         }
 
         failed += 1;
-        log?.warn({ status, endpoint: hostOf(subscription.endpoint) }, "push failed");
+        log?.warn({ status, endpoint: host }, "push failed");
 
         const row = await prisma.pushSubscription
           .update({
@@ -167,7 +214,7 @@ export async function sendToAll(
     }),
   );
 
-  return { sent, gone, abandoned, failed };
+  return { sent, gone, abandoned, failed, rejections };
 }
 
 /** The push service's host, for a log line that names no endpoint secret. */

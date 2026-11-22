@@ -155,3 +155,53 @@ describe("what the test button says went wrong", () => {
     expect(shape.slice(0, shape.indexOf("}"))).toContain("abandoned");
   });
 });
+
+describe("naming the status the push service answered with", () => {
+  const describeTest = pushLib.slice(pushLib.indexOf("function describeTest"));
+
+  it("tells a 404 apart from a 410, which the one message could not", () => {
+    /*
+     * The bug that made this necessary, 2026-11-22: notifications stopped,
+     * the test said the subscription "had expired", turning it off and on
+     * again produced the same sentence, and there was nothing anywhere to
+     * say which of the two statuses it had actually been. They call for
+     * opposite things.
+     */
+    const branch = describeTest.slice(describeTest.indexOf("result.gone > 0"));
+    expect(branch).toContain("oneStatus(result) === 404");
+    expect(branch).toMatch(/410/);
+  });
+
+  it("says plainly that off and on again will not fix a 404", () => {
+    const branch = describeTest.slice(describeTest.indexOf("oneStatus(result) === 404"));
+    const sentence = branch.slice(0, branch.indexOf("return", branch.indexOf("return") + 1));
+    expect(sentence).toMatch(/VAPID/);
+    expect(sentence).toMatch(/same answer|will keep giving/);
+  });
+
+  it("names the credentials themselves on a 401 or 403", () => {
+    const branch = describeTest.slice(describeTest.indexOf("result.failed > 0"));
+    expect(branch).toContain("status === 401 || status === 403");
+    expect(branch).toMatch(/VAPID_SUBJECT/);
+  });
+
+  it("falls back to saying only what it knows when devices disagree", () => {
+    /*
+     * Two devices failing for two reasons have no single honest sentence,
+     * so the status is dropped rather than one of them being picked.
+     */
+    const helper = pushLib.slice(
+      pushLib.indexOf("function oneStatus"),
+      pushLib.indexOf("export interface PushControls"),
+    );
+    expect(helper).toContain("if (statuses.size !== 1) return null;");
+  });
+
+  it("works against a server that does not send rejections yet", () => {
+    // An installed app can be newer than the server it is talking to, or
+    // older. Neither should throw on a screen whose job is diagnosis.
+    const shape = pushLib.slice(pushLib.indexOf("interface TestResult"));
+    expect(shape.slice(0, shape.indexOf("}"))).toContain("rejections?:");
+    expect(pushLib).toContain("result.rejections ?? []");
+  });
+});
