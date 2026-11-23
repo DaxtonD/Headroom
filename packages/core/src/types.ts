@@ -193,6 +193,43 @@ export interface PayPeriodLowest {
   readonly afterEventId: string | null;
 }
 
+/**
+ * How a period is doing, in one sentence.
+ *
+ * ## Why this is in the engine
+ *
+ * It could be assembled on the screen from the figures beside it, and that is
+ * how it would come to disagree with them. The threshold it turns on is the
+ * household's own cushion, which the engine already has and the pay-period
+ * payload does not, and a sentence built from the same pass that produced the
+ * figures cannot contradict them. It is also then testable rather than
+ * grepped - there is no DOM in the web suite.
+ *
+ * ## Why it only editorialises when something is wrong
+ *
+ * The obvious version has a word for every case - comfortable, tight, short -
+ * and the word for the good case is the one the app cannot honestly say. With
+ * a cushion of nothing, a period that dips to a dollar is "covered", and
+ * calling that comfortable would be the app vouching for something it has no
+ * opinion about. So the good case states the fact and stops: calm when it is
+ * calm, loud only when there is something to be loud about.
+ */
+export type PeriodVerdictTone =
+  /** An automatic withdrawal in here does not have the money waiting for it. */
+  | "short"
+  /** Covered, but it goes below the cushion on the way. */
+  | "tight"
+  /** Nothing in it is a problem. The sentence is a fact, not a reassurance. */
+  | "fine"
+  /** Nothing in it at all, or nothing that moves this account. */
+  | "quiet";
+
+export interface PeriodVerdict {
+  readonly tone: PeriodVerdictTone;
+  /** One sentence, ready to show. Never contains an account name. */
+  readonly sentence: string;
+}
+
 export interface PayPeriod {
   readonly label: string;
   readonly start: PlainDate;
@@ -241,6 +278,11 @@ export interface PayPeriod {
   readonly elsewhereCents: Cents;
   readonly lowest: PayPeriodLowest | null;
   readonly allAutoCovered: boolean;
+  /**
+   * The one thing worth saying about this period, from the same pass that
+   * produced the figures above it.
+   */
+  readonly verdict: PeriodVerdict;
   /**
    * The window split into one block per cheque, each with what that cheque
    * leaves behind.

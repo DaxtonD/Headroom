@@ -15,6 +15,7 @@ import {
   addDays,
   compareDates,
   firstPaydayOnOrAfter,
+  formatDateShort,
   formatDayAndMonth,
   parseDate,
   paydaysBetween,
@@ -22,12 +23,13 @@ import {
 import { chequeBlocks } from "./chequeBlocks.js";
 import type { BlockEntry } from "./chequeBlocks.js";
 import type { PlainDate } from "./dates.js";
-import type { Cents } from "./money.js";
+import { formatCents, type Cents } from "./money.js";
 import type {
   PayPeriod,
   PayPeriodLowest,
   PayPeriodOptions,
   PaySchedule,
+  PeriodVerdict,
   TimelineRow,
 } from "./types.js";
 
@@ -381,6 +383,14 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
 
     const lowest = lowestInWindow(rows);
     const autoRows = rows.filter((row) => row.requiresCoverage);
+    /*
+     * The first automatic withdrawal in here without the money waiting for
+     * it. The FIRST, not the worst: once one has gone short every balance
+     * after it is lower for the same reason, so the later ones are
+     * consequences and naming them would be reporting one problem several
+     * times.
+     */
+    const firstUncovered = autoRows.find((row) => row.runningCents < cushionCents) ?? null;
 
     return {
       label: window.isCurrentPartial ? `Now-${formatDayAndMonth(window.end)}` : periodLabel(window.start, window.end),
@@ -394,7 +404,14 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       leftCents: inCents - autoCents - flexibleCents,
       elsewhereCents,
       lowest,
-      allAutoCovered: autoRows.every((row) => row.runningCents >= cushionCents),
+      allAutoCovered: firstUncovered === null,
+      verdict: verdictFor({
+        rowCount: rows.length,
+        projectedChequeCount: projectedPaychequeIds.length,
+        lowest,
+        firstUncovered,
+        cushionCents,
+      }),
       blocks,
       projectedPaychequeIds,
       roomToSaveCents,
@@ -409,6 +426,82 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       rowIds: rows.map((row) => row.event.id),
     } satisfies PayPeriod;
   });
+}
+
+/**
+ * The one thing worth saying about a period.
+ *
+ * Asked for on 2026-11-22, after the summary under each period had grown into
+ * five figures that said the same things the top of the screen already said.
+ * The account balances are up there, the balance right now is on its own
+ * line, the rows say what is coming and when, and each cheque has its own
+ * left-over. What none of them answer is the only question this summary is
+ * uniquely for: **does this period work, and where is it tightest.**
+ *
+ * ## The threshold is the household's, not one invented here
+ *
+ * "Tight" means it goes below the cushion, which is a figure the household
+ * sets. Nothing in here decides how much is comfortable - that judgment is
+ * not the app's to make, and inventing a percentage would have made it
+ * silently.
+ *
+ * With a cushion of nothing, "tight" means it actually goes below zero. That
+ * is the correct reading of a household that has said it keeps no float, and
+ * it is the reason the good case does not claim comfort: a period that bottoms
+ * out at a dollar is covered, and saying anything warmer than the figure
+ * itself would be a reassurance the engine cannot support.
+ *
+ * ## Order matters
+ *
+ * A period can be several of these at once - an uncovered withdrawal is
+ * always also below the cushion - so the cases are ranked by what somebody
+ * would act on first, and the first match wins.
+ */
+function verdictFor(options: {
+  readonly rowCount: number;
+  readonly projectedChequeCount: number;
+  readonly lowest: PayPeriodLowest | null;
+  readonly firstUncovered: TimelineRow | null;
+  readonly cushionCents: Cents;
+}): PeriodVerdict {
+  const { rowCount, projectedChequeCount, lowest, firstUncovered, cushionCents } = options;
+
+  // An automatic withdrawal without the money waiting for it. The one case
+  // that is about a specific row, so it names it and says the size of the gap.
+  if (firstUncovered) {
+    const short = cushionCents - firstUncovered.runningCents;
+    const when = firstUncovered.effectiveDate;
+    return {
+      tone: "short",
+      sentence: when
+        ? `Short on ${formatDateShort(when)} - ${firstUncovered.event.name} needs ${formatCents(short)} more.`
+        : `Short - ${firstUncovered.event.name} needs ${formatCents(short)} more.`,
+    };
+  }
+
+  // Nothing here at all. Said plainly rather than left blank, because an
+  // empty summary reads as a screen that failed to load.
+  if (rowCount === 0 && projectedChequeCount === 0) {
+    return { tone: "quiet", sentence: "Nothing in this period yet." };
+  }
+
+  /*
+   * Rows, but none that move this account - a fortnight of card charges, for
+   * instance. There is no low point to report because the balance never
+   * moved, and "tightest at" a figure that no row produced would be a
+   * sentence about nothing.
+   */
+  if (!lowest) {
+    return { tone: "quiet", sentence: "Nothing comes out of chequing in this period." };
+  }
+
+  const where = lowest.date ? ` on ${formatDateShort(lowest.date)}` : "";
+
+  if (lowest.cents < cushionCents) {
+    return { tone: "tight", sentence: `Tight - dips to ${formatCents(lowest.cents)}${where}.` };
+  }
+
+  return { tone: "fine", sentence: `Tightest at ${formatCents(lowest.cents)}${where}.` };
 }
 
 /**

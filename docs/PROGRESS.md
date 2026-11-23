@@ -47,7 +47,8 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Preferences stored against the person | done | | 2026-11-21, asked for from use: a browser that gets cleared daily took the theme, the text size and the density with it. On the server now and loaded at sign-in; the device keeps a copy for the pre-paint script. The one route in this app with no If-Match and no idempotency key, reasoned beside it |
 | The top of the compact ledger | done | | 2026-11-21, reported after a day of the compact rows. The hero was about 425px and a third of it was whitespace around three 44px info targets. The targets survive as hit areas rather than as layout; the strip under it now lists savings as well as the cards |
 | A tab shows something the moment it is pressed | done | | 2026-11-21, reported from use. The query cache was emptied five minutes after a screen was left, nothing warmed the tabs, and five screens waited against an empty div. In memory only - no figure is written to a phone |
-| A pay period's summary, in plain words | **reverted** | | 2026-11-22. Built and pushed, then reverted at the owner's request before the issue had been restated. The implementation is in `20baaad` if any of it is wanted back |
+| A pay period says one thing about itself | done | | 2026-11-22, reasoned through with the owner. The summary now answers the one question nothing else on the screen answers - does this period work, and where is it tightest - in a sentence built in the engine from the household's own cushion. "On cards" dropped rather than renamed; room-to-save kept only on the period that starts today, because it gets quietly more optimistic the further right you scroll |
+| A pay period's summary, in plain words | **reverted** | | 2026-11-22. Built and pushed, then reverted at the owner's request before the issue had been restated. The implementation is in `20baaad` if any of it is wanted back; the second attempt is the row above |
 | A device the server had forgotten | done | | 2026-11-22, reported from use. The screen read "On for this device" from the browser alone and never asked whether the server still had the row, so a subscription dropped at send time was invisible forever. The page hands its subscription back on every load, the worker hands over a rotated one, and a refusal no longer reports itself as an expiry |
 
 ## Last session
@@ -120,6 +121,126 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## A pay period says one thing about itself (2026-11-22, reasoned through with the owner)
+
+The second attempt at the summary under each pay period, after the first was reverted (below).
+This time the question asked first was the right one: **does the summary need to say any of
+this?**
+
+Mostly it did not. Everything in it but one thing is answered better a few inches above it -
+the accounts have a strip, the balance right now has its own line, the rows say what is coming
+and when, and every cheque already carries its own left-over. What nothing else answers is
+whether **this** period works and where it is tightest. That is the whole job now.
+
+### What went
+
+- **"On cards".** It was the charges made inside the fortnight, sitting below a strip heading of
+  the same name showing what the cards owe - two quantities that can never agree, which is how
+  it was reported ("it didn't match the Visa balance"). The figure was never inaccurate, it was
+  *nonsensical where it was*. Dropped rather than renamed. Nothing is lost: the failure it
+  guarded, card debt growing while chequing looks healthy, has a far louder guard in the hero.
+  The strip keeps the phrase, which is unambiguous now that nothing else uses it, and a test
+  counts the uses rather than banning the words.
+- **"Room to save", on every period but the current one.** The owner's objection was that it is
+  useless on a period that already has a savings transfer in it. The figure is in fact correct -
+  a planned transfer lowers every balance after it, so what is shown is already room *on top of*
+  what is planned - but looking into it turned up a worse fault that the screen could not show:
+  `roomToSaveFrom` scans from the window's start to the **end of the timeline**, and the timeline
+  stops at the horizon. The first period is constrained by weeks of future bills; the last by
+  almost nothing after itself. **The figure gets quietly more optimistic the further right you
+  scroll**, and the third-cheque case it exists for lands in exactly the windows where it is
+  least reliable. It is also, on the current period with no cushion set, the same number as the
+  low point - so showing it everywhere was often printing one fact twice. It stays on the period
+  that starts today, where it is a decision somebody can act on.
+
+### What arrived: the verdict line
+
+One sentence per period, from `verdictFor` in `packages/core/src/payPeriods.ts`, carried on
+`PayPeriod.verdict` as a tone and a sentence.
+
+In the engine on purpose, for three reasons. A sentence assembled next to the figures is a
+sentence that can drift from them. The threshold is the household's **cushion**, which
+`computePayPeriods` has and the pay-period payload does not carry at all. And there is no DOM in
+the web suite, so a sentence built in a component could only ever be grepped for, where this is
+tested as behaviour.
+
+Four tones, first match wins, because a period can be several at once:
+
+- **short** - an automatic withdrawal without the money waiting for it. Names the bill and the
+  gap: the old line said only "something automatic in this window is not covered", leaving both
+  questions anybody actually has to be answered by scrolling. The *first* one short, not the
+  worst: once one has gone short every balance after it is lower for the same reason.
+- **tight** - covered, but the low point is under the cushion. Reachable only by something
+  **flexible**, because coverage in this engine already includes the cushion
+  (`timeline.ts:303`), so an automatic bill under it is a shortfall and says so. That is the
+  right split: the bank taking money you do not have is a different problem from a dip you chose
+  and can move.
+- **fine** - states the low point and offers nothing warmer. Deliberate: with no cushion set, a
+  period bottoming out at a dollar is "covered", and calling that comfortable would be the app
+  vouching for something it cannot know. Calm when calm, loud only when there is something to be
+  loud about - so a glance down the screen picks out the period that needs attention instead of
+  reading as four cheerful badges.
+- **quiet** - nothing in it, or nothing that moves chequing. Said plainly, because an empty
+  summary reads as a screen that failed to load.
+
+**No threshold was invented.** "Tight" is below the cushion, and the cushion is a figure the
+household sets. A test runs the same timeline twice with different cushions and asserts the tone
+changes, which is what makes that claim checkable rather than a comment.
+
+### Decided without asking
+
+- **The verdict's sentences live in the engine**, not the UI. Precedent: `activity.ts` already
+  composes sentences in `packages/core`.
+- **"Room to save" keeps its name for now**, even though the next piece of work is likely to
+  replace the whole idea (see below). Renaming it twice would cost the household more than
+  leaving it one more iteration.
+
+### Held by tests
+
+`packages/core/test/periodVerdict.test.ts` (new, 12 tests): each tone, the first-short rule, the
+cushion as the only threshold, an automatic bill under the cushion being short rather than tight,
+no low point claimed for a window where chequing never moved, one sentence with no break in it,
+and money written with U+2212 from `formatCents` rather than by hand.
+`apps/web/test/card-accounts.test.ts`: the summary no longer mentions `elsewhereCents`, the strip
+is the only place the phrase appears, the arithmetic that is genuinely about the window stays,
+the sentence and its tone come from the engine, a server too old to send one does not take the
+figures down, and room-to-save is behind the current-period guard.
+
+456 engine, 733 web, 605 API green. Lint, typecheck and `pnpm check:figures` clean.
+
+### Raised by the owner, not yet started
+
+Three things, in the same conversation, and **none of them is agreed or scheduled** - they are
+recorded here so the thinking is not lost, not as a plan. They share one gap: the app models
+facts and derived totals, but not the household's **current posture** or its **intent**.
+
+1. **Notice a likely shortage and suggest a specific move.** The household already does this by
+   hand - "I had to move the hydro bill to a different pay period". The engine has everything
+   needed: it knows which withdrawal goes short, and flexible rows can already move between
+   periods. The quality bar is that a suggestion must be *re-run through the timeline* before
+   being offered, so it cannot propose a move that breaks a later period. **Open question it
+   raises:** a flexible item has no real due date in the model - its date is "the day you plan to
+   pay it" - so nothing stops a suggestion deferring a bill past when it is actually due. That
+   probably needs an optional "not after" date on flexible items before any suggestion is safe to
+   make.
+2. **A shared "things are tight, use credit" mode**, set by either person, broadcast to the
+   other. The valuable half is not the message: it is that the mode should change the **default
+   source account** on a new one-off, because the manual protocol fails exactly when somebody
+   forgets and records a purchase against chequing. `paidFromAccountId` already exists on every
+   row. Notes for whoever builds it: this is a household fact, so it takes the full If-Match +
+   Idempotency-Key + activity treatment (it is *not* like `me/preferences` - two writers, real
+   race); it should **expire** on its own, or a mode nobody turns off becomes permanently on and
+   meaningless; and the app should *suggest* entering it rather than entering it by itself, which
+   is the same rule the service worker follows about not acting without being asked. It also
+   depends on push, which is currently broken - see open question 30.
+3. **Savings intent, replacing the blanket "room to save".** The household is saving toward
+   mortgage lump sums and vacations, and "that doesn't mean every spare dollar is to be allocated
+   to savings". The framing that matters: **what can safely leave** is arithmetic, and **where it
+   should go** is policy. They are two computations and conflating them is why one number felt
+   wrong. Keep `roomToSaveFrom` as the constraint; add an allocation layer above it that reports
+   the constraint *against the household's goals*, with whatever is left over named honestly as
+   unallocated. This is the largest of the three and wants a schema change.
 
 ## "On cards": built, then reverted (2026-11-22)
 

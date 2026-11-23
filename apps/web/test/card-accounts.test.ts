@@ -38,6 +38,18 @@ const read = (...parts: string[]): string =>
 const row = read("components", "OccurrenceRow.tsx");
 const ledger = read("pages", "Ledger.tsx");
 const ledgerCss = read("pages", "Ledger.css");
+
+/**
+ * The source with its comments removed, for asking what the screen SAYS.
+ *
+ * This file is otherwise happy to grep the comments - they are part of what
+ * is being protected. The exception is a label that was wrong and has been
+ * removed: the comment explaining why has to keep quoting it, so a plain
+ * search for the old wording finds the explanation and passes nothing.
+ */
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//gu, "").replace(/^\s*\/\/.*$/gmu, "");
+}
 const sheet = read("components", "UpdateBalanceSheet.tsx");
 const oneOff = read("components", "OneOffForm.tsx");
 const billForm = read("components", "BillForm.tsx");
@@ -191,17 +203,150 @@ describe("the account strip", () => {
   });
 });
 
+/**
+ * What a pay period's summary says, and what it deliberately no longer says.
+ *
+ * Reported and then reasoned through on 2026-11-22. The summary had a line
+ * reading "On cards", and the strip at the top of the same screen was HEADED
+ * "On cards" - one showing the charges made inside that fortnight, the other
+ * showing what the cards owe. Two quantities that can never agree, a few
+ * inches apart, under one label. The household compared them, as anyone
+ * would, and asked which was wrong.
+ *
+ * The answer turned out to be neither, and the question that followed was the
+ * useful one: does the summary need to say this at all? Everything it said
+ * but one thing is answered better above it - the accounts in the strip, the
+ * balance now on its own line, what is coming and when in the rows, and each
+ * cheque's own left-over under it. So the line went, rather than being
+ * renamed.
+ *
+ * Nothing is lost by dropping it. The failure it guarded - card debt growing
+ * while chequing looks healthy - has a much louder guard in the hero, which
+ * these tests still hold above.
+ */
 describe("a window's subtotal", () => {
-  it("says what went on the cards, so the rows and the totals reconcile", () => {
-    // A fortnight reporting nothing going out, with charges on screen, reads
-    // as broken rather than as accurate.
-    expect(ledger).toMatch(/period\.elsewhereCents > 0n/);
-    expect(ledger).toMatch(/On cards</);
-    expect(queries).toMatch(/readonly elsewhereCents: Cents;/);
+  it("does not report card charges a third time", () => {
+    const summary = withoutComments(ledger).slice(
+      withoutComments(ledger).indexOf("ledger__subtotal${period.allAutoCovered"),
+    );
+
+    expect(summary).not.toContain("elsewhereCents");
+    expect(summary).not.toContain("On cards");
   });
 
-  it("says that figure is not inside the others", () => {
-    expect(ledger).toMatch(/is not in that: it comes out when you pay the card/);
+  it("leaves the account strip the only place that phrase appears", () => {
+    /*
+     * The bug was the phrase meaning two quantities on one screen, not the
+     * phrase itself. With the summary line gone the strip heading is
+     * unambiguous again - "On cards" above what the cards owe is exactly
+     * right - so it keeps it, and this holds the collision from coming back
+     * rather than banning the words.
+     *
+     * Checked with the comments stripped, because the comments have to go on
+     * quoting the old wording to explain why it changed.
+     */
+    const code = withoutComments(ledger);
+    const uses = code.split("On cards").length - 1;
+
+    expect(uses, "only the strip heading may say it").toBe(1);
+    expect(code).toContain('{compact ? "Accounts" : "On cards"}');
+  });
+
+  it("keeps the arithmetic that is genuinely about this window", () => {
+    // What a fortnight does to chequing is the one thing no other part of
+    // the screen answers, so it stays - and stays checkable by hand.
+    expect(ledger).toContain("period.leftCents");
+    expect(ledger).toContain("in, less ");
+    expect(ledger).toContain("automatic and");
+    expect(ledger).toContain("flexible.");
+  });
+});
+
+/**
+ * The verdict line.
+ *
+ * Asked for on 2026-11-22: make the summary say the one thing that is true of
+ * this particular period rather than printing the same five figures whether
+ * they matter or not. The intelligence is in what one line SAYS - the
+ * arithmetic under it stays fixed and in the same order, because a block that
+ * changes shape between periods is harder to learn and harder to trust on a
+ * screen opened several times a day.
+ */
+describe("what each period says about itself", () => {
+  it("takes the sentence from the engine rather than building one here", () => {
+    /*
+     * Three reasons, and the first is the one that matters: a sentence
+     * assembled beside the figures can drift from them. The second is that
+     * it turns on the household's cushion, which the pay-period payload does
+     * not carry. The third is that there is no DOM in this suite, so a
+     * sentence built in a component can only ever be grepped for.
+     */
+    expect(ledger).toContain("period.verdict.sentence");
+    expect(queries).toMatch(/readonly verdict: PeriodVerdict \| null;/);
+  });
+
+  it("colours itself by the engine's tone, not by re-deciding", () => {
+    expect(ledger).toContain("ledger__verdict--${period.verdict.tone}");
+  });
+
+  it("survives a server too old to send one", () => {
+    // An installed app can be newer than the server it talks to, and a
+    // missing sentence must not take the figures down with it.
+    expect(ledger).toContain("{period.verdict ? (");
+    expect(queries).toContain("verdict: period.verdict ?? null");
+  });
+
+  it("stays as quiet as the figures when there is nothing wrong", () => {
+    /*
+     * The point of having tones at all. If every period shouted, a glance
+     * down the screen would pick out nothing - so only "tight" and "short"
+     * take a colour, and the good case is the same weight as the numbers
+     * under it.
+     */
+    const fine = ledgerCss.slice(ledgerCss.indexOf(".ledger__verdict--fine"));
+    expect(fine.slice(0, fine.indexOf("}"))).toContain("--hr-text-secondary");
+
+    const tight = ledgerCss.slice(ledgerCss.indexOf(".ledger__verdict--tight"));
+    expect(tight.slice(0, tight.indexOf("}"))).toContain("--hr-warning-fg");
+  });
+});
+
+/**
+ * Room to save, on the current period only.
+ *
+ * Asked about on 2026-11-22: "I'm not sure I'm a fan. If that pay period
+ * already has a transfer to savings, that line is useless." The figure is
+ * right - a planned transfer lowers every balance after it, so what is shown
+ * is already room on top of what is planned - but the objection stands for a
+ * reason the screen could not show.
+ *
+ * `roomToSaveFrom` scans from the window's start to the END of the timeline,
+ * and the timeline stops at the horizon. So the first period is constrained
+ * by weeks of future bills and the last by almost nothing after itself: the
+ * figure gets more optimistic the further right you scroll, silently. The
+ * last period's is close to "this fortnight's own floor", blind to the
+ * fortnight after it.
+ *
+ * It is also, on the current period with no cushion set, the same number as
+ * the low point - so showing it everywhere was often printing one fact twice.
+ */
+describe("room to save", () => {
+  it("is shown only on the period that starts today", () => {
+    // Comments stripped: the one above this block explains the change by
+    // quoting the label, which would otherwise be found before the code.
+    const code = withoutComments(ledger);
+    const summary = code.slice(code.indexOf("ledger__subtotal${period.allAutoCovered"));
+
+    expect(summary).toContain("{period.isCurrentPartial ? (");
+    // The guard belongs to this row, not to something further down.
+    expect(summary.indexOf("{period.isCurrentPartial ? (")).toBeLessThan(
+      summary.indexOf("Room to save"),
+    );
+    expect(summary.slice(summary.indexOf("Room to save"))).toContain("period.roomToSaveCents");
+  });
+
+  it("is still the figure the period is consulted for, where it is shown", () => {
+    expect(ledger).toContain("ledger__subtotal-row--strong");
   });
 });
 

@@ -571,6 +571,52 @@
   color: inherit;
 }
 
+/*
+ * The verdict: the one line this summary exists for.
+ *
+ * Above the figures and in the body face rather than the display one,
+ * because it is a sentence and not an amount. It carries the only colour in
+ * the block, and only when there is something to colour - the "fine" case is
+ * deliberately as quiet as the figures under it, so a glance down a screen
+ * of periods picks out the one that needs attention instead of reading as
+ * four cheerful badges.
+ */
+.ledger__verdict {
+  margin: 0 0 var(--hr-space-2);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  line-height: 1.35;
+  color: var(--hr-ink);
+  text-wrap: pretty;
+}
+
+.ledger__verdict--fine,
+.ledger__verdict--quiet {
+  font-weight: 500;
+  color: var(--hr-text-secondary);
+}
+
+.ledger__verdict--tight {
+  color: var(--hr-warning-fg);
+}
+
+.ledger__verdict--short {
+  color: var(--hr-negative);
+}
+
+/*
+ * Inside the warning-coloured block the whole card is already the signal, so
+ * the sentence stops competing with it and inherits.
+ */
+.ledger__subtotal--short .ledger__verdict {
+  color: inherit;
+}
+
+[data-density="compact"] .ledger__verdict {
+  margin-bottom: var(--hr-space-1);
+  font-size: 0.875rem;
+}
+
 .ledger__subtotal-note {
   margin-top: var(--hr-space-1);
   font-size: 0.75rem;

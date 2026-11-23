@@ -318,6 +318,10 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
           roomToSaveCents: period.roomToSaveCents,
           lowest: period.lowest,
           allAutoCovered: period.allAutoCovered,
+          // The one sentence worth saying about this period, built in the
+          // engine from the same pass as the figures - and from the
+          // household's own cushion, which is not in this payload.
+          verdict: period.verdict,
 
           /*
            * The window split one cheque at a time.

@@ -10,7 +10,7 @@
  * exists to prevent, so there is no write queue and no Background Sync.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Cents } from "@headroom/core";
+import type { Cents, PeriodVerdict } from "@headroom/core";
 import { ApiError, api, newIdempotencyKey } from "./api.js";
 
 /* -------------------------------------------------------------------------- */
@@ -348,6 +348,17 @@ export interface PayPeriod {
   readonly lowest: { readonly cents: Cents; readonly date: string | null } | null;
   readonly allAutoCovered: boolean;
   /**
+   * The one thing worth saying about this period, in a sentence.
+   *
+   * From the engine, not assembled here: it turns on the household's cushion,
+   * which this payload does not carry, and a sentence built beside the
+   * figures cannot come to disagree with them.
+   *
+   * Optional on the wire because an installed app can be newer than the
+   * server it is talking to - the worker only takes over when the page asks.
+   */
+  readonly verdict: PeriodVerdict | null;
+  /**
    * The window one cheque at a time.
    *
    * `leftCents` above is a fortnight holding two cheques, so it cannot say
@@ -491,6 +502,7 @@ interface PayPeriodWire {
   readonly roomToSaveCents: string;
   readonly lowest: { readonly cents: string; readonly date: string | null } | null;
   readonly allAutoCovered: boolean;
+  readonly verdict?: PeriodVerdict | undefined;
   readonly rows: readonly TimelineRowWire[];
   readonly projectedPaycheques: readonly {
     readonly scheduleId: string;
@@ -542,6 +554,7 @@ export function usePayPeriods() {
             ? { cents: toCents(period.lowest.cents), date: period.lowest.date }
             : null,
           allAutoCovered: period.allAutoCovered,
+          verdict: period.verdict ?? null,
           blocks: period.blocks.map((block) => ({
             kind: block.kind,
             openerId: block.openerId,

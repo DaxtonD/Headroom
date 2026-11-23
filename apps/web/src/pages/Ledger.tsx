@@ -895,41 +895,74 @@ function PeriodGroup({
         ) : null}
       </ul>
 
-      {/* ---- What the window leaves behind ---- */}
+      {/*
+        ---- What the window leaves behind ----
+
+        Cut back on 2026-11-22, after the question "do we even need this?"
+        turned out to have a good answer. Everything this summary said except
+        one thing is answered better a few inches above it: the accounts have
+        a strip, the balance right now has its own line, the rows say what is
+        coming and when, and each cheque has its own left-over. What nothing
+        else answers is whether THIS period works and where it is tightest -
+        so that is the whole job now, and it leads.
+
+        Two figures went. "On cards" was the charges made inside the
+        fortnight, sitting under a strip heading of the same name showing what
+        the cards owe: two quantities that can never agree, which is how it
+        was reported. Nothing is lost by dropping it, because the failure it
+        guarded - debt growing while chequing looks healthy - has a much
+        louder guard in the hero.
+
+        "Room to save" is still here, but only on the period that starts
+        today. See the note where it is rendered.
+      */}
       <div
         className={`ledger__subtotal${period.allAutoCovered ? "" : " ledger__subtotal--short"}`}
       >
+        {/*
+          The verdict comes from the engine, not from the figures beside it.
+          It turns on the household's cushion, which this payload does not
+          carry, and a sentence assembled here could drift from the numbers
+          it describes. Null only against a server older than this app.
+        */}
+        {period.verdict ? (
+          <p className={`ledger__verdict ledger__verdict--${period.verdict.tone}`}>
+            {period.verdict.sentence}
+          </p>
+        ) : null}
+
         <div className="ledger__subtotal-row">
           <span>Left over</span>
           <span className="hr-amount">{formatCents(period.leftCents)}</span>
         </div>
-        <div className="ledger__subtotal-row ledger__subtotal-row--strong">
-          <span>Room to save</span>
-          <span className="hr-amount">{formatCents(period.roomToSaveCents)}</span>
-        </div>
-        {period.elsewhereCents > 0n ? (
-          <div className="ledger__subtotal-row">
-            <span>On cards</span>
-            <span className="hr-amount">{formatCents(period.elsewhereCents)}</span>
+
+        {/*
+          Room to save, on the current period only.
+
+          It is a decision you act on NOW, and on a later period it is a
+          projection over an ever-shorter lookahead: `roomToSaveFrom` scans
+          from the window's start to the end of the timeline, and the
+          timeline stops at the horizon, so the further right you scroll the
+          less future there is to be constrained by. The last period's figure
+          is close to "this fortnight's own floor", blind to the fortnight
+          after it. That is not a figure to put in 17px type under every
+          period.
+
+          It is also, on the current period with no cushion set, the same
+          number as the low point - so showing it on every period was often
+          printing one fact twice.
+        */}
+        {period.isCurrentPartial ? (
+          <div className="ledger__subtotal-row ledger__subtotal-row--strong">
+            <span>Room to save</span>
+            <span className="hr-amount">{formatCents(period.roomToSaveCents)}</span>
           </div>
         ) : null}
+
         <p className="ledger__subtotal-note">
           {formatCents(period.inCents)} in, less {formatCents(period.autoCents)} automatic and{" "}
           {formatCents(period.flexibleCents)} flexible.
-          {period.elsewhereCents > 0n
-            ? ` The ${formatCents(period.elsewhereCents)} on cards is not in that: it comes out when you pay the card.`
-            : ""}
-          {period.lowest
-            ? ` Lowest inside it: ${formatCents(period.lowest.cents)}${
-                period.lowest.date ? ` on ${formatDateShort(period.lowest.date)}` : ""
-              }.`
-            : ""}
         </p>
-        {!period.allAutoCovered ? (
-          <p className="ledger__subtotal-note">
-            Something automatic in this window is not covered. Move a flexible bill out of it.
-          </p>
-        ) : null}
       </div>
     </>
   );
