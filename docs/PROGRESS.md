@@ -212,6 +212,34 @@ screen does not display it - and there are tests on both sides saying so.
 
 498 engine, 788 web, 638 API green. Lint, typecheck, `pnpm build` and `pnpm check:figures` clean.
 
+### It went red in CI the next morning, and the reason is the useful part
+
+The suite was green locally and **failed in CI on both branches and both Node versions** - four
+tests in `roomAllocation.test.ts`, all of them asserting on an allocation that had come back
+`null`.
+
+The cause was one line of test setup: `anchorDate: new Date()` for the pay schedule. A
+`@db.Date` column truncates in **UTC**, while "today" is computed in **America/Regina**, so for
+the six hours either side of UTC midnight the two disagree about the date. On the evening it was
+written they disagreed, and the anchor landed on tomorrow. By the time CI ran they agreed - so
+the anchor landed on **today**, today was therefore a payday, and a household whose next payday
+is today has no current *partial* window at all. `currentPeriod` was undefined, the allocation
+was null, and every assertion about it failed at once.
+
+Fixed by deriving the anchor from the date the **server** reports and putting it four days out,
+which guarantees a partial window whatever the clock says. Verified under four pinned dates.
+
+Two things worth carrying forward:
+
+- **`new Date()` must not reach a date column in a test.** It is an instant, the column is a
+  calendar day, and the conversion happens in the wrong timezone. Every date in a fixture should
+  be derived from the `today` the API reports, which is what `suggestedMoves.test.ts` already
+  did and why that file was unaffected.
+- **"Today is a payday" is a real arrangement of today**, and a fixture that lands on it by
+  accident tests something else entirely. This is the second time in two days that a fixture
+  passed for the wrong reason; the first was four windows left at exactly zero, which with no
+  cushion is "covered".
+
 ### A prerequisite that turned out not to exist
 
 This was recorded twice as blocked on fixing the room-to-save **horizon flaw** first -

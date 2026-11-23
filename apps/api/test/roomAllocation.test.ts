@@ -40,22 +40,55 @@ afterAll(async () => {
   await harness?.close();
 });
 
+/** A plain date `days` after `from`, with no timezone in it. */
+function plus(from: string, days: number): string {
+  const at = new Date(`${from}T00:00:00.000Z`);
+  at.setUTCDate(at.getUTCDate() + days);
+  return at.toISOString().slice(0, 10);
+}
+
 beforeEach(async () => {
   await harness.reset();
   seeded = await seedHousehold(harness);
   cookie = await signIn(harness, "alex@example.test", seeded.password);
 
-  // A balance and a payday, so there is a current period with room in it.
   await harness.db.prisma.balanceSnapshot.create({
     data: {
       accountId: seeded.account.id,
       cents: 300_000n,
+      // An hour ago, so nothing settled later races it to the same instant.
       asOf: new Date(Date.now() - 60 * 60 * 1000),
       enteredById: seeded.alex.id,
     },
   });
+
+  /*
+   * A payday four days out, derived from the date the SERVER reports.
+   *
+   * This was `new Date()`, and it was a date-dependent test of exactly the
+   * kind `PIN_DATE` exists to find - it went red the next morning. A
+   * `@db.Date` truncates in UTC, while "today" is computed in
+   * America/Regina, so for the six hours either side of UTC midnight the two
+   * disagree. On the day they agreed, the anchor landed ON today, today was
+   * therefore a payday, and there was no current *partial* window at all -
+   * so the allocation was null and every assertion about it failed at once.
+   *
+   * Four days out guarantees a partial window whatever the clock says, and
+   * anchoring on the server's own date keeps the two in step.
+   */
+  const first = await harness.app.inject({
+    method: "GET",
+    url: "/api/dashboard",
+    headers: { cookie },
+  });
+  const today = (first.json() as { today: string }).today;
+
   await harness.db.prisma.paySchedule.create({
-    data: { userId: seeded.alex.id, anchorDate: new Date(), defaultCents: 100_000n },
+    data: {
+      userId: seeded.alex.id,
+      anchorDate: new Date(`${plus(today, 4)}T00:00:00.000Z`),
+      defaultCents: 100_000n,
+    },
   });
 });
 
