@@ -58,6 +58,30 @@ self.addEventListener("message", (event: ExtendableMessageEvent) => {
   }
 
   /*
+   * "Nothing is serving this page - take it over."
+   *
+   * Added 2026-11-22, reported from use: the app and the server agreed on a
+   * build while Settings showed the background worker several builds behind,
+   * for a day or two at a time.
+   *
+   * `clients.claim()` is still never called on activation, and the reason in
+   * the header stands: a new build must not swap itself in under somebody
+   * halfway through typing a balance. But a page with NO controller is not
+   * that case. It came from the network, its code is already loaded, nothing
+   * is answering its fetches, and claiming it changes only where its later
+   * ones are answered from. Left unclaimed it has no offline cache at all,
+   * and nothing ever adopted it.
+   *
+   * The page asks, so the rule holds; and it asks only after checking this
+   * worker is its own build, because a newer precache would answer an older
+   * page's hashed chunk requests with a 404. See `claimIfUncontrolled`.
+   */
+  if (data.type === "CLAIM") {
+    void self.clients.claim();
+    return;
+  }
+
+  /*
    * "Which worker is actually running, and can it receive a push?"
    *
    * A push subscription belongs to the service worker *registration*, but a

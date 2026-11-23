@@ -47,6 +47,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Preferences stored against the person | done | | 2026-11-21, asked for from use: a browser that gets cleared daily took the theme, the text size and the density with it. On the server now and loaded at sign-in; the device keeps a copy for the pre-paint script. The one route in this app with no If-Match and no idempotency key, reasoned beside it |
 | The top of the compact ledger | done | | 2026-11-21, reported after a day of the compact rows. The hero was about 425px and a third of it was whitespace around three 44px info targets. The targets survive as hit areas rather than as layout; the strip under it now lists savings as well as the cards |
 | A tab shows something the moment it is pressed | done | | 2026-11-21, reported from use. The query cache was emptied five minutes after a screen was left, nothing warmed the tabs, and five screens waited against an empty div. In memory only - no figure is written to a phone |
+| The background worker lagged behind | done | | 2026-11-22, reported from use and long-standing. `update()` resolves before an install finishes, so the promotion found no waiting worker, timed out in 3s and unregistered - and an unregister with live clients is deferred while the reload is not, leaving a new page beside the old worker. Now waits on the lifecycle; and a page with no controller can ask to be claimed, guarded on the build matching |
 | A pay period says one thing about itself | done | | 2026-11-22, reasoned through with the owner. The summary now answers the one question nothing else on the screen answers - does this period work, and where is it tightest - in a sentence built in the engine from the household's own cushion. "On cards" dropped rather than renamed; room-to-save kept only on the period that starts today, because it gets quietly more optimistic the further right you scroll |
 | A pay period's summary, in plain words | **reverted** | | 2026-11-22. Built and pushed, then reverted at the owner's request before the issue had been restated. The implementation is in `20baaad` if any of it is wanted back; the second attempt is the row above |
 | A device the server had forgotten | done | | 2026-11-22, reported from use. The screen read "On for this device" from the browser alone and never asked whether the server still had the row, so a subscription dropped at send time was invisible forever. The page hands its subscription back on every load, the worker hands over a rotated one, and a refusal no longer reports itself as an expiry |
@@ -121,6 +122,94 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## The background worker lagged several builds behind (2026-11-22, reported from use)
+
+Reported with a screenshot of Settings: the app and the server both on the current build, the
+**background worker** four commits behind. Not new - "it's been an issue for awhile now and I
+didn't report it" - and it "resolves itself after a day or two".
+
+A chain of three small things, each reasonable on its own.
+
+### Why it happened
+
+`registration.update()` resolves once the worker **script** has been fetched and the install has
+been *started* - not finished - and installing means precaching the shell, which is over half a
+megabyte. `loadServerBuild` then looked only for a `waiting` worker, found none because the new
+one was still `installing`, waited three seconds for a `controllerchange` that was never coming,
+concluded the lifecycle would not cooperate, and **unregistered the registration**.
+
+`unregister()` on a registration that still has clients is deferred by the browser. The reload
+that followed was not. So the page came back fresh from the network - new bundle - beside a
+registration whose active worker was still the old one. **New app, new server, old worker.**
+
+And an installed app that is only ever backgrounded never drops to zero clients, which is the
+condition that state needs to clear. Android eventually kills the app: the "day or two".
+
+There was a second, independent reason to wait on `controllerchange` being wrong. It only fires
+for a page the new worker **claims**, and this app deliberately never calls `clients.claim()`. So
+for a page the old worker controls it may not fire at all, and a worker that had taken over
+perfectly well was judged to have failed.
+
+### What changed
+
+- **`promote()` looks at `installing` as well as `waiting`**, and waits for a mid-install worker
+  to finish - up to 20 seconds, which is enough for that precache on mobile data. The old single
+  three-second wall was timing the wrong thing.
+- **Reaching `activated` counts as taking over**, not only `controllerchange`. From that moment
+  the registration's active worker is the new one, which is what the reload is served by.
+- **It gives up early on a `redundant` worker**, which can never get there.
+- **Unregistering is the last resort it was written as**, reached only after every registration
+  has been given a real chance.
+
+### The M5 rule was narrowed, not dropped
+
+`clients.claim()` is still never called on activation. The rule it protects stands: a new build
+must not swap itself in under somebody halfway through typing a balance.
+
+But a page with **no controller** is not that case, and after the unregister-and-reload above
+that is exactly what the page was. It works - it came from the network - but nothing is serving
+it, so it has no offline cache, and nothing ever adopted it. The page's code is already loaded;
+claiming changes only where its *later* fetches are answered from.
+
+So the worker answers a `CLAIM` message, and the page asks - which keeps "only when the page
+asks" true - under two guards:
+
+1. only when `navigator.serviceWorker.controller` is null, so there is nothing to replace;
+2. only when the worker reports **the same build as the page**. A newer worker would answer this
+   page's hashed chunk requests from a newer precache, and the first screen not yet opened would
+   404 - worse than the problem being fixed. The `WHICH_BUILD` channel already existed to ask.
+
+### Settings can tell the two apart now
+
+`controlled` was being computed in `workerStatus()` and then thrown away, so "an old worker is
+still in charge" and "the right worker has not adopted this page" read identically on screen.
+That ambiguity is why this could only be guessed at when reported - the exact failure the three
+build lines were added to prevent. The worker line now says `<build>, not serving this page yet`
+when it is running but not controlling.
+
+### Held by tests
+
+`apps/web/test/build-id.test.ts`, three new blocks (27 tests in the file now): the installing
+worker being considered, the install cap being long enough for a real precache, `activated`
+counting as takeover, early exit on redundant, promotion being tried before any unregister, both
+claim guards, the retry while a worker installs, the hook running outside the session, and the
+Settings line. `apps/web/test/sw.test.ts`: claiming never happens on activation, happens at
+exactly one call site, and only inside the message handler - the test that previously banned
+`clients.claim()` outright was narrowed rather than deleted, so the dangerous version is still
+caught.
+
+Verified in the built worker as well as the source: `dist/sw.js` carries all three message types
+and exactly one `claim()` call.
+
+456 engine, 745 web, 605 API green. Lint, typecheck, `pnpm build` and `pnpm check:figures` clean.
+
+### Worth knowing for next time
+
+`registration.update()` resolving does **not** mean a new worker is ready. Anything that waits on
+a service worker needs to watch the state machine - `installing` → `installed` → `activating` →
+`activated`, plus `redundant` - rather than set a timer and assume. A flat timeout on a lifecycle
+measures the connection, not the state.
 
 ## A pay period says one thing about itself (2026-11-22, reasoned through with the owner)
 
@@ -380,13 +469,25 @@ being the whole of that fix. `apps/api/test/push.test.ts` now asserts the give-u
 
 443 engine, 726 web, 605 API. Lint, typecheck, build and `check:figures` clean.
 
-### Open question for the household
+### Open question for the household - **answered 2026-11-22**
 
-**Question 30.** What does `node scripts/check_vapid.mjs` say about the pair in the container's
-environment, and what status is in the log once this build is deployed? If the pair does not
-match, the fix is one `npx web-push generate-vapid-keys`, both values set from that single
-output, a restart, and each device signed up again. Nothing is lost by regenerating: every
-subscription is already being rejected.
+**Question 30 is closed.** Notifications are working again. The owner's report: "it took several
+'turn off and turn on's' to get working, but it's working now." The VAPID pair was therefore
+never the fault, and `scripts/check_vapid.mjs` was not needed - it stays, because a mismatched
+pair is invisible from the outside and worth being able to rule out in one command.
+
+**A likely connection, worth recording rather than asserting.** The stale background worker found
+the same day (see the newest entry) is a candidate explanation for why it took several attempts.
+The worker in charge was four commits old, which predates both push fixes: the
+`pushsubscriptionchange` handler the worker needs, and the resubscribe-on-load repair. So the
+device was turning notifications off and on against a worker that did not have the code meant to
+make that stick, and the push handler in the running worker was older than the one the page
+believed it had. Each off-and-on would have re-subscribed and then drifted again.
+
+That is consistent with the symptoms and with `pushNotifications.ts` already warning when the
+worker's build differs from the page's - but it is a reconstruction, not something that was
+observed happening. If notifications go quiet again after the worker fix is deployed, this is the
+first thing to doubt.
 
 ## Three things from a day's use (2026-11-21, asked for and reported from use)
 

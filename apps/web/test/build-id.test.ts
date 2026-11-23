@@ -148,6 +148,147 @@ describe("offering a refresh", () => {
   });
 });
 
+/**
+ * Why the worker kept lagging several builds behind the app and the server.
+ *
+ * Reported from use on 2026-11-22, and not new: "the background worker never
+ * matches the app or server version after an update", resolving itself after
+ * a day or two. The mechanism was a chain of three small things.
+ *
+ * `registration.update()` resolves once the worker SCRIPT has been fetched
+ * and the install has been *started* - not finished - and installing means
+ * precaching over half a megabyte. The promotion then looked only for a
+ * `waiting` worker, found none because the new one was still `installing`,
+ * concluded after three seconds that the lifecycle would not cooperate, and
+ * **unregistered** it. `unregister()` on a registration that still has clients
+ * is deferred by the browser; the reload that followed was not. So the page
+ * came back fresh from the network - new bundle - beside a registration whose
+ * active worker was still the old one. New app, new server, old worker.
+ *
+ * An installed app that is only ever backgrounded never drops to zero clients,
+ * so that state persisted until Android eventually killed the app, which is
+ * the "day or two".
+ */
+describe("promoting a worker that is still installing", () => {
+  const source = read("apps/web/src/lib/serverBuild.ts");
+
+  it("looks at the installing worker, not only the waiting one", () => {
+    // The whole bug in one expression. Right after `update()` a brand-new
+    // worker is almost always still installing, so looking only at `waiting`
+    // found nothing exactly when there was something to find.
+    expect(source).toContain("registration.waiting ?? registration.installing");
+  });
+
+  it("lets a precache finish rather than timing out over it", () => {
+    expect(source).toContain('candidate.state === "installing"');
+    expect(source).toMatch(/waitForState\(\s*candidate/u);
+
+    // Long enough for half a megabyte on mobile data. The old single wall
+    // was three seconds for the whole promotion, install included.
+    const cap = /const INSTALL_CAP_MS = (\d[\d_]*)/u.exec(source)?.[1]?.replace(/_/gu, "");
+    expect(Number(cap)).toBeGreaterThanOrEqual(15_000);
+  });
+
+  it("counts reaching activated as taking over, not only controllerchange", () => {
+    /*
+     * `controllerchange` only fires for a page the new worker claims, and
+     * this app does not claim on activation. For a page the OLD worker
+     * controls it may never fire - so a worker that had taken over perfectly
+     * well was judged to have failed, and unregistered.
+     *
+     * Reaching `activated` is enough: from that moment the registration's
+     * active worker is the new one, which is what the reload gets served by.
+     */
+    const takeover = source.slice(source.indexOf("async function waitForTakeover"));
+    const body = takeover.slice(0, takeover.indexOf("\n}"));
+    expect(body).toContain("controllerchange");
+    expect(body).toMatch(/worker\.state === "activated"/u);
+  });
+
+  it("gives up early on a worker that can never get there", () => {
+    // Redundant means replaced or failed. Waiting out the timeout would only
+    // delay the fallback without changing its answer.
+    const takeover = source.slice(source.indexOf("async function waitForTakeover"));
+    expect(takeover.slice(0, takeover.indexOf("\n}"))).toMatch(/redundant/u);
+  });
+
+  it("tries every registration before resorting to unregistering any", () => {
+    /*
+     * Unregistering is the step that produced the mismatch, because the
+     * reload takes effect and the unregister does not. It stays available -
+     * a lifecycle that truly will not move needs it - but it is now the last
+     * resort it was written as rather than the common path.
+     */
+    expect(source).toContain("registrations.map(promote)");
+    const promote = source.indexOf("registrations.map(promote)");
+    const unregister = source.indexOf("registration.unregister()");
+    expect(promote).toBeLessThan(unregister);
+  });
+});
+
+/**
+ * A page that nothing is serving.
+ *
+ * The other half of the same report. After the unregister-and-reload above,
+ * the page has no controller at all - and because `clients.claim()` is never
+ * called on activation, nothing ever adopted it. It works, because it came
+ * from the network, but it has no offline cache for the rest of its life.
+ */
+describe("adopting an uncontrolled page", () => {
+  const source = read("apps/web/src/lib/serverBuild.ts");
+
+  it("asks only when there is no controller to replace", () => {
+    /*
+     * The M5 rule stands for the case it was written for: a new build must
+     * not swap itself in under somebody mid-edit. This is not that case, and
+     * the guard is what keeps the two apart.
+     */
+    const claim = source.slice(source.indexOf("export async function claimIfUncontrolled"));
+    const body = claim.slice(0, claim.indexOf("\n}"));
+    expect(body).toContain("navigator.serviceWorker.controller !== null) return");
+  });
+
+  it("asks only a worker of its own build", () => {
+    // A newer worker would answer this page's hashed chunk requests from a
+    // newer precache, and the first screen not yet opened would 404.
+    const claim = source.slice(source.indexOf("export async function claimIfUncontrolled"));
+    const body = claim.slice(0, claim.indexOf("\n}"));
+    expect(body).toMatch(/askBuild\(active/u);
+    expect(body).toContain("build !== BUILD_ID) return");
+  });
+
+  it("keeps asking while the worker is still installing", () => {
+    // A worker mid-install has no `active` yet, so one attempt on mount
+    // answers about timing rather than about state.
+    const hook = source.slice(source.indexOf("export function useClaimIfUncontrolled"));
+    expect(hook).toContain("attempts < 5");
+    expect(hook).toContain("navigator.serviceWorker.controller !== null) return");
+  });
+
+  it("runs on every load, not only once somebody is signed in", () => {
+    // A page nothing is serving has no offline cache whoever is looking at
+    // it, including on the sign-in screen.
+    const bar = read("apps/web/src/components/UpdateReady.tsx");
+    expect(bar).toContain("useClaimIfUncontrolled()");
+  });
+});
+
+/**
+ * Settings has to be able to tell the two apart.
+ *
+ * `controlled` was computed and then thrown away, so an old worker still in
+ * charge and a correct worker that had not adopted the page read identically
+ * on screen. That is why this could only be guessed at when it was reported -
+ * which is the exact failure the three build lines were added to prevent.
+ */
+describe("what the worker line says", () => {
+  it("says when a worker is running but not serving this page", () => {
+    const settings = read("apps/web/src/pages/Settings.tsx");
+    expect(settings).toContain("worker.controlled ?");
+    expect(settings).toContain("not serving this page yet");
+  });
+});
+
 describe("the plumbing that supplies the stamp", () => {
   const dockerfile = read("Dockerfile");
   const ci = read(".github/workflows/ci.yml");

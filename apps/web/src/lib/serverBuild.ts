@@ -97,26 +97,198 @@ export function useServerBuild(): ServerBuild {
 }
 
 /**
- * How long to give a worker that has been told to take over.
+ * How long to let a worker finish installing before giving up on it.
  *
- * Activation is normally immediate. Three seconds is long enough that a
- * working worker is never given up on, and short enough that a tap on
- * "Reload" still feels like a reload.
+ * This used to be one three-second wall for the whole promotion, and that
+ * number was measuring the wrong thing. `registration.update()` resolves once
+ * the worker SCRIPT has been fetched and the install has been *started* - not
+ * finished - and installing means precaching the shell, which is over half a
+ * megabyte. On a phone on mobile data that is routinely longer than three
+ * seconds, so the promotion below found no `waiting` worker to talk to, judged
+ * the lifecycle uncooperative, and unregistered a worker whose only fault was
+ * being partway through its job.
+ *
+ * Twenty seconds is long enough for that download on a bad connection. It is
+ * never the common path: a worker that has already installed is promoted
+ * immediately, and this only runs when one is genuinely mid-install.
  */
-const TAKEOVER_TIMEOUT_MS = 3000;
+const INSTALL_CAP_MS = 20_000;
 
-/** Resolves true if a different worker takes control in time, false if not. */
-async function waitForTakeover(timeoutMs: number): Promise<boolean> {
+/**
+ * How long to give a worker that has been *told* to take over.
+ *
+ * Activation itself is immediate once installed, so this stays short - a tap
+ * on "Reload" still has to feel like a reload.
+ */
+const TAKEOVER_CAP_MS = 5000;
+
+/** Resolves true once `worker` reaches one of `states`, false if it cannot. */
+async function waitForState(
+  worker: ServiceWorker,
+  states: readonly ServiceWorker["state"][],
+  timeoutMs: number,
+): Promise<boolean> {
+  if (states.includes(worker.state)) return true;
+
   return await new Promise<boolean>((resolve) => {
     const done = (result: boolean): void => {
       clearTimeout(timer);
-      navigator.serviceWorker.removeEventListener("controllerchange", onChange);
+      worker.removeEventListener("statechange", onChange);
       resolve(result);
     };
-    const onChange = (): void => done(true);
+    const onChange = (): void => {
+      if (states.includes(worker.state)) done(true);
+      // Redundant means it was replaced or failed: it will never get there,
+      // so waiting out the timeout would only delay the fallback.
+      else if (worker.state === "redundant") done(false);
+    };
     const timer = setTimeout(() => done(false), timeoutMs);
-    navigator.serviceWorker.addEventListener("controllerchange", onChange);
+    worker.addEventListener("statechange", onChange);
   });
+}
+
+/**
+ * Resolves true once this worker is in charge, false if it never gets there.
+ *
+ * Two ways of counting as "in charge", and the second is the one that matters
+ * on an installed app. `controllerchange` is the clean signal, but it only
+ * fires for a page the new worker actually claims - and this app deliberately
+ * never calls `clients.claim()`, so for a page already controlled by the old
+ * worker it may not fire at all. Reaching `activated` is enough: the
+ * registration's active worker is the new one from that moment, which is what
+ * the reload immediately afterwards will be served by.
+ *
+ * Waiting only for `controllerchange` is why the fallback kept firing on a
+ * worker that had in fact taken over perfectly well.
+ */
+async function waitForTakeover(worker: ServiceWorker, timeoutMs: number): Promise<boolean> {
+  return await new Promise<boolean>((resolve) => {
+    const done = (result: boolean): void => {
+      clearTimeout(timer);
+      navigator.serviceWorker.removeEventListener("controllerchange", onController);
+      worker.removeEventListener("statechange", onState);
+      resolve(result);
+    };
+    const onController = (): void => done(true);
+    const onState = (): void => {
+      if (worker.state === "activated") done(true);
+      else if (worker.state === "redundant") done(false);
+    };
+    const timer = setTimeout(() => done(false), timeoutMs);
+    navigator.serviceWorker.addEventListener("controllerchange", onController);
+    worker.addEventListener("statechange", onState);
+  });
+}
+
+/**
+ * Get one registration's newest worker into charge, politely.
+ *
+ * Returns false only when the lifecycle genuinely will not cooperate, which
+ * is the single case the caller is entitled to unregister over.
+ */
+async function promote(registration: ServiceWorkerRegistration): Promise<boolean> {
+  /*
+   * `installing` as well as `waiting`, which is the bug this had.
+   * Immediately after `update()` a brand-new worker is almost always still
+   * installing, so looking only at `waiting` found nothing exactly when
+   * there was something to find.
+   */
+  const candidate = registration.waiting ?? registration.installing;
+  if (!candidate) return false;
+
+  if (candidate.state === "installing") {
+    const installed = await waitForState(
+      candidate,
+      ["installed", "activating", "activated"],
+      INSTALL_CAP_MS,
+    );
+    if (!installed) return false;
+  }
+
+  // It got all the way there on its own while we waited.
+  if (candidate.state === "activated") return true;
+
+  // Listen before posting: activation can be quicker than this stack.
+  const takeover = waitForTakeover(candidate, TAKEOVER_CAP_MS);
+  candidate.postMessage({ type: "SKIP_WAITING" });
+  return await takeover;
+}
+
+/**
+ * Ask the active worker to start serving this page, when nothing is.
+ *
+ * ## When this happens, and why it is not the same as taking over
+ *
+ * A page can end up with no controller at all: the load that follows an
+ * `unregister()` below, a first load before any worker existed, or a
+ * registration the browser is still tearing down. The page works - it came
+ * from the network - but nothing is serving it, so it has no offline cache,
+ * and until 2026-11-22 nothing ever adopted it, because `clients.claim()` is
+ * deliberately never called.
+ *
+ * That rule exists to stop a new build swapping itself in under somebody
+ * halfway through typing a balance. It does not apply here: there is no
+ * controller to replace. The page's code is already loaded and claiming
+ * changes nothing about it - only where its *later* fetches are answered
+ * from. And it stays page-initiated, so "only when the page asks" still
+ * holds.
+ *
+ * ## The guard that matters
+ *
+ * Only when the worker is the SAME build as this page. A newer worker would
+ * start answering from a newer precache, and this page's lazily-loaded chunks
+ * are named with hashes from its own build - so the first screen that had not
+ * been opened yet would 404. Asking first costs one message on a channel that
+ * already exists.
+ */
+export async function claimIfUncontrolled(): Promise<void> {
+  if (!("serviceWorker" in navigator)) return;
+  if (navigator.serviceWorker.controller !== null) return;
+
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    const active = registration?.active;
+    if (!active) return;
+
+    const build = await askBuild(active, 3000);
+    if (build === null || build !== BUILD_ID) return;
+
+    active.postMessage({ type: "CLAIM" });
+  } catch {
+    // No worker, no permission, or it went away. The next load tries again.
+  }
+}
+
+/**
+ * Keep asking to be adopted until something is serving this page.
+ *
+ * A worker that is still installing has no `active` yet, so a single attempt
+ * on mount answers about timing rather than about state - the same trap
+ * {@link useWorkerStatus} documents. Stops the moment there is a controller,
+ * which is the condition it exists to reach.
+ */
+export function useClaimIfUncontrolled(): void {
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+
+    let cancelled = false;
+    let attempts = 0;
+
+    const look = (): void => {
+      if (cancelled || navigator.serviceWorker.controller !== null) return;
+
+      void claimIfUncontrolled().then(() => {
+        attempts += 1;
+        if (cancelled || navigator.serviceWorker.controller !== null) return;
+        if (attempts < 5) setTimeout(look, 1500);
+      });
+    };
+
+    look();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 }
 
 /**
@@ -293,15 +465,13 @@ export async function loadServerBuild(): Promise<void> {
         }),
       );
 
-      const waiting = registrations.find((registration) => registration.waiting)?.waiting;
-
-      let tookOver = false;
-      if (waiting) {
-        // Listen before posting: activation can be quicker than this stack.
-        const takeover = waitForTakeover(TAKEOVER_TIMEOUT_MS);
-        waiting.postMessage({ type: "SKIP_WAITING" });
-        tookOver = await takeover;
-      }
+      /*
+       * Every registration, not the first one that happens to be `waiting`.
+       * A worker mid-install is the usual state right after `update()`, and
+       * `promote` is what waits for it instead of writing it off.
+       */
+      const promoted = await Promise.all(registrations.map(promote));
+      const tookOver = promoted.some(Boolean);
 
       if (!tookOver) {
         await Promise.all(

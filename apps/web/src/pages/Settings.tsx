@@ -54,9 +54,22 @@ function describeWorker(worker: WorkerStatus): string {
       return "installing…";
     case "waiting":
       return "ready, waiting to take over";
-    case "active":
+    case "active": {
       if (worker.buildId === null) return "running, but too old to say which build";
-      return isStamped(worker.buildId) ? shortBuild(worker.buildId) : "not a released build";
+      const build = isStamped(worker.buildId) ? shortBuild(worker.buildId) : "not a released build";
+
+      /*
+       * Whether it is SERVING this page, not just whether it exists.
+       *
+       * `controlled` was computed and then thrown away, which made two quite
+       * different situations read identically: an old worker still in charge,
+       * and a correct worker that has not adopted an uncontrolled page. That
+       * ambiguity is why "the background worker never matches after an
+       * update" could only be guessed at when it was reported on 2026-11-22 -
+       * exactly what the three build lines exist to prevent.
+       */
+      return worker.controlled ? build : `${build}, not serving this page yet`;
+    }
   }
 }
 

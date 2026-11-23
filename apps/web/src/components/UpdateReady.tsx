@@ -52,10 +52,18 @@
  */
 import { useRegisterSW } from "virtual:pwa-register/react";
 import { BUILD_ID, shouldOfferRefresh } from "../lib/buildId.js";
-import { loadServerBuild, useServerBuild } from "../lib/serverBuild.js";
+import { loadServerBuild, useClaimIfUncontrolled, useServerBuild } from "../lib/serverBuild.js";
 import "./UpdateReady.css";
 
 export function UpdateReady(): React.JSX.Element | null {
+  /*
+   * Mounted here because this component is outside the router and outside
+   * the session, so it runs on every load including the sign-in screen - and
+   * a page nothing is serving is a page with no offline cache, whoever is
+   * looking at it.
+   */
+  useClaimIfUncontrolled();
+
   const {
     needRefresh: [needRefresh, setNeedRefresh],
   } = useRegisterSW({

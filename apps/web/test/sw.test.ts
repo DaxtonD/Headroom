@@ -41,6 +41,15 @@ const config = read("vite.config.ts");
  */
 const code = sw.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
+/**
+ * The page side of the worker's lifecycle.
+ *
+ * Read here rather than in its own file because the two halves only make
+ * sense together: the worker will claim a page when asked, and the whole
+ * safety of that sits in the conditions under which this asks.
+ */
+const serverBuild = read("src/lib/serverBuild.ts");
+
 describe("how the worker is built", () => {
   it("is our file, not a generated one", () => {
     expect(config).toContain('strategies: "injectManifest"');
@@ -113,14 +122,48 @@ describe("it still refuses to take over on its own", () => {
     expect(sw).toContain("self.skipWaiting()");
   });
 
-  it("never claims a page that is already open", () => {
-    /*
-     * The rule since M5: a new build must not swap itself in under somebody
-     * halfway through typing a balance. `clientsClaim()` or `clients.claim()`
-     * would do exactly that, and both are one line that looks harmless.
-     */
+  /**
+   * The rule since M5: a new build must not swap itself in under somebody
+   * halfway through typing a balance.
+   *
+   * Narrowed on 2026-11-22, not dropped. The rule is about *replacing* a
+   * controller. A page with NO controller is not that case - it came from the
+   * network, its code is already loaded, and claiming it changes only where
+   * its later fetches are answered from. Left unclaimed it has no offline
+   * cache and nothing ever adopts it, which is half of what was reported as
+   * "the background worker never matches after an update".
+   *
+   * So claiming is allowed, and these hold the three things that keep it
+   * from becoming the autoUpdate behaviour in disguise: it never happens on
+   * activation, it only happens when the page asks, and the page only asks
+   * when nothing is serving it.
+   */
+  it("never claims on activation, which is the version that swaps code under you", () => {
     expect(code).not.toMatch(/clientsClaim\s*\(/);
-    expect(code).not.toMatch(/clients\s*\.\s*claim\s*\(/);
+
+    const activate = code.slice(code.indexOf('addEventListener("activate"'));
+    expect(activate).not.toMatch(/clients\s*\.\s*claim\s*\(/);
+  });
+
+  it("claims only inside the message handler, and only on request", () => {
+    // One call site, reached one way: the page asking for it by name.
+    expect([...code.matchAll(/clients\s*\.\s*claim\s*\(/gu)]).toHaveLength(1);
+    expect(code).toContain('data.type === "CLAIM"');
+
+    const claim = code.slice(code.indexOf('data.type === "CLAIM"'));
+    expect(claim.slice(0, claim.indexOf("}"))).toMatch(/clients\s*\.\s*claim\s*\(/u);
+  });
+
+  it("is asked for only by a page nothing is serving, on its own build", () => {
+    /*
+     * The two guards live on the page side, so they are checked there. A
+     * newer worker claiming an older page would answer that page's hashed
+     * chunk requests from a newer precache, and the first unopened screen
+     * would 404 - worse than the problem being fixed.
+     */
+    expect(serverBuild).toContain("navigator.serviceWorker.controller !== null) return");
+    expect(serverBuild).toContain("build !== BUILD_ID) return");
+    expect(serverBuild).toContain('active.postMessage({ type: "CLAIM" })');
   });
 
   it("still answers SKIP_WAITING now that it answers other messages too", () => {
