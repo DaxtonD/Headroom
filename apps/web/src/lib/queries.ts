@@ -10,7 +10,7 @@
  * exists to prevent, so there is no write queue and no Background Sync.
  */
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { Cents } from "@headroom/core";
+import type { Cents, ElsewhereMove } from "@headroom/core";
 import { ApiError, api, newIdempotencyKey } from "./api.js";
 
 /* -------------------------------------------------------------------------- */
@@ -334,10 +334,16 @@ export interface PayPeriod {
   readonly flexibleCents: Cents;
   readonly leftCents: Cents;
   /**
-   * Money going out of this window that did not come out of chequing:
-   * charges on a credit card. Counted in none of the figures above.
+   * Money going out of this window that did not come out of chequing.
+   * Counted in none of the figures above.
+   *
+   * Not the same thing as "on cards", though it was labelled that until
+   * 2026-11-22: it also holds anything paid straight out of savings, and a
+   * card paid off out of savings. `elsewhere` is the same total split by the
+   * accounts it moved between, which is what the summary says out loud.
    */
   readonly elsewhereCents: Cents;
+  readonly elsewhere: readonly ElsewhereMove[];
   /**
    * What could go into savings out of this window.
    *
@@ -488,6 +494,18 @@ interface PayPeriodWire {
   readonly flexibleCents: string;
   readonly leftCents: string;
   readonly elsewhereCents: string;
+  /**
+   * Optional on the wire on purpose. An installed app can be running against
+   * a server older than itself - the service worker only takes over when the
+   * page asks it to - and a summary that threw rather than falling back to
+   * the total would be the worst possible answer on a money screen.
+   */
+  readonly elsewhere?: readonly {
+    readonly fromAccountId: string | null;
+    readonly toAccountId: string | null;
+    readonly cents: string;
+    readonly count: number;
+  }[];
   readonly roomToSaveCents: string;
   readonly lowest: { readonly cents: string; readonly date: string | null } | null;
   readonly allAutoCovered: boolean;
@@ -537,6 +555,12 @@ export function usePayPeriods() {
           flexibleCents: toCents(period.flexibleCents),
           leftCents: toCents(period.leftCents),
           elsewhereCents: toCents(period.elsewhereCents),
+          elsewhere: (period.elsewhere ?? []).map((move) => ({
+            fromAccountId: move.fromAccountId,
+            toAccountId: move.toAccountId,
+            cents: toCents(move.cents),
+            count: move.count,
+          })),
           roomToSaveCents: toCents(period.roomToSaveCents),
           lowest: period.lowest
             ? { cents: toCents(period.lowest.cents), date: period.lowest.date }

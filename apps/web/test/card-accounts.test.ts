@@ -38,6 +38,18 @@ const read = (...parts: string[]): string =>
 const row = read("components", "OccurrenceRow.tsx");
 const ledger = read("pages", "Ledger.tsx");
 const ledgerCss = read("pages", "Ledger.css");
+
+/**
+ * The source with its comments removed, for asking what the screen SAYS.
+ *
+ * This file is otherwise happy to grep the comments - they are part of what
+ * is being protected. The exception is a label that was wrong and has been
+ * changed: the comment explaining why has to keep quoting it, so a plain
+ * search for the old wording finds the explanation and passes nothing.
+ */
+function withoutComments(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//gu, "").replace(/^\s*\/\/.*$/gmu, "");
+}
 const sheet = read("components", "UpdateBalanceSheet.tsx");
 const oneOff = read("components", "OneOffForm.tsx");
 const billForm = read("components", "BillForm.tsx");
@@ -175,7 +187,9 @@ describe("the account strip", () => {
     expect(ledger).toContain(
       'data.accounts.filter((account) => account.kind === "savings")',
     );
-    expect(ledger).toContain('{compact ? "Accounts" : "On cards"}');
+    // "Cards" since 2026-11-22, because "On cards" also headed a line in
+    // every period summary below - see the subtotal tests.
+    expect(ledger).toContain('{compact ? "Accounts" : "Cards"}');
   });
 
   /**
@@ -191,17 +205,139 @@ describe("the account strip", () => {
   });
 });
 
+/**
+ * What a window says about money that did not come out of chequing.
+ *
+ * Reported 2026-11-22. A pay period's summary read "On cards" and so did the
+ * heading on the account strip a few inches above it, and the two figures
+ * could never agree: the strip shows what the cards OWE, the summary showed
+ * what was CHARGED to them inside that fortnight. The household compared
+ * them, as anyone would, and concluded the app was wrong.
+ *
+ * Underneath the label was a second, worse fault. The figure is built from
+ * `deltaCents === 0`, which is true of every unsettled outgoing row whose
+ * source is not chequing - not just card charges. An expense paid out of
+ * savings was in it, and so was a card PAID OFF out of savings, which lowers
+ * what is owed while raising the number labelled "On cards".
+ *
+ * Both halves are held here: the words are not reused, and the figure is
+ * itemised by the accounts the money actually moved between.
+ */
 describe("a window's subtotal", () => {
-  it("says what went on the cards, so the rows and the totals reconcile", () => {
+  it("still reports it at all, so the rows and the totals reconcile", () => {
     // A fortnight reporting nothing going out, with charges on screen, reads
     // as broken rather than as accurate.
-    expect(ledger).toMatch(/period\.elsewhereCents > 0n/);
-    expect(ledger).toMatch(/On cards</);
     expect(queries).toMatch(/readonly elsewhereCents: Cents;/);
+    expect(queries).toMatch(/readonly elsewhere\??: readonly/);
+    expect(ledger).toContain("Not out of chequing");
+  });
+
+  it("never labels it with the words the account strip uses", () => {
+    /*
+     * The whole bug. Either heading may be reworded again; what must not come
+     * back is one phrase meaning two quantities on one screen.
+     *
+     * Checked against the code with the comments taken out, because the
+     * comments say what the phrase used to mean and have to go on saying it.
+     */
+    expect(withoutComments(ledger)).not.toContain("On cards");
+  });
+
+  it("names a card charge, money spent out of savings, and a card payment apart", () => {
+    const named = ledger.slice(ledger.indexOf("const elsewhere = useMemo"));
+    expect(named).toContain("`Charged to ${from}`");
+    expect(named).toContain("`Spent out of ${from}`");
+    expect(named).toContain("`${to} paid from ${from}`");
+
+    // The card-charge wording is reached by the SOURCE being a card, which is
+    // what makes a payment out of savings miss it.
+    expect(named).toContain('if (fromKind === "credit_card")');
+  });
+
+  it("says a card being paid is not money spent", () => {
+    /*
+     * The line that was wrong by its sign. Lumped in with spending it made a
+     * fortnight look more expensive the more debt was cleared.
+     */
+    const named = ledger.slice(ledger.indexOf("const elsewhere = useMemo"));
+    expect(named).toMatch(/It is not money spent/);
   });
 
   it("says that figure is not inside the others", () => {
-    expect(ledger).toMatch(/is not in that: it comes out when you pay the card/);
+    expect(ledger).toMatch(/None of the figures above include these/);
+  });
+
+  it("falls back to the bare total against a server that cannot itemise it", () => {
+    // Hiding outgoings is the one thing this figure exists to prevent, so an
+    // app newer than its server shows the total rather than nothing.
+    const named = ledger.slice(ledger.indexOf("const elsewhere = useMemo"));
+    expect(named).toContain("period.elsewhere.length === 0 && period.elsewhereCents > 0n");
+  });
+});
+
+/**
+ * The summary as a worked sum.
+ *
+ * Asked for on 2026-11-22: it "needs to be easy to understand", and "the more
+ * detail here the better". What it replaced put the arithmetic behind "Left
+ * over" in a sentence of prose, so checking it meant re-doing it.
+ */
+describe("the figures a pay period is read for", () => {
+  it("shows every term of the sum, not just its answer", () => {
+    const summary = ledger.slice(ledger.indexOf("ledger__subtotal${period.allAutoCovered"));
+
+    for (const term of ["period.inCents", "period.autoCents", "period.flexibleCents"]) {
+      expect(summary, `${term} must be its own row`).toContain(`cents={`);
+      expect(summary, `${term} must be its own row`).toContain(term);
+    }
+    for (const label of ["Coming in", "Automatic", "Flexible", "Left over"]) {
+      expect(summary, `${label} must be a row's label`).toContain(`"${label}"`);
+    }
+
+    // Signed, so the subtraction is visible rather than described in prose.
+    expect(summary).toContain("cents={-period.autoCents}");
+    expect(summary).toContain("cents={-period.flexibleCents}");
+    // And the answer carries the rule that makes the rows above it a sum.
+    expect(summary).toMatch(/cents=\{period\.leftCents\}\s+sum\s/u);
+  });
+
+  it("says the current period opens with money already in the account", () => {
+    /*
+     * `inCents` includes the opening balance for the current partial window
+     * and nothing else, so one label cannot be honest for both. "Coming in"
+     * on a window that mostly holds money already there is the confusion
+     * this summary exists to remove.
+     */
+    expect(ledger).toContain('period.isCurrentPartial ? "In chequing, plus pay coming"');
+  });
+
+  it("gives every row a second line saying what it is", () => {
+    // A label like "Flexible" is obvious only to whoever set the bills up.
+    const component = ledger.slice(ledger.indexOf("function SummaryRow"));
+    expect(component).toContain("ledger__subtotal-hint");
+    // Required, not optional: a row with no explanation would pass review.
+    expect(component).toMatch(/\n {2}hint: string;/u);
+  });
+
+  it("renames room-to-save when it has gone negative", () => {
+    // "Room to save" with a minus sign in front of it is a riddle.
+    expect(ledger).toContain("period.roomToSaveCents >= 0n ?");
+    expect(ledger).toContain('label="Short by"');
+    expect(ledger).toContain("cents={-period.roomToSaveCents}");
+  });
+
+  it("keeps the explanations in the compact view", () => {
+    /*
+     * Compact is denser, not shorter on facts - the same rule the rows
+     * follow. The person who asked for this detail is the likeliest to be in
+     * compact, and detail only visible in the other view is detail nobody
+     * reads.
+     */
+    const compact = ledgerCss.slice(ledgerCss.indexOf('[data-density="compact"] .ledger__subtotal-hint'));
+    expect(compact.slice(0, compact.indexOf("}"))).toMatch(/font-size/);
+    expect(ledgerCss).not.toMatch(
+      /\[data-density="compact"\][^{]*\.ledger__subtotal-hint \{[^}]*display:\s*none/,
+    );
   });
 });
 

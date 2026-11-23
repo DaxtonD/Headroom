@@ -193,6 +193,31 @@ export interface PayPeriodLowest {
   readonly afterEventId: string | null;
 }
 
+/**
+ * One pair of accounts, and how much moved between them inside a window
+ * without touching the account being projected.
+ *
+ * The distinction that matters is `toAccountId`. Spending has no destination -
+ * the money is gone, and a charge on a card is new debt. A move WITH a
+ * destination is not a cost at all: paying a card out of savings lowers two
+ * balances and buys nothing, and reading it as spending is how the old single
+ * figure came to overstate what a fortnight had cost.
+ */
+export interface ElsewhereMove {
+  /**
+   * The account the money left. Null means the one a timeline projects by
+   * default, which is chequing - reachable only when something other than
+   * chequing is being projected.
+   */
+  readonly fromAccountId: string | null;
+  /** Where it landed, or null when it was spent rather than moved. */
+  readonly toAccountId: string | null;
+  /** Positive magnitude. */
+  readonly cents: Cents;
+  /** How many rows are behind it, for "3 charges" rather than "a charge". */
+  readonly count: number;
+}
+
 export interface PayPeriod {
   readonly label: string;
   readonly start: PlainDate;
@@ -230,15 +255,40 @@ export interface PayPeriod {
   readonly leftCents: Cents;
   /**
    * Money going out inside this window that does NOT come out of this
-   * account, as a positive magnitude. Charges on a credit card, in practice.
+   * account, as a positive magnitude.
    *
    * Counted in none of the figures above, and reported anyway, because a
    * fortnight whose outgoings are mostly on a card would otherwise look like
    * a fortnight with nothing going out. It is also the number that makes the
    * window add up by hand: the rows on screen and the totals beside them
    * have to be reconcilable, or the ledger stops being checkable.
+   *
+   * **It is not "on cards", and this comment used to say it was** - "charges
+   * on a credit card, in practice". The test behind it is `deltaCents === 0`,
+   * which is true of every row whose source is not the projected account, so
+   * an expense paid out of savings lands here too, and so does a card payment
+   * made FROM savings - which lowers what is owed while raising a figure the
+   * ledger had labelled "On cards". Reported from use on 2026-11-22, by
+   * somebody comparing it against the cards in the account strip.
+   *
+   * Use {@link elsewhere} to say anything about where the money went. This
+   * stays as the total, because that is the part that reconciles.
    */
   readonly elsewhereCents: Cents;
+  /**
+   * The same money as {@link elsewhereCents}, itemised by where it moved.
+   *
+   * One entry per source-and-destination pair, in the order the window's rows
+   * first produce them, so a screen can say "charged to Visa" and "paid from
+   * savings" separately rather than calling both of them cards. They sum to
+   * `elsewhereCents` exactly, by construction.
+   *
+   * Deliberately account IDs rather than names or kinds: the engine knows
+   * which account the money left and where it landed, and that is the whole
+   * fact. What to CALL a move between two particular accounts is a display
+   * decision, made where the accounts and their kinds already are.
+   */
+  readonly elsewhere: readonly ElsewhereMove[];
   readonly lowest: PayPeriodLowest | null;
   readonly allAutoCovered: boolean;
   /**

@@ -47,6 +47,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Preferences stored against the person | done | | 2026-11-21, asked for from use: a browser that gets cleared daily took the theme, the text size and the density with it. On the server now and loaded at sign-in; the device keeps a copy for the pre-paint script. The one route in this app with no If-Match and no idempotency key, reasoned beside it |
 | The top of the compact ledger | done | | 2026-11-21, reported after a day of the compact rows. The hero was about 425px and a third of it was whitespace around three 44px info targets. The targets survive as hit areas rather than as layout; the strip under it now lists savings as well as the cards |
 | A tab shows something the moment it is pressed | done | | 2026-11-21, reported from use. The query cache was emptied five minutes after a screen was left, nothing warmed the tabs, and five screens waited against an empty div. In memory only - no figure is written to a phone |
+| A pay period's summary, in plain words | done | | 2026-11-22, reported and asked for from use. "On cards" labelled the card balances AND the fortnight's charges on one screen, and the figure behind it was really "did not come out of chequing" - which includes a card paid off out of savings, raising a total called "on cards" while lowering what the cards owe. The engine itemises it by the accounts the money moved between; the summary is a worked sum with every term named and explained |
 | A device the server had forgotten | done | | 2026-11-22, reported from use. The screen read "On for this device" from the browser alone and never asked whether the server still had the row, so a subscription dropped at send time was invisible forever. The page hands its subscription back on every load, the worker hands over a rotated one, and a refusal no longer reports itself as an expiry |
 
 ## Last session
@@ -119,6 +120,103 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## "On cards" meant two things, and neither was what it added up (2026-11-22, reported from use)
+
+A pay period's summary read **On cards** with a figure, the account strip a few inches above
+it was **headed** On cards with two quite different figures, and the household did the obvious
+thing: compared them, found they could not be reconciled, and asked whether the code was wrong.
+
+It was, twice - though not in the arithmetic, which was right the whole time.
+
+### The two labels
+
+The strip heading showed what the cards **owe**. The summary line showed what had been
+**charged** to them inside that fortnight. Two different quantities, the same two words, one
+screen. They can never agree, so any attempt to check one against the other looks like a fault.
+
+The strip heading is now **Cards** in the comfortable view (it was already "Accounts" in
+compact, which lists savings as well). The summary does not use the phrase at all. Held by a
+test that strips the comments out of `Ledger.tsx` first, because the comments have to go on
+quoting the old wording to explain why it changed.
+
+### The fault underneath it
+
+`elsewhereCents` in `packages/core/src/payPeriods.ts` is accumulated from rows whose
+`deltaCents` is zero - every unsettled outgoing row whose source is **not** the account being
+projected. Charges on a card are only the common case of that. Anything paid straight out of
+savings is in it too. **And so is a card paid off out of savings**, which lowers what is owed
+while *raising* a figure the ledger called "On cards".
+
+The engine's own type comment had been hedging about this since it was written - "charges on a
+credit card, **in practice**" - and the UI had hardened the hedge into a claim. The only test
+of the figure used card charges exclusively, so nothing caught it.
+
+The total is unchanged and still reconciles, which is what it is for. What is new is
+`PayPeriod.elsewhere`: the same money itemised by the accounts it moved between, one entry per
+source-and-destination pair, in the order the window's rows produce them. They sum to the total
+by construction.
+
+Deliberately account **ids**, not names or kinds. The engine knows which account the money left
+and where it landed, and that is the whole fact; what to *call* a move between two particular
+accounts depends on what kind of account each end is, and the kinds are already on the screen
+that renders it. So the engine gained no new option and no new input.
+
+The screen now tells three things apart that were one line:
+
+- **Charged to <card>** - new debt, and chequing pays for it on whatever day the card is paid.
+- **Spent out of <account>** - really spent, and chequing never sees it.
+- **<card> paid from <account>** - not spending at all. It lowers what is owed.
+
+### The summary is a worked sum now
+
+Asked for in the same breath: this summary "needs to be easy to understand", and "the more
+detail here the better". What it replaced was four figures and a sentence of prose, so the
+arithmetic behind "Left over" was there to be re-done in your head rather than read.
+
+Every term is its own row now, signed, in the order they apply, each with a second line saying
+what it is - because a label like "Flexible" is only obvious to whoever set the bills up. The
+explanation is a required prop on the row component, so a row with none would not compile.
+
+Four things that came out of writing it down:
+
+- **The current period's first row cannot share a label with the others.** Its `inCents`
+  includes the opening balance and no other window's does, so "Coming in" would be wrong for
+  it exactly where being wrong matters most. It says "In chequing, plus pay coming".
+- **"Left over" means two things too**, and now says which: what is still in chequing at the
+  end of the current window, versus what a future fortnight's own pay leaves after its own
+  bills.
+- **A negative "Room to save" is a riddle.** Below zero it is a shortfall, so it renames itself
+  to **Short by** and shows the magnitude.
+- **"Room to save" and "Lowest it gets" are usually the same number**, because room-to-save is
+  the lowest point from here to the horizon less the cushion, and that dip is often inside the
+  window. Two identical figures stacked with no explanation reads as a bug, so when they are
+  equal the lower row says it is the dip that sets the one above.
+
+The explanations stay in the compact view, smaller. Compact is denser, not shorter on facts -
+the same rule the compact rows already follow - and the person who asked for this detail is the
+likeliest to be in compact.
+
+### Held by tests
+
+- Engine, `packages/core/test/timeline.test.ts`: a card charge told apart from money spent out
+  of savings; a card paid from savings not counted as a charge on that card; two moves out of
+  one account kept apart by where they went; the itemisation summing to the total; settled rows
+  and incoming money excluded.
+- Web, `apps/web/test/card-accounts.test.ts`: the phrase not reused anywhere the screen renders
+  it; the three wordings reachable by the right conditions; every term of the sum present and
+  signed; the current period's own label; the hint required; the rename below zero; the hints
+  kept in compact.
+
+450 engine, 735 web, 605 API green. Lint, typecheck, `pnpm build` and `pnpm check:figures`
+clean.
+
+### Worth knowing for next time
+
+`pnpm check:figures` earned its keep here. A first draft of the code comments quoted the real
+figures from the bug report to explain what had been compared with what, which is exactly the
+thing that must never reach a tracked file in a public repo. The comments describe the shape
+now and name no amount.
 
 ## A device the server had forgotten (2026-11-22, reported from use)
 
