@@ -308,17 +308,9 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
           autoCents: period.autoCents,
           flexibleCents: period.flexibleCents,
           leftCents: period.leftCents,
-          // Money that went out inside this window without coming out of
-          // chequing: counted in none of the figures above, and shown so the
-          // window reconciles with its rows.
-          //
-          // `elsewhere` itemises the same total by the accounts it moved
-          // between. The screen needs that to name it: the total covers card
-          // charges, anything paid straight out of savings, and a card paid
-          // off out of savings, and calling all three "on cards" is what was
-          // reported on 2026-11-22.
+          // Charges on a card inside this window: counted in none of the
+          // figures above, and shown so the window reconciles with its rows.
           elsewhereCents: period.elsewhereCents,
-          elsewhere: period.elsewhere,
           // "Safe to spend now" asked at a later point on the timeline: what
           // could be moved into savings out of this window without pushing any
           // later balance below the cushion. This is what turns a third cheque

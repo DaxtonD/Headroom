@@ -11,7 +11,7 @@ import { computeHorizonEnd, computePayPeriods, payPeriodWindows } from "../src/p
 import { accountDelta, computeTimeline, effectiveBalance, orderTimeline,
   summariseTimeline,
 } from "../src/timeline.js";
-import type { PayPeriod, PaySchedule, TimelineInput } from "../src/types.js";
+import type { PaySchedule, TimelineInput } from "../src/types.js";
 
 const JORDAN: PaySchedule = {
   id: "jordan",
@@ -1298,20 +1298,11 @@ describe("money that moves between accounts", () => {
       expect(periods[0]?.leftCents).toBe(240_000n);
     });
 
-    it("still says how much went out elsewhere, so the window adds up", () => {
+    it("still says how much went on the cards, so the window adds up", () => {
       // A fortnight reporting nothing going out, with two charges on screen,
       // would read as broken rather than as accurate.
       expect(periods[0]?.elsewhereCents).toBe(11_500n);
       expect(periods[1]?.elsewhereCents).toBe(0n);
-    });
-
-    it("itemises it by the accounts the money moved between", () => {
-      // Both charges left the same card and arrived nowhere, so they are one
-      // line with a count rather than two lines that have to be added up.
-      expect(periods[0]?.elsewhere).toEqual([
-        { fromAccountId: VISA, toAccountId: null, cents: 11_500n, count: 2 },
-      ]);
-      expect(periods[1]?.elsewhere).toEqual([]);
     });
 
     it("has no low point of its own when nothing in it moved", () => {
@@ -1322,115 +1313,6 @@ describe("money that moves between accounts", () => {
       expect(periods[1]?.rowIds).toEqual(["visa-payment", "power"]);
       expect(periods[1]?.flexibleCents).toBe(40_000n);
       expect(periods[1]?.autoCents).toBe(14_000n);
-    });
-  });
-
-  /**
-   * "Elsewhere" is not "on cards", and the difference is not academic.
-   *
-   * Reported from use on 2026-11-22: a pay period reading "On cards $X"
-   * against an account strip showing what the cards owed, and the reasonable
-   * conclusion that one of them was wrong. Neither was - they were two
-   * different quantities sharing a label - but looking into it turned up the
-   * real fault underneath.
-   *
-   * The total is built from `deltaCents === 0`, which is true of every
-   * unsettled outgoing row whose source is not the account being projected.
-   * Card charges are only the common case. Money spent straight out of
-   * savings is in it. So is a card PAID OFF out of savings, which lowers what
-   * is owed - and used to RAISE a figure the ledger called "On cards".
-   *
-   * The total is unchanged and still reconciles. What is new is that the
-   * engine says which account each part of it left, so a screen can tell the
-   * three apart instead of guessing from the common case.
-   */
-  describe("money that goes out without touching the projected account", () => {
-    const periodsFor = (events: readonly TimelineInput[]): readonly PayPeriod[] =>
-      computePayPeriods({
-        timeline: computeTimeline({ events, startBalanceCents: 240_000n, accountId: CHEQUING }),
-        paySchedules: [JORDAN],
-        today: "2026-11-20",
-        periodCount: 2,
-        anchorScheduleId: JORDAN.id,
-      });
-
-    it("tells a card charge apart from money spent out of savings", () => {
-      const periods = periodsFor([
-        charge("groceries", "2026-11-24", -9_500n, VISA),
-        charge("vet", "2026-11-25", -20_000n, SAVINGS),
-      ]);
-
-      expect(periods[0]?.elsewhere).toEqual([
-        { fromAccountId: VISA, toAccountId: null, cents: 9_500n, count: 1 },
-        { fromAccountId: SAVINGS, toAccountId: null, cents: 20_000n, count: 1 },
-      ]);
-      // Both are still money gone, so the total is both.
-      expect(periods[0]?.elsewhereCents).toBe(29_500n);
-    });
-
-    it("does not call a card paid out of savings a charge on that card", () => {
-      /*
-       * The one that was wrong by its sign. It left savings, it arrived on
-       * the card, it lowered a debt and it bought nothing - and the single
-       * figure counted it beside the spending, so clearing more debt made
-       * the fortnight look more expensive.
-       */
-      const periods = periodsFor([
-        charge("groceries", "2026-11-24", -9_500n, VISA),
-        transfer("visa-from-savings", "2026-11-25", -30_000n, SAVINGS, VISA),
-      ]);
-
-      expect(periods[0]?.elsewhere).toEqual([
-        { fromAccountId: VISA, toAccountId: null, cents: 9_500n, count: 1 },
-        // A destination, which is what makes it a move rather than a cost.
-        { fromAccountId: SAVINGS, toAccountId: VISA, cents: 30_000n, count: 1 },
-      ]);
-    });
-
-    it("keeps two moves out of one account apart by where they went", () => {
-      const periods = periodsFor([
-        charge("vet", "2026-11-24", -20_000n, SAVINGS),
-        transfer("visa-from-savings", "2026-11-25", -30_000n, SAVINGS, VISA),
-      ]);
-
-      expect(periods[0]?.elsewhere).toHaveLength(2);
-      expect(periods[0]?.elsewhere.map((move) => move.toAccountId)).toEqual([null, VISA]);
-    });
-
-    it("adds up to the total, which is the part that has to reconcile", () => {
-      const periods = periodsFor([
-        charge("groceries", "2026-11-24", -9_500n, VISA),
-        charge("netflix", "2026-11-25", -2_000n, VISA),
-        charge("vet", "2026-11-26", -20_000n, SAVINGS),
-        transfer("visa-from-savings", "2026-11-27", -30_000n, SAVINGS, VISA),
-      ]);
-
-      const itemised = (periods[0]?.elsewhere ?? []).reduce((sum, move) => sum + move.cents, 0n);
-      expect(itemised).toBe(periods[0]?.elsewhereCents);
-    });
-
-    it("leaves out a settled row, which the opening balance has already been past", () => {
-      // Counting it would show the window spending money that left before it
-      // began - the same reason the total excludes it.
-      const periods = periodsFor([
-        { ...charge("groceries", "2026-11-24", -9_500n, VISA), settled: true },
-        charge("netflix", "2026-11-25", -2_000n, VISA),
-      ]);
-
-      expect(periods[0]?.elsewhere).toEqual([
-        { fromAccountId: VISA, toAccountId: null, cents: 2_000n, count: 1 },
-      ]);
-    });
-
-    it("leaves out money arriving somewhere else, which is not an outgoing", () => {
-      const periods = periodsFor([
-        transfer("interest", "2026-11-24", 5_000n, VISA, SAVINGS),
-        charge("netflix", "2026-11-25", -2_000n, VISA),
-      ]);
-
-      expect(periods[0]?.elsewhere).toEqual([
-        { fromAccountId: VISA, toAccountId: null, cents: 2_000n, count: 1 },
-      ]);
     });
   });
 

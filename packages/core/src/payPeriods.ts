@@ -24,7 +24,6 @@ import type { BlockEntry } from "./chequeBlocks.js";
 import type { PlainDate } from "./dates.js";
 import type { Cents } from "./money.js";
 import type {
-  ElsewhereMove,
   PayPeriod,
   PayPeriodLowest,
   PayPeriodOptions,
@@ -255,15 +254,6 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
     let flexibleCents = 0n;
     let elsewhereCents = 0n;
 
-    /*
-     * Where the "elsewhere" money actually went, keyed source-to-destination.
-     *
-     * A `Map` because insertion order is the answer: the rows arrive in the
-     * order the ledger shows them, so the first charge on a card decides where
-     * that card's line sits, and the list is the same on every render.
-     */
-    const elsewhereBy = new Map<string, { -readonly [K in keyof ElsewhereMove]: ElsewhereMove[K] }>();
-
     // The current partial window opens with whatever is in the account, which
     // is what "coming in" means for a window that starts today.
     if (window.isCurrentPartial) {
@@ -296,27 +286,7 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
          * double what the window appears to have spent.
          */
         if (row.event.settled !== true && row.event.cents < 0n) {
-          const magnitude = -row.event.cents;
-          elsewhereCents += magnitude;
-
-          /*
-           * Itemised as well as totalled, because the total alone cannot be
-           * labelled. Everything that reaches here left SOME account other
-           * than the one being projected, and "which" is the difference
-           * between a card charge, money spent out of savings, and a card
-           * being paid off out of savings. One figure called them all the
-           * same thing until 2026-11-22.
-           */
-          const fromAccountId = row.event.fromAccountId ?? null;
-          const toAccountId = row.event.toAccountId ?? null;
-          const key = `${fromAccountId ?? ""}>${toAccountId ?? ""}`;
-          const already = elsewhereBy.get(key);
-          if (already) {
-            already.cents += magnitude;
-            already.count += 1;
-          } else {
-            elsewhereBy.set(key, { fromAccountId, toAccountId, cents: magnitude, count: 1 });
-          }
+          elsewhereCents -= row.event.cents;
         }
         continue;
       }
@@ -423,7 +393,6 @@ export function computePayPeriods(options: PayPeriodOptions): PayPeriod[] {
       flexibleCents,
       leftCents: inCents - autoCents - flexibleCents,
       elsewhereCents,
-      elsewhere: [...elsewhereBy.values()],
       lowest,
       allAutoCovered: autoRows.every((row) => row.runningCents >= cushionCents),
       blocks,

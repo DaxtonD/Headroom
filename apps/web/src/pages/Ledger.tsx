@@ -481,19 +481,8 @@ export function Ledger({
       */}
       {strip.length > 0 ? (
         <section className="ledger__cards" aria-labelledby="ledger-cards-label">
-          {/*
-            "Cards", not "On cards".
-
-            Reported 2026-11-22: the same two words headed this strip, where
-            they mean the BALANCES the cards carry, and a line in every pay
-            period summary below, where they meant the charges made inside
-            that fortnight. Two quantities that can never match, labelled
-            identically, a few inches apart - so comparing them is the
-            obvious thing to do and it always looks broken. Both labels
-            changed; neither word is reused.
-          */}
           <p className="ledger__cards-label" id="ledger-cards-label">
-            {compact ? "Accounts" : "Cards"}
+            {compact ? "Accounts" : "On cards"}
           </p>
           <ul className="ledger__cards-list">
             {strip.map((account) => (
@@ -789,96 +778,6 @@ function PeriodGroup({
     return footers;
   }, [entries, period.blocks]);
 
-  /**
-   * The window's outgoings that never touched chequing, each named for what
-   * it actually was.
-   *
-   * The engine reports which accounts the money moved between and nothing
-   * else, which is the whole fact and deliberately not a label - what to
-   * CALL a move depends on what kind of account each end is, and the kinds
-   * are here rather than in the engine.
-   *
-   * Three shapes, and they are not variations on one sentence:
-   *
-   *  - spent on a card: new debt, and chequing pays for it later;
-   *  - spent out of savings: really spent, and chequing never sees it;
-   *  - moved from one of them to the other: not spending at all. Paying a
-   *    card out of savings lowers two balances and buys nothing, and the one
-   *    figure this replaces counted it as money gone - which is what made
-   *    "On cards" bigger than the cards.
-   */
-  const elsewhere = useMemo(() => {
-    const byId = new Map(accounts.map((account) => [account.id, account]));
-    const nameOf = (id: string | null): string => {
-      if (id === null) return "chequing";
-      return byId.get(id)?.name ?? "another account";
-    };
-    const kindOf = (id: string | null): Account["kind"] | null => {
-      if (id === null) return "chequing";
-      return byId.get(id)?.kind ?? null;
-    };
-
-    /*
-     * An installed app can be newer than the server it is talking to - this
-     * worker only takes over when the page asks it to - and that server
-     * sends the total without the itemisation. Showing the total under an
-     * honest heading is the right answer there; dropping it would hide
-     * outgoings, which is the one thing this figure exists to prevent.
-     */
-    if (period.elsewhere.length === 0 && period.elsewhereCents > 0n) {
-      return [
-        {
-          key: "total",
-          cents: period.elsewhereCents,
-          label: "Went out somewhere else",
-          hint: "Card charges, or anything paid straight out of savings. This app is newer than the server, which has not said which.",
-        },
-      ];
-    }
-
-    return period.elsewhere.map((move) => {
-      const from = nameOf(move.fromAccountId);
-      const fromKind = kindOf(move.fromAccountId);
-      const key = `${move.fromAccountId ?? ""}>${move.toAccountId ?? ""}`;
-      const many = move.count > 1 ? `${String(move.count)} of them. ` : "";
-
-      // Spent, with no destination: the money is gone.
-      if (move.toAccountId === null) {
-        if (fromKind === "credit_card") {
-          return {
-            key,
-            cents: move.cents,
-            label: `Charged to ${from}`,
-            hint: `${many}New debt on the card. It leaves chequing when you pay the card off, on whichever day that falls.`,
-          };
-        }
-        return {
-          key,
-          cents: move.cents,
-          label: `Spent out of ${from}`,
-          hint: `${many}Paid straight from ${from}, so chequing never sees it.`,
-        };
-      }
-
-      // Moved between two accounts, neither of them chequing.
-      const to = nameOf(move.toAccountId);
-      if (kindOf(move.toAccountId) === "credit_card") {
-        return {
-          key,
-          cents: move.cents,
-          label: `${to} paid from ${from}`,
-          hint: `${many}This lowers what ${to} owes. It is not money spent, and no chequing money goes to it.`,
-        };
-      }
-      return {
-        key,
-        cents: move.cents,
-        label: `Moved from ${from} to ${to}`,
-        hint: `${many}Between two accounts, so it is not spent and it does not come out of chequing.`,
-      };
-    });
-  }, [period.elsewhere, period.elsewhereCents, accounts]);
-
   return (
     <>
       <header className="ledger__period-head">
@@ -996,129 +895,36 @@ function PeriodGroup({
         ) : null}
       </ul>
 
-      {/*
-        ---- What the window leaves behind ----
-
-        Rewritten 2026-11-22. The old version was four figures and a sentence
-        of prose - "<in> in, less <auto> automatic and <flexible> flexible" -
-        which left the arithmetic behind "Left over" to be re-done in your
-        head rather than read. Asked for in these words: this summary "needs
-        to be easy to understand", and "the more detail here the better".
-
-        So it is a worked sum. Every figure that goes into Left over is its
-        own row, with the sign it carries, in the order they apply, and each
-        row says on a second line what it actually is. Nothing is left to
-        prose except the one thing that is genuinely a caveat.
-      */}
+      {/* ---- What the window leaves behind ---- */}
       <div
         className={`ledger__subtotal${period.allAutoCovered ? "" : " ledger__subtotal--short"}`}
       >
-        <SummaryRow
-          label={period.isCurrentPartial ? "In chequing, plus pay coming" : "Coming in"}
-          hint={
-            period.isCurrentPartial
-              ? `What is in chequing today, plus every cheque due by ${formatDateShort(period.end)}.`
-              : "Pay and anything else arriving in this fortnight."
-          }
-          cents={period.inCents}
-        />
-        <SummaryRow
-          label="Automatic"
-          hint="Bills the bank takes on a date of its own."
-          cents={-period.autoCents}
-        />
-        <SummaryRow
-          label="Flexible"
-          hint="Bills you pick the day for."
-          cents={-period.flexibleCents}
-        />
-        <SummaryRow
-          label="Left over"
-          hint={
-            period.isCurrentPartial
-              ? `What is still in chequing on ${formatDateShort(period.end)}.`
-              : "What this fortnight's pay leaves once its own bills are paid."
-          }
-          cents={period.leftCents}
-          sum
-        />
-
-        {/*
-          Room to save leads on type size, because it is the decision this
-          screen supports. Below zero it stops being a room at all, and a
-          negative "Room to save" is a riddle, so it changes its name: the
-          figure is a shortfall and says so.
-        */}
-        {period.roomToSaveCents >= 0n ? (
-          <SummaryRow
-            label="Room to save"
-            hint="What you could move into savings and still cover everything that comes after it."
-            cents={period.roomToSaveCents}
-            strong
-          />
-        ) : (
-          <SummaryRow
-            label="Short by"
-            hint="Even saving nothing more, this period cannot cover everything after it."
-            cents={-period.roomToSaveCents}
-            strong
-          />
-        )}
-
-        {/*
-          The two figures are usually the same number, and stacking the same
-          number twice with no explanation looks like a fault rather than a
-          reason. Room to save is the lowest point from here to the horizon,
-          less the cushion - so whenever that low point falls inside this
-          period and the cushion is nothing, they agree exactly. When they
-          do, this row says why instead of repeating itself.
-        */}
-        {period.lowest ? (
-          <SummaryRow
-            label="Lowest it gets"
-            hint={`${
-              period.lowest.date
-                ? `The least that is in chequing at any point inside this period, on ${formatDateShort(period.lowest.date)}.`
-                : "The least that is in chequing at any point inside this period."
-            }${
-              period.lowest.cents === period.roomToSaveCents
-                ? " It is the dip that sets the room to save above."
-                : ""
-            }`}
-            cents={period.lowest.cents}
-          />
-        ) : null}
-
-        {/*
-          ---- Money that moved somewhere else ----
-
-          Reported 2026-11-22: a period summary reading "On cards" beside an
-          account strip headed "On cards", two figures that could not match,
-          and the reasonable conclusion that one of them was wrong. Neither
-          was. One was the charges made inside the fortnight, the other was
-          what the cards owe, and they shared a label.
-
-          The deeper half of the same bug: that total is every unsettled
-          outgoing row that did not come out of chequing, which is not the
-          same set as "charges on a card". Anything paid straight out of
-          savings is in it - and so is a card PAID OFF out of savings, which
-          lowers what is owed while raising a figure labelled "On cards".
-
-          So the engine itemises it by the accounts the money moved between,
-          and each line is named for what actually happened.
-        */}
-        {elsewhere.length > 0 ? (
-          <div className="ledger__subtotal-group">
-            <p className="ledger__subtotal-group-label">Not out of chequing</p>
-            {elsewhere.map((move) => (
-              <SummaryRow key={move.key} label={move.label} hint={move.hint} cents={move.cents} />
-            ))}
-            <p className="ledger__subtotal-note">
-              None of the figures above include these - the money did not pass through chequing.
-            </p>
+        <div className="ledger__subtotal-row">
+          <span>Left over</span>
+          <span className="hr-amount">{formatCents(period.leftCents)}</span>
+        </div>
+        <div className="ledger__subtotal-row ledger__subtotal-row--strong">
+          <span>Room to save</span>
+          <span className="hr-amount">{formatCents(period.roomToSaveCents)}</span>
+        </div>
+        {period.elsewhereCents > 0n ? (
+          <div className="ledger__subtotal-row">
+            <span>On cards</span>
+            <span className="hr-amount">{formatCents(period.elsewhereCents)}</span>
           </div>
         ) : null}
-
+        <p className="ledger__subtotal-note">
+          {formatCents(period.inCents)} in, less {formatCents(period.autoCents)} automatic and{" "}
+          {formatCents(period.flexibleCents)} flexible.
+          {period.elsewhereCents > 0n
+            ? ` The ${formatCents(period.elsewhereCents)} on cards is not in that: it comes out when you pay the card.`
+            : ""}
+          {period.lowest
+            ? ` Lowest inside it: ${formatCents(period.lowest.cents)}${
+                period.lowest.date ? ` on ${formatDateShort(period.lowest.date)}` : ""
+              }.`
+            : ""}
+        </p>
         {!period.allAutoCovered ? (
           <p className="ledger__subtotal-note">
             Something automatic in this window is not covered. Move a flexible bill out of it.
@@ -1126,44 +932,6 @@ function PeriodGroup({
         ) : null}
       </div>
     </>
-  );
-}
-
-/**
- * One line of a pay period's summary: what it is, what it means, how much.
- *
- * The hint is not optional and it is not a tooltip. These are the figures a
- * decision gets checked against, and a label like "Flexible" is only obvious
- * to whoever set the bills up - which is one of the two people who use this.
- *
- * `sum` draws the rule that makes the rows above it read as a sum. `strong`
- * is the one figure a period is actually consulted for.
- */
-function SummaryRow({
-  label,
-  hint,
-  cents,
-  sum = false,
-  strong = false,
-}: {
-  label: string;
-  hint: string;
-  cents: Cents;
-  sum?: boolean;
-  strong?: boolean;
-}): React.JSX.Element {
-  return (
-    <div
-      className={`ledger__subtotal-row${sum ? " ledger__subtotal-row--sum" : ""}${
-        strong ? " ledger__subtotal-row--strong" : ""
-      }`}
-    >
-      <span className="ledger__subtotal-label">
-        {label}
-        <span className="ledger__subtotal-hint">{hint}</span>
-      </span>
-      <span className="hr-amount">{formatCents(cents)}</span>
-    </div>
   );
 }
 

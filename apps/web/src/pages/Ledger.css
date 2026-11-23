@@ -552,97 +552,11 @@
   justify-content: space-between;
   gap: var(--hr-space-3);
   min-height: 26px;
-  padding: 2px 0;
   font-size: 0.875rem;
   color: var(--hr-text-secondary);
 }
 
 .ledger__subtotal--short .ledger__subtotal-row {
-  color: inherit;
-}
-
-/*
- * Label over hint, with the amount still on the far right.
- *
- * The amount is the row's sibling rather than being inside this, so a hint
- * that wraps to three lines pushes the figures no further left - which is
- * the same mistake the card strip made and had reported.
- */
-.ledger__subtotal-label {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-/*
- * The figure never breaks across two lines.
- *
- * Both sides of a flex row shrink by default, so on a narrow phone a long
- * hint could squeeze the amount until it wrapped mid-number. A dollar figure
- * split over two lines is not a slightly worse layout, it is a figure that
- * can be misread, so the label column gives way instead - it has `min-width:
- * 0` for exactly that.
- */
-.ledger__subtotal-row > .hr-amount {
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
-
-.ledger__subtotal-hint {
-  font-size: 0.75rem;
-  font-weight: 400;
-  line-height: 1.35;
-  color: var(--hr-text-muted);
-  text-wrap: pretty;
-}
-
-.ledger__subtotal--short .ledger__subtotal-hint {
-  color: inherit;
-  opacity: 0.85;
-}
-
-/*
- * The rule that turns the rows above into a sum.
- *
- * Only a hairline, and only above the total - a box around the arithmetic
- * would make the summary look like a second ledger inside the first.
- */
-.ledger__subtotal-row--sum {
-  margin-top: var(--hr-space-1);
-  padding-top: var(--hr-space-2);
-  border-top: 1px solid var(--hr-row-divider);
-}
-
-.ledger__subtotal-row--sum .ledger__subtotal-label,
-.ledger__subtotal-row--sum > .hr-amount {
-  font-weight: 600;
-  color: var(--hr-ink);
-}
-
-.ledger__subtotal--short .ledger__subtotal-row--sum .ledger__subtotal-label,
-.ledger__subtotal--short .ledger__subtotal-row--sum > .hr-amount {
-  color: inherit;
-}
-
-/* ---- Money that moved somewhere else ---- */
-
-.ledger__subtotal-group {
-  margin-top: var(--hr-space-2);
-  padding-top: var(--hr-space-2);
-  border-top: 1px solid var(--hr-row-divider);
-}
-
-.ledger__subtotal-group-label {
-  margin: 0 0 2px;
-  font-size: 0.75rem;
-  font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  color: var(--hr-text-muted);
-}
-
-.ledger__subtotal--short .ledger__subtotal-group-label {
   color: inherit;
 }
 
@@ -927,30 +841,10 @@
 
 [data-density="compact"] .ledger__subtotal-row {
   min-height: 22px;
-  padding: 1px 0;
 }
 
 [data-density="compact"] .ledger__subtotal-row--strong {
   font-size: 1rem;
-}
-
-/*
- * The hints stay in compact, smaller.
- *
- * Tempting to hide them - they are the tallest thing in the block - and
- * wrong for the same reason the compact rows give up no figure. The person
- * who asked for this detail is the person most likely to be in compact, and
- * detail that is only visible in the view they do not use is detail nobody
- * reads. Compact is denser, not shorter on facts.
- */
-[data-density="compact"] .ledger__subtotal-hint {
-  font-size: 0.6875rem;
-  line-height: 1.3;
-}
-
-[data-density="compact"] .ledger__subtotal-group {
-  margin-top: var(--hr-space-1);
-  padding-top: var(--hr-space-1);
 }
 
 /* ---- The compact ledger: the top of the screen ---------------------------
