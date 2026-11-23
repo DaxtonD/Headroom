@@ -53,6 +53,17 @@ const goalCreate = z
       .refine((value) => value > 0n, { message: "A target has to be above zero, or left out entirely." })
       .nullish(),
     savedCents: wireCents.refine((value) => value >= 0n, { message: "Saved cannot be negative." }).optional(),
+    /**
+     * How much to put in each payday, or null for a pot with no plan.
+     *
+     * Per payday rather than per month, because the figure it is compared
+     * against - what could safely leave chequing in a pay period - is a
+     * per-period one, and converting money between the two needs a rounding
+     * rule nobody asked for.
+     */
+    perPaydayIntentCents: wireCents
+      .refine((value) => value >= 0n, { message: "An intent cannot be negative." })
+      .nullish(),
     purpose: z.enum(["general", "mortgage_lump_sum"]).optional(),
     sortIndex: z.number().int().min(0).max(100_000).optional(),
   })
@@ -64,6 +75,10 @@ const goalPatch = z
     /** Explicitly null clears the target, which is a real edit, not a no-op. */
     targetCents: wireCents.nullish(),
     savedCents: wireCents.optional(),
+    /** Explicitly null clears the plan, leaving a pot to put money in. */
+    perPaydayIntentCents: wireCents
+      .refine((value) => value >= 0n, { message: "An intent cannot be negative." })
+      .nullish(),
     purpose: z.enum(["general", "mortgage_lump_sum"]).optional(),
     sortIndex: z.number().int().min(0).max(100_000).optional(),
     baseVersion: z.number().int().min(1).optional(),
@@ -106,6 +121,10 @@ function serialiseGoal(row: Goal) {
     // one and not the other.
     targetCents: row.targetCents === null ? null : row.targetCents.toString(),
     savedCents: row.savedCents.toString(),
+    // Null travels as null here too: "no plan" and "a plan of nothing" are
+    // different, and only the first means the goal is never allocated to.
+    perPaydayIntentCents:
+      row.perPaydayIntentCents === null ? null : row.perPaydayIntentCents.toString(),
     purpose: row.purpose,
     sortIndex: row.sortIndex,
     version: row.version,
@@ -279,6 +298,9 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
             // "no target".
             targetCents: input.targetCents ?? null,
             savedCents: input.savedCents ?? 0n,
+            // Same reasoning as the target: absent and null both mean "no
+            // plan", and a goal with no plan is never allocated to.
+            perPaydayIntentCents: input.perPaydayIntentCents ?? null,
             ...(input.purpose === undefined ? {} : { purpose: input.purpose }),
             ...(input.sortIndex === undefined ? {} : { sortIndex: input.sortIndex }),
             updatedById: user.id,
@@ -367,6 +389,9 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
             name: row.name,
             targetCents: row.targetCents?.toString() ?? null,
             savedCents: row.savedCents.toString(),
+            // In the 409 body as well, so a conflict over the plan can show
+            // what the other person set rather than only that they set it.
+            perPaydayIntentCents: row.perPaydayIntentCents?.toString() ?? null,
           }),
           labelKind: "goal",
         });
@@ -440,6 +465,9 @@ export async function registerGoalRoutes(app: FastifyInstance): Promise<void> {
             name: row.name,
             targetCents: row.targetCents?.toString() ?? null,
             savedCents: row.savedCents.toString(),
+            // In the 409 body as well, so a conflict over the plan can show
+            // what the other person set rather than only that they set it.
+            perPaydayIntentCents: row.perPaydayIntentCents?.toString() ?? null,
           }),
           labelKind: "goal",
         });

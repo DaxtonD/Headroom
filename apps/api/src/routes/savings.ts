@@ -617,9 +617,16 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
       })),
     });
 
-    // Earmarks come back from the engine in display order, so the version each
-    // row needs for an If-Match has to be looked up rather than zipped.
+    /*
+     * Earmarks come back from the engine in display order, so the version each
+     * row needs for an If-Match has to be looked up rather than zipped. The
+     * payday intent rides along the same way, and for a sharper reason: this
+     * screen edits a goal through the goal form, which sends every field it
+     * knows about. Leaving the intent out here would have the form read it as
+     * absent and clear the household's plan on any edit made from Savings.
+     */
     const versions = new Map(goals.map((goal) => [goal.id, goal.version]));
+    const intents = new Map(goals.map((goal) => [goal.id, goal.perPaydayIntentCents]));
 
     return reply.send({
       today,
@@ -638,6 +645,7 @@ export async function registerSavingsRoutes(app: FastifyInstance): Promise<void>
         remainingCents: earmark.remainingCents === null ? null : earmark.remainingCents.toString(),
         pct: earmark.percent,
         isMet: earmark.isMet,
+        perPaydayIntentCents: intents.get(earmark.id)?.toString() ?? null,
         version: versions.get(earmark.id) ?? 1,
       })),
       mortgage:

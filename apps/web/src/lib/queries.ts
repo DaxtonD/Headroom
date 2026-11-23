@@ -76,6 +76,22 @@ interface DashboardWire {
   readonly horizonEnd: string;
   readonly cushionCents: string;
   readonly householdVersion?: number | undefined;
+  readonly roomAllocation?:
+    | {
+        readonly availableCents: string;
+        readonly intendedCents: string;
+        readonly lines: readonly {
+          readonly goalId: string;
+          readonly name: string;
+          readonly intentCents: string;
+          readonly allocatedCents: string;
+          readonly isShort: boolean;
+        }[];
+        readonly unallocatedCents: string;
+        readonly shortCents: string;
+      }
+    | null
+    | undefined;
   readonly suggestedMoves?:
     | readonly {
         readonly eventId: string;
@@ -247,6 +263,30 @@ export interface SuggestedMove {
   readonly lowestAfterCents: Cents;
 }
 
+/**
+ * What the current period's room to save is for.
+ *
+ * Two things kept apart on purpose. `availableCents` is the constraint - the
+ * most that could leave chequing without something later going short - and
+ * the lines are what the household said they mean to put aside. The figure
+ * that answers "not every spare dollar is for savings" is
+ * `unallocatedCents`, and it is not a failure to allocate: it is the part
+ * they have not committed.
+ */
+export interface RoomAllocation {
+  readonly availableCents: Cents;
+  readonly intendedCents: Cents;
+  readonly lines: readonly {
+    readonly goalId: string;
+    readonly name: string;
+    readonly intentCents: Cents;
+    readonly allocatedCents: Cents;
+    readonly isShort: boolean;
+  }[];
+  readonly unallocatedCents: Cents;
+  readonly shortCents: Cents;
+}
+
 export interface Dashboard {
   readonly today: string;
   readonly horizonEnd: string;
@@ -267,6 +307,8 @@ export interface Dashboard {
    * model, so only the household knows whether a bill can actually wait.
    */
   readonly suggestedMoves: readonly SuggestedMove[];
+  /** Null against a server too old to send it, or with no pay schedules. */
+  readonly roomAllocation: RoomAllocation | null;
   readonly balance: {
     readonly cents: Cents;
     readonly snapshotCents: Cents;
@@ -520,6 +562,19 @@ export function useDashboard() {
         ...wire,
         cushionCents: toCents(wire.cushionCents),
         householdVersion: wire.householdVersion ?? 0,
+        roomAllocation: wire.roomAllocation
+          ? {
+              availableCents: toCents(wire.roomAllocation.availableCents),
+              intendedCents: toCents(wire.roomAllocation.intendedCents),
+              lines: wire.roomAllocation.lines.map((line) => ({
+                ...line,
+                intentCents: toCents(line.intentCents),
+                allocatedCents: toCents(line.allocatedCents),
+              })),
+              unallocatedCents: toCents(wire.roomAllocation.unallocatedCents),
+              shortCents: toCents(wire.roomAllocation.shortCents),
+            }
+          : null,
         suggestedMoves: (wire.suggestedMoves ?? []).map((move) => ({
           ...move,
           cents: toCents(move.cents),

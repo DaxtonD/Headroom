@@ -685,6 +685,66 @@
   font-size: 0.875rem;
 }
 
+/* ---- What the room to save is for --------------------------------------
+ *
+ * Indented under the figure it divides up, because that relationship is the
+ * whole point: the figure above is what CAN leave, and these are what the
+ * household decided to do with it. Two computations, kept visibly apart.
+ */
+.ledger__plan {
+  margin-top: 2px;
+  padding-left: var(--hr-space-3);
+  border-left: 2px solid var(--hr-row-divider);
+}
+
+.ledger__plan-row {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--hr-space-3);
+  min-height: 22px;
+  font-size: 0.8125rem;
+  color: var(--hr-text-secondary);
+}
+
+.ledger__plan-row > .hr-amount {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+/*
+ * "Not earmarked" is the line that answers the complaint, so it reads as a
+ * figure in its own right rather than as a leftover at the bottom of a list.
+ */
+.ledger__plan-row--rest {
+  margin-top: 2px;
+  padding-top: 2px;
+  border-top: 1px solid var(--hr-row-divider);
+  color: var(--hr-ink);
+}
+
+/* What was planned but did not fit, beside what did. */
+.ledger__plan-short {
+  color: var(--hr-text-muted);
+}
+
+.ledger__subtotal--short .ledger__plan-row,
+.ledger__subtotal--short .ledger__plan-row--rest,
+.ledger__subtotal--short .ledger__plan-short {
+  color: inherit;
+}
+
+/*
+ * 22px, the same floor the compact subtotal rows use. These are display rows
+ * rather than touch targets - nothing on them is pressable - which is what
+ * allows them under 44px at all, and `compact-ledger.test.ts` holds the
+ * convention that nothing in here goes below 22 whatever it is.
+ */
+[data-density="compact"] .ledger__plan-row {
+  min-height: 22px;
+  font-size: 0.75rem;
+}
+
 .ledger__subtotal-note {
   margin-top: var(--hr-space-1);
   font-size: 0.75rem;

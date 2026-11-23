@@ -28,4 +28,5 @@ export * from "./chequeCalendar.js";
 export * from "./yearAhead.js";
 export * from "./mortgage.js";
 export * from "./savings.js";
+export * from "./allocateRoom.js";
 export * from "./activity.js";

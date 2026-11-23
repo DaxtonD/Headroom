@@ -155,6 +155,10 @@ export function Savings({ canEdit }: { canEdit: boolean }): React.JSX.Element {
     name: earmark.name,
     targetCents: earmark.targetCents,
     savedCents: earmark.setAsideCents,
+    // Carried through, not defaulted: the goal form sends every field it
+    // knows about, so a null here would clear the household's plan on any
+    // edit made from this screen.
+    perPaydayIntentCents: earmark.perPaydayIntentCents,
     remainingCents: earmark.remainingCents,
     pct: earmark.pct,
     isMet: earmark.isMet,

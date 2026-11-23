@@ -47,6 +47,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Preferences stored against the person | done | | 2026-11-21, asked for from use: a browser that gets cleared daily took the theme, the text size and the density with it. On the server now and loaded at sign-in; the device keeps a copy for the pre-paint script. The one route in this app with no If-Match and no idempotency key, reasoned beside it |
 | The top of the compact ledger | done | | 2026-11-21, reported after a day of the compact rows. The hero was about 425px and a third of it was whitespace around three 44px info targets. The targets survive as hit areas rather than as layout; the strip under it now lists savings as well as the cards |
 | A tab shows something the moment it is pressed | done | | 2026-11-21, reported from use. The query cache was emptied five minutes after a screen was left, nothing warmed the tabs, and five screens waited against an empty div. In memory only - no figure is written to a phone |
+| What the room to save is for | done | | 2026-11-22, asked for from use. "Room to save" was a constraint shown as an instruction. It is "Could move out" now, with what the household actually decided underneath it from a per-payday intent per goal, and the remainder named "Not earmarked". A goal with no intent is never allocated to, which is what stops that figure quietly becoming zero |
 | Which bill to move, and to when | done | | 2026-11-22, asked for from use. The shortfall warning now names which flexible bill to move and to which payday, each one applied and the whole timeline re-run before being offered. Worded as an offer and tapping it opens the row - the app has no due dates, so whether a bill can wait stays the household's call. Removed the need for the "not after" date that was thought to block it |
 | Where purchases come from, for now | done | | 2026-11-22, asked for from use. Replaces a morning conversation: when chequing runs low, purchases go on the Visa until payday. Not a banner - it is the default source account on a new one-off, which is where the manual version failed. The server sets the end date to the next payday and records who said so; whether it still applies is derived, so it lapses by itself at midnight |
 | The background worker lagged behind | done | | 2026-11-22, reported from use and long-standing. `update()` resolves before an install finishes, so the promotion found no waiting worker, timed out in 3s and unregistered - and an unregister with live clients is deferred while the reload is not, leaving a new page beside the old worker. Now waits on the lifecycle; and a page with no controller can ask to be claimed, guarded on the build matching |
@@ -124,6 +125,113 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## What the room to save is for (2026-11-22, asked for from use)
+
+The last of the three ideas raised on 2026-11-22: "let's build the savings intelligence into the
+model. A blanket 'room to save' doesn't cover all scenarios. Our household is really trying to
+save to make lump-sum payments to the mortgage and for vacations, but that doesn't mean every
+spare dollar is to be allocated to savings."
+
+### The complaint was exact, and it is a category error in the figure
+
+**What can safely leave is arithmetic. Where it should go is policy.** `roomToSaveFrom` answers
+the first - the most that could leave chequing without something later going short - and it was
+being shown in the one place and the one type size that make it read as an answer to the second.
+One number doing two jobs.
+
+So the constraint is untouched and renamed to what it is: **"Could move out"**. Underneath it,
+what the household actually decided, from a figure they set per goal. The last line is the one
+that answers the complaint: **"Not earmarked"** - and that is not money somebody failed to
+allocate, it is the part they have not committed.
+
+### What the model gained, and what it already had
+
+Goals already had `sortIndex` and an optional `targetCents`, so **priority needed no new
+column**; the household's order is their stated priority. The one thing missing was an intent:
+without a figure the household has set, the app has no basis to divide the room at all and can
+only report the whole thing and let it be misread.
+
+So: `Goal.perPaydayIntentCents`, nullable.
+
+**Per payday, not per month.** The household is paid biweekly, the ledger is organised in pay
+periods, and the figure this is compared against is a per-period one. A monthly figure would have
+to be converted at the point of comparison, and a conversion on money needs a rounding rule
+nobody asked for.
+
+**Null is not zero**, on the same reasoning that makes `targetCents` optional - recorded
+2026-11-08: "Trips never have a set date or set cost. We simply save for it and book a good deal
+when it comes about." A goal with no intent is a pot with no plan and is **never allocated to**.
+That is load-bearing: a rule that absorbed the room into unplanned pots would make "not
+earmarked" always zero, which is the exact reading being objected to, and would do it silently.
+
+### How the division works
+
+`allocateRoom` in `packages/core/src/allocateRoom.ts`, in `sortIndex` order, each goal taking up
+to its stated intent until the room runs out.
+
+In order rather than proportionally, and that is a choice about what a household does when money
+is short: they fund the first thing fully and the last thing not at all, rather than underfunding
+everything by a quarter. A proportional split would also leave a remainder to round.
+
+A negative room - the period is already short - allocates nothing and reports the whole plan
+unmet, but still returns the real negative figure, because "nothing fits" and "this period is
+already underwater" are different pieces of news.
+
+### Decided without asking
+
+- **The intent is per payday**, for the reason above.
+- **A goal with no intent is never allocated to**, rather than sharing the remainder.
+- **The figure is renamed on the ledger.** "Room to save" invited the misreading; keeping the
+  name while changing the meaning underneath would have been worse than either.
+- **Only the current period gets the breakdown**, which is where the figure is shown and the
+  only window where it is a decision anybody can act on today.
+
+### A data-loss trap this nearly shipped
+
+The savings screen edits a goal through the **goal form**, and that form sends every field it
+knows about. An earmark that did not carry the intent would have arrived at the form as absent,
+so saving any edit made from Savings would have cleared the household's plan without mentioning
+it. The intent is carried through the savings payload for that reason and nothing else - that
+screen does not display it - and there are tests on both sides saying so.
+
+### Held by tests
+
+- `packages/core/test/allocateRoom.test.ts` (12): every intent met with the rest unallocated, a
+  pot with no plan excluded, order deciding who goes short, nothing allocated when there is no
+  room, a negative room reported as itself, and an arithmetic invariant across seven amounts -
+  every cent either allocated or unallocated, every cent of the plan either met or short.
+- `apps/api/test/roomAllocation.test.ts` (7, against real Postgres): the intent round-tripping
+  through create, patch and the ledger; null surviving as null; cleared by an explicit null; a
+  negative refused; the household's order followed; the constraint identical to the period's own
+  `roomToSaveCents`; and the savings payload carrying the intent.
+- `apps/web/test/room-allocation.test.ts` (12): the rename, the breakdown sitting under the
+  figure, the division taken from the engine, "Not earmarked" present and styled as a figure of
+  its own, the shortfall line, the per-payday wording, blank treated as a real answer, and both
+  halves of the data-loss trap.
+
+498 engine, 788 web, 638 API green. Lint, typecheck, `pnpm build` and `pnpm check:figures` clean.
+
+### A prerequisite that turned out not to exist
+
+This was recorded twice as blocked on fixing the room-to-save **horizon flaw** first -
+`roomToSaveFrom` scans only as far as the timeline reaches, so it grows more optimistic the
+further right you scroll.
+
+That fix is not possible as described, and finding out why is worth keeping: occurrences are only
+generated to **`horizonEnd` + 14 days** (`generationWindow`), so "look further" has no rows to
+look at. Extending it would mean projecting from templates, which is a different piece of
+machinery (`yearAhead.ts`).
+
+It is also not needed. The flaw bites later windows, and the allocation is scoped to the
+**current** period - which has the longest lookahead and is the only window where moving money to
+savings is a decision anybody can act on today. The actionable question was never the one the
+flaw spoils.
+
+The flaw itself is unfixed and now has only one consumer: `roomToSaveCents` on later periods,
+which the ledger stopped showing earlier the same day. Worth revisiting only if a future screen
+wants a forward-looking savings figure, and the honest first move then is to **report the
+lookahead** alongside the figure rather than to pretend it reaches further than it does.
 
 ## Which bill to move, and to when (2026-11-22, asked for from use)
 

@@ -57,6 +57,7 @@ import {
   useRemoveOneOff,
   type Account,
   type PayPeriod,
+  type RoomAllocation,
   type TimelineRow,
 } from "../lib/queries.js";
 import "./Ledger.css";
@@ -771,6 +772,7 @@ export function Ledger({
               >
                 <PeriodGroup
                   period={period}
+                  roomAllocation={data.roomAllocation}
                   balanceBeforeId={balanceBeforeId}
                   balanceCents={data.balance.cents}
                   moveTargets={moveTargets}
@@ -858,8 +860,18 @@ function PeriodGroup({
   accounts,
   balanceBeforeId,
   balanceCents,
+  roomAllocation,
 }: {
   period: PayPeriod;
+  /**
+   * What the current period's room to save is for, or null.
+   *
+   * Passed in rather than fetched here: it divides up a figure this component
+   * already has, and the two must not be able to disagree about which goals
+   * exist. Ignored by every window but the current one, which is the only
+   * place the figure is shown.
+   */
+  roomAllocation: RoomAllocation | null;
   moveTargets: readonly MoveTarget[];
   /**
    * The row the "Balance now" line goes above: the first one whose money has
@@ -1128,10 +1140,63 @@ function PeriodGroup({
           printing one fact twice.
         */}
         {period.isCurrentPartial ? (
-          <div className="ledger__subtotal-row ledger__subtotal-row--strong">
-            <span>Room to save</span>
-            <span className="hr-amount">{formatCents(period.roomToSaveCents)}</span>
-          </div>
+          <>
+            <div className="ledger__subtotal-row ledger__subtotal-row--strong">
+              <span>Could move out</span>
+              <span className="hr-amount">{formatCents(period.roomToSaveCents)}</span>
+            </div>
+
+            {/*
+              ---- And what it is for ----
+
+              Asked for on 2026-11-22: "a blanket 'room to save' doesn't
+              cover all scenarios. Our household is really trying to save to
+              make lump-sum payments to the mortgage and for vacations, but
+              that doesn't mean every spare dollar is to be allocated to
+              savings."
+
+              The complaint was exact, and the fix is to stop one number
+              doing two jobs. **What can safely leave is arithmetic; where it
+              should go is policy.** The figure above is the constraint and
+              now says so - "Could move out", not "Room to save", which read
+              as an instruction to put all of it in savings.
+
+              Underneath it, what the household actually decided, from an
+              intent they set per goal. The line that answers the complaint
+              is the last one: money they have not committed is not money
+              they have failed to allocate.
+            */}
+            {roomAllocation && roomAllocation.lines.length > 0 ? (
+              <div className="ledger__plan">
+                {roomAllocation.lines.map((line) => (
+                  <div className="ledger__plan-row" key={line.goalId}>
+                    <span>
+                      {line.name}
+                      {line.isShort ? (
+                        <span className="ledger__plan-short">
+                          {" "}
+                          · {formatCents(line.intentCents)} planned
+                        </span>
+                      ) : null}
+                    </span>
+                    <span className="hr-amount">{formatCents(line.allocatedCents)}</span>
+                  </div>
+                ))}
+                <div className="ledger__plan-row ledger__plan-row--rest">
+                  <span>Not earmarked</span>
+                  <span className="hr-amount">
+                    {formatCents(roomAllocation.unallocatedCents)}
+                  </span>
+                </div>
+                {roomAllocation.shortCents > 0n ? (
+                  <p className="ledger__subtotal-note">
+                    {formatCents(roomAllocation.shortCents)} of what you planned to put aside
+                    does not fit this period.
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
+          </>
         ) : null}
 
         <p className="ledger__subtotal-note">

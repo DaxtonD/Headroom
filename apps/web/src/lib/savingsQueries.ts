@@ -50,6 +50,15 @@ export interface Earmark {
   readonly remainingCents: Cents | null;
   readonly pct: number | null;
   readonly isMet: boolean;
+  /**
+   * What the household means to put in each payday, or null for no plan.
+   *
+   * Carried here even though this screen does not show it, because this
+   * screen EDITS a goal through the goal form - and that form sends every
+   * field it knows about. Without this, any edit made from Savings would
+   * clear the plan.
+   */
+  readonly perPaydayIntentCents: Cents | null;
   readonly version: number;
 }
 
@@ -182,10 +191,15 @@ interface SavingsWire {
   earmarkedCents: string;
   unallocatedCents: string;
   isOverAllocated: boolean;
-  earmarks: (Omit<Earmark, "setAsideCents" | "targetCents" | "remainingCents"> & {
+  earmarks: (Omit<
+    Earmark,
+    "setAsideCents" | "targetCents" | "remainingCents" | "perPaydayIntentCents"
+  > & {
     setAsideCents: string;
     targetCents: string | null;
     remainingCents: string | null;
+    // Optional: this screen has to survive an older API than itself.
+    perPaydayIntentCents?: string | null;
   })[];
   mortgage: (Omit<
     MortgagePanel,
@@ -279,6 +293,7 @@ export function savingsOptions(lumpSumCents?: Cents) {
           setAsideCents: toCents(earmark.setAsideCents),
           targetCents: toCentsOrNull(earmark.targetCents),
           remainingCents: toCentsOrNull(earmark.remainingCents),
+          perPaydayIntentCents: toCentsOrNull(earmark.perPaydayIntentCents ?? null),
         })),
         mortgage:
           wire.mortgage === null

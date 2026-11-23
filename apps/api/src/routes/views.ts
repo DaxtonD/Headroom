@@ -176,6 +176,17 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
       suggestedMoves: context.suggestedMoves,
 
       /*
+       * What the current period's room to save is for.
+       *
+       * The constraint and the policy, kept apart: `roomToSaveCents` on the
+       * period is still the most that could leave chequing without something
+       * later going short, and this says what the household decided to do
+       * with it. Asked for on 2026-11-22, because one figure doing both jobs
+       * read as an instruction to put all of it in savings.
+       */
+      roomAllocation: context.roomAllocation,
+
+      /*
        * Where purchases come from, for now. Null is the ordinary state.
        *
        * Derived in `loadTimelineContext` so the banner and the one-off form's

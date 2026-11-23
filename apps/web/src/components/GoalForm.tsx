@@ -25,7 +25,13 @@ export function GoalForm({
   const create = useCreateGoal();
   const patch = usePatchGoal();
   const remove = useDeleteGoal();
-  const ids = { name: useId(), target: useId(), saved: useId(), hasTarget: useId() };
+  const ids = {
+    name: useId(),
+    target: useId(),
+    saved: useId(),
+    hasTarget: useId(),
+    intent: useId(),
+  };
 
   const [name, setName] = useState(existing?.name ?? "");
   // Spelled out rather than `existing?.targetCents != null`, because for a new
@@ -38,6 +44,19 @@ export function GoalForm({
   );
   const [saved, setSaved] = useState(
     existing ? formatCents(existing.savedCents, { currencySymbol: false, grouping: false }) : "0",
+  );
+  /**
+   * What to put in each payday, or empty for a pot with no plan.
+   *
+   * Empty is not zero, and the difference decides whether this goal is ever
+   * allocated to. A pot with no plan is somewhere to put money on purpose -
+   * the normal state for a trip - and the ledger leaves it out of the
+   * breakdown rather than quietly earmarking for it.
+   */
+  const [intent, setIntent] = useState(
+    existing && existing.perPaydayIntentCents !== null
+      ? formatCents(existing.perPaydayIntentCents, { currencySymbol: false, grouping: false })
+      : "",
   );
   const [error, setError] = useState<string | null>(null);
   const [armed, setArmed] = useState(false);
@@ -86,6 +105,20 @@ export function GoalForm({
       }
     }
 
+    let intentCents: bigint | null = null;
+    if (intent.trim() !== "") {
+      try {
+        intentCents = parseCents(intent);
+      } catch {
+        setError("That payday amount is not a number.");
+        return;
+      }
+      if (intentCents < 0n) {
+        setError("A payday amount cannot be negative.");
+        return;
+      }
+    }
+
     try {
       savedCents = parseCents(saved === "" ? "0" : saved);
     } catch {
@@ -106,6 +139,7 @@ export function GoalForm({
             name: name.trim(),
             targetCents: targetCents === null ? null : targetCents.toString(),
             savedCents: savedCents.toString(),
+            perPaydayIntentCents: intentCents === null ? null : intentCents.toString(),
           },
         });
       } else {
@@ -113,6 +147,7 @@ export function GoalForm({
           name: name.trim(),
           targetCents: targetCents === null ? null : targetCents.toString(),
           savedCents: savedCents.toString(),
+          perPaydayIntentCents: intentCents === null ? null : intentCents.toString(),
         });
       }
       onClose();
@@ -216,6 +251,35 @@ export function GoalForm({
           value={saved}
           onChange={(event) => setSaved(event.target.value)}
           placeholder="0.00"
+          disabled={saving}
+        />
+      </Field>
+
+      {/*
+        What the household means to put in each payday.
+
+        Per payday rather than per month, because the figure it is shown
+        against on the ledger - what could safely leave chequing in this pay
+        period - is a per-period one. Converting money between the two would
+        need a rounding rule nobody asked for.
+
+        Leaving it blank is a real answer and the hint says so: a pot with no
+        plan is never allocated to, which is what keeps "not earmarked" from
+        quietly becoming zero.
+      */}
+      <Field
+        label="Put aside each payday?"
+        htmlFor={ids.intent}
+        hint="Leave blank for a pot you add to when you choose. The ledger shows this against what could safely leave chequing."
+      >
+        <input
+          className="hr-input"
+          id={ids.intent}
+          type="text"
+          inputMode="decimal"
+          value={intent}
+          onChange={(event) => setIntent(event.target.value)}
+          placeholder="Blank for no plan"
           disabled={saving}
         />
       </Field>

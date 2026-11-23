@@ -13,12 +13,14 @@ import {
   computePayPeriods,
   computeTimeline,
   effectiveBalance,
+  allocateRoom,
   spendFromIsActive,
   suggestMoves,
   type AccountMove,
   type PayPeriod,
   type PaySchedule,
   type MoveSuggestion,
+  type RoomAllocation,
   type PlainDate,
   type TimelineInput,
   type TimelineResult,
@@ -206,6 +208,18 @@ export interface TimelineContext {
    * question anybody can answer by looking.
    */
   readonly suggestedMoves: readonly MoveSuggestion[];
+  /**
+   * What the room to save in the CURRENT period is for.
+   *
+   * Only the current one, which is where the figure is shown and the only
+   * window where it is a decision somebody can act on today. The constraint
+   * comes from the engine untouched; this says what the household has
+   * decided to do with it, from intents they set per goal.
+   *
+   * Null when there is no current window at all, which happens only in a
+   * household with no pay schedules.
+   */
+  readonly roomAllocation: RoomAllocation | null;
   /**
    * Where purchases come from, for now, or null for the ordinary state.
    *
@@ -694,6 +708,23 @@ export async function loadTimelineContext(
         }
       : null;
 
+  /*
+   * The window today falls in, and the goals, for the room allocation below.
+   *
+   * The goals are read here rather than on the savings screen's own path,
+   * because the figure they divide up is a ledger figure and the two must not
+   * be able to disagree about which goals exist.
+   */
+  const currentPeriod = payPeriods.find((period) => period.isCurrentPartial);
+  const goalRows =
+    currentPeriod === undefined
+      ? []
+      : await prisma.goal.findMany({
+          where: { householdId, deletedAt: null },
+          select: { id: true, name: true, perPaydayIntentCents: true, sortIndex: true },
+          orderBy: [{ sortIndex: "asc" }, { createdAt: "asc" }],
+        });
+
   return {
     householdId,
     today,
@@ -706,6 +737,30 @@ export async function loadTimelineContext(
      * moving a bill lowers every balance after it and the window it lands in
      * has its own withdrawals to cover.
      */
+    /*
+     * What the current period's room to save is for.
+     *
+     * Asked for on 2026-11-22: "a blanket 'room to save' doesn't cover all
+     * scenarios... that doesn't mean every spare dollar is to be allocated to
+     * savings." The constraint goes in untouched - what can safely leave is
+     * arithmetic - and comes back divided across what the household said they
+     * mean to put aside, with the remainder named `unallocated`.
+     *
+     * The current window only. It is the one where the figure is shown and
+     * the only one where it is a decision anybody can act on today.
+     */
+    roomAllocation:
+      currentPeriod === undefined
+        ? null
+        : allocateRoom({
+            availableCents: currentPeriod.roomToSaveCents,
+            goals: goalRows.map((goal) => ({
+              id: goal.id,
+              name: goal.name,
+              perPaydayIntentCents: goal.perPaydayIntentCents,
+              sortIndex: goal.sortIndex,
+            })),
+          }),
     suggestedMoves: suggestMoves({
       events,
       startBalanceCents: effectiveCents,

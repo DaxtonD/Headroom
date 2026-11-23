@@ -1,0 +1,27 @@
+-- How much the household means to put toward each goal, each payday.
+--
+-- Asked for on 2026-11-22: "let's build the savings intelligence into the
+-- model. A blanket 'room to save' doesn't cover all scenarios. Our household
+-- is really trying to save to make lump-sum payments to the mortgage and for
+-- vacations, but that doesn't mean every spare dollar is to be allocated to
+-- savings."
+--
+-- The complaint is exact. "Room to save" is a CONSTRAINT - the most that could
+-- leave chequing without something later going short - and it was being shown
+-- in the one place and the one type size that make it read as an INSTRUCTION.
+-- Without a stated intent the app has no basis to split it, so it could only
+-- report the whole figure and let it be misread.
+--
+-- Per payday, not per month. The household is paid biweekly, the ledger is
+-- organised in pay periods, and the figure this is compared against is a
+-- per-period one. A monthly figure would have to be converted at the point of
+-- comparison, and a conversion on money needs a rounding rule nobody asked
+-- for.
+--
+-- Nullable, and null is not zero. A goal with no intent is a pot with no plan,
+-- which is the normal state for a trip - the same reasoning that makes
+-- `targetCents` optional, recorded on 2026-11-08: "Trips never have a set date
+-- or set cost. We simply save for it and book a good deal when it comes
+-- about." Such a goal is never allocated to automatically. It is somewhere to
+-- put money on purpose.
+ALTER TABLE "goal" ADD COLUMN "perPaydayIntentCents" BIGINT;

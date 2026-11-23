@@ -682,6 +682,25 @@ model Goal {
   targetCents BigInt?
   savedCents  BigInt @default(0)
 
+  /// How much the household means to put in each payday.
+  ///
+  /// Asked for on 2026-11-22: "a blanket 'room to save' doesn't cover all
+  /// scenarios... that doesn't mean every spare dollar is to be allocated to
+  /// savings". Without a stated intent the app has no basis to split that
+  /// figure at all - it can only report the whole constraint and let it be
+  /// read as an instruction, which is the thing being complained about.
+  ///
+  /// **Per payday, not per month.** The household is paid biweekly, the ledger
+  /// is organised in pay periods, and the figure this is compared against is a
+  /// per-period one. A monthly figure would need converting at the point of
+  /// comparison, and a conversion on money needs a rounding rule that nobody
+  /// asked for.
+  ///
+  /// Null is a pot with no plan - which is the normal state for a trip, the
+  /// same reasoning as `targetCents` above. A goal with no intent is never
+  /// allocated to automatically; it is somewhere to put money on purpose.
+  perPaydayIntentCents BigInt?
+
   /// Lets the savings screen find the pot that feeds the mortgage payoff
   /// projection without a household setting pointing at a UUID.
   purpose     EarmarkPurpose @default(general)

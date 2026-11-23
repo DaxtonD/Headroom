@@ -312,13 +312,21 @@ describe("what each period says about itself", () => {
 });
 
 /**
- * Room to save, on the current period only.
+ * The constraint, on the current period only.
  *
  * Asked about on 2026-11-22: "I'm not sure I'm a fan. If that pay period
  * already has a transfer to savings, that line is useless." The figure is
  * right - a planned transfer lowers every balance after it, so what is shown
  * is already room on top of what is planned - but the objection stands for a
  * reason the screen could not show.
+ *
+ * It is labelled **"Could move out"** since later the same day, when the
+ * second half of that conversation arrived: "a blanket 'room to save' doesn't
+ * cover all scenarios... that doesn't mean every spare dollar is to be
+ * allocated to savings." What can safely leave is arithmetic and where it
+ * should go is policy, and the old name made one figure answer both. The
+ * policy now sits under it as its own lines - see the allocation tests in
+ * `apps/web/test/room-allocation.test.ts`.
  *
  * `roomToSaveFrom` scans from the window's start to the END of the timeline,
  * and the timeline stops at the horizon. So the first period is constrained
@@ -331,6 +339,17 @@ describe("what each period says about itself", () => {
  * the low point - so showing it everywhere was often printing one fact twice.
  */
 describe("room to save", () => {
+  it("is named for what it is: a constraint, not an instruction", () => {
+    /*
+     * "Room to save" read as "put this in savings". It is in fact the most
+     * that could leave chequing without something later going short, which
+     * is a different statement and the only one the engine can make.
+     */
+    const code = withoutComments(ledger);
+    expect(code).toContain("Could move out");
+    expect(code, "the old wording invited the misreading").not.toContain("Room to save");
+  });
+
   it("is shown only on the period that starts today", () => {
     // Comments stripped: the one above this block explains the change by
     // quoting the label, which would otherwise be found before the code.
@@ -340,9 +359,9 @@ describe("room to save", () => {
     expect(summary).toContain("{period.isCurrentPartial ? (");
     // The guard belongs to this row, not to something further down.
     expect(summary.indexOf("{period.isCurrentPartial ? (")).toBeLessThan(
-      summary.indexOf("Room to save"),
+      summary.indexOf("Could move out"),
     );
-    expect(summary.slice(summary.indexOf("Room to save"))).toContain("period.roomToSaveCents");
+    expect(summary.slice(summary.indexOf("Could move out"))).toContain("period.roomToSaveCents");
   });
 
   it("is still the figure the period is consulted for, where it is shown", () => {

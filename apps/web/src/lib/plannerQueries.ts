@@ -147,6 +147,15 @@ export interface GoalProgress {
    */
   readonly targetCents: Cents | null;
   readonly savedCents: Cents;
+  /**
+   * What the household means to put in each payday, or null for a pot with
+   * no plan.
+   *
+   * Null is not zero, on the same reasoning as `targetCents`: a goal with no
+   * plan is never allocated to automatically, which is what keeps the
+   * ledger's "not earmarked" figure from quietly becoming nothing.
+   */
+  readonly perPaydayIntentCents: Cents | null;
   readonly remainingCents: Cents | null;
   readonly pct: number | null;
   readonly isMet: boolean;
@@ -214,10 +223,15 @@ export function useGoalsOverview() {
     queryKey: goalsKey,
     queryFn: async (): Promise<GoalsOverview> => {
       const wire = await api.get<{
-        goals: (Omit<GoalProgress, "targetCents" | "savedCents" | "remainingCents"> & {
+        goals: (Omit<
+          GoalProgress,
+          "targetCents" | "savedCents" | "remainingCents" | "perPaydayIntentCents"
+        > & {
           targetCents: string | null;
           savedCents: string;
           remainingCents: string | null;
+          // Optional: this bundle has to survive an older API than itself.
+          perPaydayIntentCents?: string | null;
         })[];
         reimbursements: {
           /*
@@ -258,6 +272,10 @@ export function useGoalsOverview() {
           ...goal,
           targetCents: goal.targetCents === null ? null : toCents(goal.targetCents),
           savedCents: toCents(goal.savedCents),
+          perPaydayIntentCents:
+            goal.perPaydayIntentCents === null || goal.perPaydayIntentCents === undefined
+              ? null
+              : toCents(goal.perPaydayIntentCents),
           remainingCents: goal.remainingCents === null ? null : toCents(goal.remainingCents),
         })),
         reimbursements: {
