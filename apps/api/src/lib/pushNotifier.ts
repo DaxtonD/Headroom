@@ -71,6 +71,19 @@ export function worthTelling(entry: ActivityEvent): boolean {
       if (entry.action === "create") return true;
       return entry.action === "update" && entry.fields.includes("submitted");
 
+    case "household":
+      /*
+       * One field of the household row, not the row.
+       *
+       * "Purchases come from the Visa for now" is the only change here that
+       * is *addressed* to the other person - it replaces somebody saying it
+       * over breakfast, which is the whole reason it was asked for. The
+       * cushion, the horizon and the weekend rule are settings; a
+       * notification that one of them moved would be noise, and the list
+       * above is deliberately a list of what is in.
+       */
+      return entry.action === "update" && entry.fields.includes("spendFromAccountId");
+
     default:
       return false;
   }

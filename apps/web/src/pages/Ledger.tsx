@@ -36,12 +36,14 @@ import { Amount, Chip, CoveragePill } from "../components/Badges.js";
 import { ExplainButton, ExplainPanel } from "../components/Explain.js";
 import { OccurrenceRow, type MoveTarget } from "../components/OccurrenceRow.js";
 import { OneOffForm } from "../components/OneOffForm.js";
+import { SpendFromForm } from "../components/SpendFromForm.js";
 import { Thumb } from "../components/Thumb.js";
 import {
   explainInChequing,
   explainLeftThisCycle,
   explainSafeToSpend,
 } from "../lib/explain.js";
+import { usePatchHousehold } from "../lib/manageQueries.js";
 import { useAppearanceValue } from "../lib/appearance.js";
 import { useBackDismiss } from "../lib/backDismiss.js";
 import { useLaunchedBy } from "../lib/launchAction.js";
@@ -95,6 +97,18 @@ export function Ledger({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   // Opened by either copy of the button, or by the manifest shortcut.
   const [addingOneOff, setAddingOneOff] = useState(useLaunchedBy("add-one-off"));
+
+  /*
+   * Where purchases come from, for now.
+   *
+   * Setting it opens a sheet; lifting it does not, because "back to chequing"
+   * is one decision with one outcome and a sheet asking to confirm the
+   * ordinary state would be a step for nothing. It is reversible in one tap
+   * either way, which is what makes that safe.
+   */
+  const [settingPosture, setSettingPosture] = useState(false);
+  const [clearingPosture, setClearingPosture] = useState(false);
+  const patchHousehold = usePatchHousehold();
 
   /*
    * The hero has gone behind the header, so the pinned line takes over.
@@ -260,6 +274,38 @@ export function Ledger({
    */
   const savingsAccounts = data.accounts.filter((account) => account.kind === "savings");
   const strip = compact ? [...savingsAccounts, ...cards] : cards;
+
+  /*
+   * Somewhere other than chequing for purchases to come from.
+   *
+   * Counted rather than assumed from the cards alone: a household that spends
+   * out of savings is doing the same thing for the same reason, and the API
+   * accepts either. Zero means the button is not offered at all.
+   */
+  const spendFromChoices = data.accounts.filter((account) => account.kind !== "chequing").length;
+
+  /**
+   * Lift the posture: purchases come out of chequing again.
+   *
+   * No error surface of its own. It is one field, reversible in a tap, and
+   * the only failures are offline and a 409 from the other of you having
+   * already changed it - in both of which the right next thing is the screen
+   * refreshing, which `onSuccess` does anyway.
+   */
+  const clearPosture = async (): Promise<void> => {
+    if (clearingPosture) return;
+    setClearingPosture(true);
+    try {
+      await patchHousehold.mutateAsync({
+        version: data.householdVersion,
+        changes: { spendFromAccountId: null },
+      });
+    } catch {
+      // Left as it was, and the banner still says so.
+    } finally {
+      setClearingPosture(false);
+    }
+  };
 
   /**
    * An account id as a name, or null for chequing.
@@ -467,6 +513,48 @@ export function Ledger({
       </div>
 
       {/*
+        ---- Where purchases come from, for now ----
+
+        Asked for on 2026-11-22, to replace a conversation the household was
+        having by hand: when chequing runs low, one of them tells the other in
+        the morning that necessary purchases go on the Visa until payday.
+
+        In the hero, above the scroll, for the same reason the unpaid-card
+        warning is: it changes what the other person should do next, and a
+        line at the bottom nobody reaches would not.
+
+        The banner is not the feature. Saving this changes the default source
+        account on a new one-off, which is where the manual version actually
+        failed - somebody forgets and records a purchase against chequing, and
+        then chequing looks emptier than it is while the card looks healthier.
+        The banner exists so the other of you can see who said so, and why,
+        without asking.
+      */}
+      {data.spendFrom ? (
+        <section className="ledger__posture" aria-labelledby="ledger-posture-label">
+          <p className="ledger__posture-head" id="ledger-posture-label">
+            <strong>Purchases are going on {data.spendFrom.accountName}</strong> until{" "}
+            {formatDateShort(data.spendFrom.until)}.
+          </p>
+          {data.spendFrom.note ? (
+            <p className="ledger__posture-note">“{data.spendFrom.note}”</p>
+          ) : null}
+          <p className="ledger__posture-by">
+            {data.spendFrom.setBy ? `Set by ${data.spendFrom.setBy.name}. ` : ""}
+            It lifts by itself on {formatDateShort(data.spendFrom.until)}.
+          </p>
+          <button
+            className="hr-button hr-button--secondary ledger__posture-clear"
+            type="button"
+            disabled={!canEdit || clearingPosture}
+            onClick={() => void clearPosture()}
+          >
+            {clearingPosture ? "Changing…" : "Back to chequing"}
+          </button>
+        </section>
+      ) : null}
+
+      {/*
         ---- The cards ----
 
         Inside the hero, above coverage, because of what changed underneath
@@ -515,6 +603,29 @@ export function Ledger({
               Charges do not come out of chequing, so safe to spend does not know about this yet.
               Add a payment as a one-off and it will.
             </p>
+          ) : null}
+
+          {/*
+            The button that replaces the morning conversation.
+
+            Here rather than beside Update balance and One-off, which are
+            already a pair and would become a crowd - and here rather than in
+            Settings, because "things are tight, use the card" is said in the
+            moment and a setting three taps away is a setting nobody reaches.
+
+            Only when there is somewhere else for purchases to come from, on
+            the same rule the one-off form follows: a choice with no valid
+            answer is worse than no choice.
+          */}
+          {data.spendFrom === null && spendFromChoices > 0 ? (
+            <button
+              className="ledger__posture-set"
+              type="button"
+              disabled={!canEdit}
+              onClick={() => setSettingPosture(true)}
+            >
+              Put purchases on a card for now
+            </button>
           ) : null}
         </section>
       ) : null}
@@ -638,7 +749,16 @@ export function Ledger({
           accounts={data.accounts}
           mortgageId={data.mortgageId}
           today={data.today}
+          spendFromAccountId={data.spendFrom?.accountId ?? null}
           onClose={() => setAddingOneOff(false)}
+        />
+      ) : null}
+
+      {settingPosture ? (
+        <SpendFromForm
+          accounts={data.accounts}
+          householdVersion={data.householdVersion}
+          onClose={() => setSettingPosture(false)}
         />
       ) : null}
     </div>

@@ -161,6 +161,29 @@ model Household {
 
   weekendWithdrawalRule WeekendWithdrawalRule @default(as_scheduled)
 
+  /// Where purchases come from, for now.
+  ///
+  /// Asked for on 2026-11-22, to replace a conversation the household was
+  /// having by hand: when chequing runs low, one of them tells the other that
+  /// necessary purchases go on the Visa until payday. The message was never
+  /// the hard part - what failed was somebody forgetting and recording a
+  /// purchase against chequing anyway. So this is not a note, it is the
+  /// DEFAULT SOURCE for a new one-off, and the banner is a consequence of it.
+  ///
+  /// Null means the ordinary state: purchases come out of chequing.
+  spendFromAccountId String? @db.Uuid
+  /// The last day it applies, inclusive. Defaults to the next payday when it
+  /// is set, because a posture nobody turns off becomes permanently on and
+  /// therefore meaningless. Whether it is still in force is DERIVED from this
+  /// and today, never stored as a flag.
+  spendFromUntil     DateTime? @db.Date
+  /// Why, in their words. Optional, and never an amount.
+  spendFromNote      String?
+  /// Who said so, and when. The point of the banner is that the other person
+  /// can see who it was without asking.
+  spendFromSetById   String?   @db.Uuid
+  spendFromSetAt     DateTime? @db.Timestamptz(6)
+
   /// The household's stated net income for the Budget screen (HANDOFF 4.3).
   /// The yearly figure is NOT monthly x 12 - the two do not agree exactly, and
   /// section 14 q2 says to use the stated numbers as given rather than reconcile

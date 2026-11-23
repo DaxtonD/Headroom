@@ -100,6 +100,32 @@ describe("what is worth interrupting somebody for", () => {
     ).toBe(true);
   });
 
+  it("tells them where purchases come from, for now", () => {
+    /*
+     * Added 2026-11-22. The only household change that is *addressed* to the
+     * other person rather than being a setting: it replaces somebody saying
+     * over breakfast that necessary purchases go on the Visa until payday,
+     * which is the whole reason it was asked for.
+     */
+    expect(
+      worthTelling(
+        event({ entity: "household", action: "update", fields: ["spendFromAccountId"] }),
+      ),
+    ).toBe(true);
+  });
+
+  it("stays quiet about the household's other settings", () => {
+    // The cushion, the horizon and the weekend rule change every derived
+    // figure, and none of them is news somebody needs on a lock screen.
+    for (const quiet of [
+      event({ entity: "household", action: "update", fields: ["cushionCents"] }),
+      event({ entity: "household", action: "update", fields: ["horizonPaychequeCount"] }),
+      event({ entity: "household", action: "update", fields: ["name"] }),
+    ]) {
+      expect(worthTelling(quiet), JSON.stringify(quiet.fields)).toBe(false);
+    }
+  });
+
   it("stays quiet about the balance-update checklist", () => {
     /*
      * Ticking bills off happens *inside* saving a balance. Notifying on it

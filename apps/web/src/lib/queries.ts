@@ -62,10 +62,22 @@ interface AccountWire {
   readonly imageId: string | null;
 }
 
+interface SpendFromWire {
+  readonly accountId: string;
+  readonly accountName: string;
+  readonly until: string;
+  readonly note: string | null;
+  readonly setBy: PersonWire | null;
+  readonly setAt: string | null;
+}
+
 interface DashboardWire {
   readonly today: string;
   readonly horizonEnd: string;
   readonly cushionCents: string;
+  readonly householdVersion?: number | undefined;
+  /** Optional on the wire: an installed app can outrun its server. */
+  readonly spendFrom?: SpendFromWire | null | undefined;
   readonly balance: {
     readonly cents: string;
     readonly snapshotCents: string;
@@ -191,10 +203,35 @@ export interface Account {
   readonly imageId: string | null;
 }
 
+/**
+ * Where purchases come from, for now.
+ *
+ * Null is the ordinary state, and it covers four situations that mean the
+ * same thing here - never set, lifted, lapsed overnight, or pointing at an
+ * account that has gone. The server derives it from the stored facts and
+ * today, so nothing on this side has to work out whether it still applies.
+ */
+export interface SpendFrom {
+  readonly accountId: string;
+  readonly accountName: string;
+  /** The last day it applies, inclusive. */
+  readonly until: string;
+  readonly note: string | null;
+  readonly setBy: PersonWire | null;
+  readonly setAt: Date | null;
+}
+
 export interface Dashboard {
   readonly today: string;
   readonly horizonEnd: string;
   readonly cushionCents: Cents;
+  /**
+   * The household row's version, for `If-Match` when this screen sets where
+   * purchases come from. Zero only against a server too old to send it, which
+   * the control treats as "cannot change this right now".
+   */
+  readonly householdVersion: number;
+  readonly spendFrom: SpendFrom | null;
   readonly balance: {
     readonly cents: Cents;
     readonly snapshotCents: Cents;
@@ -447,6 +484,13 @@ export function useDashboard() {
       return {
         ...wire,
         cushionCents: toCents(wire.cushionCents),
+        householdVersion: wire.householdVersion ?? 0,
+        spendFrom: wire.spendFrom
+          ? {
+              ...wire.spendFrom,
+              setAt: wire.spendFrom.setAt === null ? null : new Date(wire.spendFrom.setAt),
+            }
+          : null,
         balance: {
           cents: toCents(wire.balance.cents),
           snapshotCents: toCents(wire.balance.snapshotCents),

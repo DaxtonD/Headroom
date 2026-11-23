@@ -207,6 +207,30 @@ export function describeActivity(event: ActivityEvent): string {
 
 /** An update says what kind of update it was, where the fields make that clear. */
 function describeUpdate(event: ActivityEvent, subject: string): string {
+  /*
+   * "Purchases come from the Visa for now", said out loud.
+   *
+   * The one household change worth telling the other person about, because
+   * it is the only one that is *addressed* to them - it replaces somebody
+   * saying it over breakfast. Everything else on the household row is a
+   * setting, and a notification that the cushion changed would be noise.
+   *
+   * The account's name is carried in `label`, set by the route, because the
+   * row itself only holds an id and "a card" is worse than naming it. No
+   * amount, like everything else here: this reaches a lock screen.
+   */
+  if (event.entity === "household" && event.fields.includes("spendFromAccountId")) {
+    // Read straight out of `after` rather than through `became`, which only
+    // answers for booleans. An explicit null is the posture being lifted; a
+    // missing key is a row from before this existed and takes the other path.
+    if (event.after !== null && event.after !== undefined && event.after["spendFromAccountId"] === null) {
+      return "said purchases come out of chequing again";
+    }
+    return event.label === null
+      ? "said to put purchases on a card for now"
+      : `said to put purchases on ${event.label} for now`;
+  }
+
   if (event.entity === "reimbursement") {
     if (only(event, "submitted")) {
       return became(event, "submitted") === false

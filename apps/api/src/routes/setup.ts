@@ -7,7 +7,7 @@
  * two-week pay periods, where a flexible bill anchors, and any bill that comes
  * out "the day after a payday". Without this the app cannot be set up.
  */
-import { isPlainDate } from "@headroom/core";
+import { addDays, compareDates, firstPaydayOnOrAfter, isPlainDate } from "@headroom/core";
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { publishChange } from "../lib/changeStream.js";
@@ -22,7 +22,7 @@ import { forgetImageIfUnused, requireOwnImage } from "../lib/images.js";
 import { runIdempotent } from "../lib/idempotency.js";
 import { applyVersionedChange, logCreation, type PrismaLike } from "../lib/versioning.js";
 import { wireCents } from "../lib/wire.js";
-import { fromPlainDate, toPlainDate } from "../lib/timelineService.js";
+import { fromPlainDate, todayInZone, toPlainDate } from "../lib/timelineService.js";
 import type { Account, PaySchedule } from "../generated/prisma/client.js";
 
 const plainDate = z
@@ -58,6 +58,26 @@ const householdPatch = z
     /** "Through the day before the Nth upcoming paycheque." */
     horizonPaychequeCount: z.number().int().min(1).max(52).optional(),
     weekendWithdrawalRule: z.enum(["as_scheduled", "friday_before", "next_business_day"]).optional(),
+    /**
+     * Where purchases come from, for now. Null lifts it.
+     *
+     * The other two fields are only read when this one is present: an end
+     * date or a note on its own would describe a posture that is not in
+     * force, and the route rejects that rather than storing it.
+     */
+    spendFromAccountId: z.string().uuid().nullable().optional(),
+    /**
+     * The last day it applies, inclusive. Absent means the next payday, which
+     * the server works out - a posture nobody turns off becomes permanently
+     * on, and asking somebody to pick a date is a decision they do not have
+     * to make.
+     */
+    spendFromUntil: z
+      .string()
+      .regex(/^\d{4}-\d{2}-\d{2}$/u, "That is not a date.")
+      .optional(),
+    /** Why, in their words. Never shown with an amount. */
+    spendFromNote: z.string().trim().max(140).nullable().optional(),
     baseVersion: z.number().int().min(1).optional(),
   })
   .strict();
@@ -630,15 +650,124 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
     }
 
     const { baseVersion: _ignored, ...requested } = parsed.data;
-    const changes = Object.fromEntries(
+    const changes: Record<string, unknown> = Object.fromEntries(
       Object.entries(requested).filter(([, value]) => value !== undefined),
     );
     if (Object.keys(changes).length === 0) {
       throw new HttpError(400, "nothing_to_change", "That request did not change anything.");
     }
 
+    /*
+     * The integrity headers before any of the work below.
+     *
+     * They are two cheap reads of two headers, and the posture validation
+     * underneath them hits the database three times. Doing that first meant a
+     * request with no `If-Match` was answered by whichever validation
+     * happened to fail - so the client was told its account was wrong when
+     * the actual problem was a missing header, and a rejected request did
+     * lookups for nothing.
+     */
     const baseVersion = requireBaseVersion(request);
     const key = requireIdempotencyKey(request);
+
+    /*
+     * ---- Where purchases come from, for now ----
+     *
+     * Settled here rather than trusted from the client, because the other
+     * four columns are consequences of the one field the client sends. A body
+     * that could set `spendFromSetById` itself would let one of them put the
+     * other's name on it.
+     */
+    let spendFromLabel: string | null = null;
+    if ("spendFromAccountId" in changes) {
+      const wanted = changes["spendFromAccountId"];
+
+      if (wanted === null) {
+        /*
+         * Lifting it clears the whole posture. Leaving the end date and the
+         * note behind would describe something that is not in force, and
+         * `spendFromIsActive` would be the only thing standing between that
+         * and a banner.
+         */
+        changes["spendFromUntil"] = null;
+        changes["spendFromNote"] = null;
+        changes["spendFromSetById"] = null;
+        changes["spendFromSetAt"] = null;
+      } else {
+        /*
+         * The account has to be one of this household's. Scoped by
+         * `householdId` in the WHERE rather than fetched and then checked, so
+         * another household's id simply does not match - the shape every
+         * other read in here uses.
+         */
+        const account = await app.db.prisma.account.findFirst({
+          where: { id: String(wanted), householdId: user.householdId, deletedAt: null },
+          select: { id: true, name: true, kind: true },
+        });
+        if (!account) {
+          throw new HttpError(404, "not_found", "That account is not one of yours.");
+        }
+        if (account.kind === "chequing") {
+          /*
+           * Chequing is not a posture, it is the ordinary state, and null
+           * already says it. Two spellings of one thing would mean a banner
+           * announcing business as usual.
+           */
+          throw new HttpError(
+            400,
+            "invalid_request",
+            "Purchases already come out of chequing. Clear this instead of setting it to chequing.",
+          );
+        }
+        spendFromLabel = account.name;
+
+        /*
+         * The end date. Absent means the next payday - a date the server
+         * already knows, and a decision the household should not have to
+         * make. Anchored on whichever schedule pays soonest rather than one
+         * person's: "until payday" means the next money arriving, whoever
+         * earns it.
+         */
+        if (changes["spendFromUntil"] === undefined) {
+          const schedules = await app.db.prisma.paySchedule.findMany({
+            where: { user: { householdId: user.householdId }, deletedAt: null },
+            select: { anchorDate: true },
+          });
+          const row = await app.db.prisma.household.findUnique({
+            where: { id: user.householdId },
+            select: { timezone: true },
+          });
+          const today = todayInZone(row?.timezone ?? "America/Regina");
+          const paydays = schedules
+            .map((schedule) => firstPaydayOnOrAfter(toPlainDate(schedule.anchorDate), today))
+            .sort(compareDates);
+
+          /*
+           * No pay schedules at all: a fortnight. It has to end somewhere,
+           * and an end that is only approximate is far better than one that
+           * never comes - which is the failure this default prevents.
+           */
+          changes["spendFromUntil"] = paydays[0] ?? addDays(today, 14);
+        }
+
+        changes["spendFromSetById"] = user.id;
+        changes["spendFromSetAt"] = new Date();
+      }
+    } else if ("spendFromUntil" in changes || "spendFromNote" in changes) {
+      // An end date or a note with no account describes a posture that is not
+      // in force. Storing it would leave the row half-written, which
+      // `spendFromIsActive` is deliberately strict about.
+      throw new HttpError(400, "invalid_request", "Say which account purchases come from as well.");
+    }
+
+    /*
+     * Dates go in as dates. `spendFromUntil` is a `@db.Date`, and handing the
+     * driver a bare string lands it at midnight UTC - which in
+     * America/Regina is the evening before.
+     */
+    if (typeof changes["spendFromUntil"] === "string") {
+      changes["spendFromUntil"] = fromPlainDate(changes["spendFromUntil"]);
+    }
 
     const result = await runIdempotent({
       prisma: app.db.prisma,
@@ -658,6 +787,14 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
           householdId: user.householdId,
           action: "update",
           changes,
+          /*
+           * The account's name, so the activity row and the notification can
+           * say "put purchases on the Visa" rather than "on a card". The row
+           * holds only an id, and `packages/core/src/activity.ts` reads this.
+           * Null for every other household change, which has no subject worth
+           * naming beyond the household itself.
+           */
+          label: spendFromLabel,
           readRow: () => tx.household.findUnique({ where: { id: user.householdId } }),
           writeRow: (nextVersion) =>
             tx.household.update({
@@ -670,6 +807,10 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
             cushionCents: row.cushionCents.toString(),
             horizonPaychequeCount: row.horizonPaychequeCount,
             weekendWithdrawalRule: row.weekendWithdrawalRule,
+            // In the 409 body as well, so a conflict over this field can show
+            // what the other person set rather than only that they set it.
+            spendFromAccountId: row.spendFromAccountId,
+            spendFromUntil: row.spendFromUntil === null ? null : toPlainDate(row.spendFromUntil),
           }),
         });
 
@@ -689,6 +830,12 @@ export async function registerSetupRoutes(app: FastifyInstance): Promise<void> {
               cushionCents: applied.row.cushionCents.toString(),
               horizonPaychequeCount: applied.row.horizonPaychequeCount,
               weekendWithdrawalRule: applied.row.weekendWithdrawalRule,
+              spendFromAccountId: applied.row.spendFromAccountId,
+              spendFromUntil:
+                applied.row.spendFromUntil === null
+                  ? null
+                  : toPlainDate(applied.row.spendFromUntil),
+              spendFromNote: applied.row.spendFromNote,
               version: applied.row.version,
             },
             merged: applied.merged,

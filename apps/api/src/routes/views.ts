@@ -151,6 +151,36 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
       horizonEnd: context.horizonEnd,
       cushionCents: context.cushionCents,
 
+      /*
+       * The household row's version, for the one change this screen can make.
+       *
+       * "Purchases come from the Visa for now" is a household fact like any
+       * other, so setting it needs `If-Match`. Sent here rather than fetched
+       * from the settings screen: an extra request on the screen opened
+       * several times a day, to carry one integer, is the wrong trade - and a
+       * PATCH assembled without it would be a mutation on a money screen with
+       * no conflict detection, which is the thing the rule exists to stop.
+       */
+      householdVersion: context.householdVersion,
+
+      /*
+       * Where purchases come from, for now. Null is the ordinary state.
+       *
+       * Derived in `loadTimelineContext` so the banner and the one-off form's
+       * default cannot disagree about whether it is in force - and so it
+       * lapses by itself at midnight, with nothing to run.
+       */
+      spendFrom: context.spendFrom
+        ? {
+            accountId: context.spendFrom.accountId,
+            accountName: context.spendFrom.accountName,
+            until: context.spendFrom.until,
+            note: context.spendFrom.note,
+            setBy: context.spendFrom.setBy,
+            setAt: context.spendFrom.setAt?.toISOString() ?? null,
+          }
+        : null,
+
       balance: {
         cents: context.balance.effectiveCents,
         // What the user actually typed in, and when, for "Updated today, 9:58 AM".

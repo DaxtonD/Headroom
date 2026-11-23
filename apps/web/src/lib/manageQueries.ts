@@ -378,6 +378,16 @@ export function usePatchHousehold() {
         horizonPaychequeCount?: number;
         weekendWithdrawalRule?: HouseholdSettings["weekendWithdrawalRule"];
         name?: string;
+        /**
+         * Where purchases come from, for now. Null lifts it.
+         *
+         * The end date and the note are deliberately not here: the server
+         * sets the end to the next payday and records who said so, because
+         * neither is a decision worth asking for and `setBy` must not be
+         * something one of them can put the other's name on.
+         */
+        spendFromAccountId?: string | null;
+        spendFromNote?: string | null;
       };
     }) =>
       api.patch("/api/settings/household", input.changes, {

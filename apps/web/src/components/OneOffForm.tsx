@@ -90,6 +90,7 @@ export function OneOffForm({
   accounts = [],
   mortgageId = null,
   today,
+  spendFromAccountId = null,
   onClose,
 }: {
   /** "Now" plus each upcoming payday, as built by the screen showing them. */
@@ -112,6 +113,16 @@ export function OneOffForm({
    * side of midnight would otherwise date a payment yesterday.
    */
   today: string;
+  /**
+   * The account the household has said purchases come from for now, or null
+   * for the ordinary state.
+   *
+   * Only ever the *initial* value of the source choice. Nothing here decides
+   * whether the posture still applies - the server derives that from the end
+   * date and today, so a posture that lapsed overnight arrives as null and
+   * this form never has to know the rule.
+   */
+  spendFromAccountId?: string | null;
   onClose: () => void;
 }): React.JSX.Element {
   const create = useCreateOneOff();
@@ -176,8 +187,25 @@ export function OneOffForm({
   const [savingsId, setSavingsId] = useState<string>(
     () => savingsAccounts[0]?.id ?? CHEQUING,
   );
-  /** Where the money comes from. "" is chequing, as the API spells it. */
-  const [paidFromAccountId, setPaidFromAccountId] = useState(CHEQUING);
+  /**
+   * Where the money comes from. "" is chequing, as the API spells it.
+   *
+   * Defaults to the household's standing "purchases come from here for now"
+   * when there is one, which is the whole point of that setting: the manual
+   * version of it - one of them telling the other that necessary purchases go
+   * on the Visa until payday - failed when somebody forgot and recorded a
+   * purchase against chequing anyway. Every figure on the ledger is then
+   * wrong in the direction that matters, because chequing looks emptier than
+   * it is and the card looks healthier.
+   *
+   * Still a visible, changeable choice. It moves what is already selected,
+   * not what is possible: a purchase that genuinely did come out of chequing
+   * is one tap away, and nothing is recorded differently from what the form
+   * shows.
+   */
+  const [paidFromAccountId, setPaidFromAccountId] = useState(
+    () => spendFromAccountId ?? CHEQUING,
+  );
   const [error, setError] = useState<string | null>(null);
 
   /**

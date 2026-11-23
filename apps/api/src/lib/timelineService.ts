@@ -13,6 +13,7 @@ import {
   computePayPeriods,
   computeTimeline,
   effectiveBalance,
+  spendFromIsActive,
   type AccountMove,
   type PayPeriod,
   type PaySchedule,
@@ -187,6 +188,33 @@ export interface TimelineContext {
   readonly today: PlainDate;
   readonly horizonEnd: PlainDate;
   readonly cushionCents: bigint;
+  /**
+   * The household row's version, for `If-Match` on the one change a view
+   * screen can make. Carried here so the ledger does not have to fetch the
+   * settings screen's payload to assemble a versioned PATCH.
+   */
+  readonly householdVersion: number;
+  /**
+   * Where purchases come from, for now, or null for the ordinary state.
+   *
+   * Null covers never-set, lifted, lapsed, and pointing at an account that
+   * is gone - four situations that mean one thing to every caller. Nothing
+   * stores whether it is in force: the row holds the facts and today decides,
+   * so it lapses by itself at midnight with nothing to run.
+   */
+  readonly spendFrom: {
+    readonly accountId: string;
+    readonly accountName: string;
+    /** The last day it applies, inclusive. */
+    readonly until: PlainDate;
+    readonly note: string | null;
+    readonly setBy: {
+      readonly id: string;
+      readonly name: string;
+      readonly initial: string;
+    } | null;
+    readonly setAt: Date | null;
+  } | null;
   readonly timeline: TimelineResult;
   readonly payPeriods: readonly PayPeriod[];
   readonly paySchedules: readonly PaySchedule[];
@@ -229,6 +257,12 @@ export async function loadTimelineContext(
       cushionCents: true,
       horizonPaychequeCount: true,
       weekendWithdrawalRule: true,
+      spendFromAccountId: true,
+      spendFromUntil: true,
+      spendFromNote: true,
+      spendFromSetAt: true,
+      spendFromSetById: true,
+      version: true,
     },
   });
 
@@ -597,9 +631,62 @@ export async function loadTimelineContext(
         })
       : [];
 
+  /*
+   * ---- Where purchases come from, for now ----
+   *
+   * Derived here, in the one place every screen's figures come from, so the
+   * banner on the ledger and the default on the one-off form cannot disagree
+   * about whether it is in force. `spendFromIsActive` is the only rule, and
+   * it lives in the engine for the same reason.
+   *
+   * Null covers three different situations that all mean the same thing to a
+   * caller - never set, lifted, or lapsed overnight - which is why nothing
+   * stores "active" as a flag. The row holds the facts; today decides.
+   */
+  const spendFromActive = spendFromIsActive(
+    {
+      accountId: household.spendFromAccountId,
+      until: household.spendFromUntil === null ? null : toPlainDate(household.spendFromUntil),
+    },
+    today,
+  );
+
+  const spendFromSetBy =
+    spendFromActive && household.spendFromSetById !== null
+      ? await prisma.user.findUnique({
+          where: { id: household.spendFromSetById },
+          select: { id: true, name: true, initial: true },
+        })
+      : null;
+
+  const spendFromAccount = spendFromActive
+    ? (accounts.find((account) => account.id === household.spendFromAccountId) ?? null)
+    : null;
+
+  /*
+   * An active posture pointing at an account that is no longer there reads as
+   * nothing rather than as a banner with a blank in it. Accounts are
+   * soft-deleted and this is scoped to the household, so it takes a deleted
+   * account to get here - but a banner telling somebody to use a card that is
+   * gone is worse than no banner.
+   */
+  const spendFrom =
+    spendFromActive && spendFromAccount
+      ? {
+          accountId: spendFromAccount.id,
+          accountName: spendFromAccount.name,
+          until: toPlainDate(household.spendFromUntil as Date),
+          note: household.spendFromNote,
+          setBy: spendFromSetBy,
+          setAt: household.spendFromSetAt,
+        }
+      : null;
+
   return {
     householdId,
     today,
+    householdVersion: household.version,
+    spendFrom,
     horizonEnd,
     cushionCents: household.cushionCents,
     timeline,

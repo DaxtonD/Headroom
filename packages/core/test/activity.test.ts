@@ -218,6 +218,61 @@ describe("rows that do not know their own name", () => {
   });
 });
 
+/**
+ * "Purchases come from the Visa for now."
+ *
+ * The one household change worth telling the other person about, because it
+ * is the only one that is *addressed* to them - it replaces somebody saying
+ * it over breakfast, which is the whole reason it was asked for on
+ * 2026-11-22. The cushion and the horizon are settings; a notification that
+ * one of them moved would be noise.
+ */
+describe("where purchases come from, for now", () => {
+  const posture = (over: Partial<ActivityEvent>): ActivityEvent =>
+    event({
+      entity: "household",
+      labelKind: null,
+      fields: ["spendFromAccountId", "spendFromUntil", "spendFromSetById"],
+      ...over,
+    });
+
+  it("names the account, because 'a card' is worse than naming it", () => {
+    // The row holds an id; the route puts the account's name in `label`.
+    expect(
+      activitySentence("Alex", posture({ label: "Visa", after: { spendFromAccountId: "a-1" } })),
+    ).toBe("Alex said to put purchases on Visa for now");
+  });
+
+  it("says it the other way round when it is lifted", () => {
+    /*
+     * An explicit null is the posture being lifted. Read straight out of
+     * `after` rather than through the boolean helper, which would return
+     * undefined for a string field and send both cases down one branch.
+     */
+    expect(
+      activitySentence("Alex", posture({ label: null, after: { spendFromAccountId: null } })),
+    ).toBe("Alex said purchases come out of chequing again");
+  });
+
+  it("still reads when the row predates the name being recorded", () => {
+    // Every branch in this file has to survive a missing label; a log that
+    // shows a sentence with a hole in it is a log nobody trusts.
+    expect(describeActivity(posture({ label: null, after: { spendFromAccountId: "a-1" } }))).toBe(
+      "said to put purchases on a card for now",
+    );
+  });
+
+  it("leaves every other household change alone", () => {
+    // The cushion is a setting. It gets the generic wording and, in
+    // `pushNotifier`, no notification at all.
+    expect(
+      describeActivity(
+        event({ entity: "household", label: "Home", labelKind: null, fields: ["cushionCents"] }),
+      ),
+    ).toBe("updated Home");
+  });
+});
+
 describe("no amounts, ever", () => {
   it("never puts a figure in the sentence", () => {
     /*

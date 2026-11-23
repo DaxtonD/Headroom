@@ -742,6 +742,89 @@
   }
 }
 
+/* ---- Where purchases come from, for now ---------------------------------
+ *
+ * In the hero, above the scroll, for the same reason the unpaid-card warning
+ * is: it changes what the other person should do next.
+ *
+ * Deliberately not the warning colour. Nothing is wrong - the household has
+ * decided something and is telling each other about it - and a red banner
+ * for a decision somebody made on purpose is the kind of alarm that teaches
+ * people to ignore banners.
+ */
+.ledger__posture {
+  margin-top: var(--hr-space-3);
+  padding: var(--hr-space-3) var(--hr-space-4);
+  border-radius: var(--hr-radius-card);
+  border-left: 4px solid var(--hr-focus);
+  background: var(--hr-neutral-bg);
+}
+
+.ledger__posture-head {
+  margin: 0;
+  font-size: 0.9375rem;
+  line-height: 1.35;
+  color: var(--hr-ink);
+}
+
+/* Their words, so they read as a quote rather than as the app talking. */
+.ledger__posture-note {
+  margin: var(--hr-space-1) 0 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--hr-text-secondary);
+  font-style: italic;
+}
+
+.ledger__posture-by {
+  margin: var(--hr-space-1) 0 0;
+  font-size: 0.75rem;
+  line-height: 1.4;
+  color: var(--hr-text-muted);
+}
+
+.ledger__posture-clear {
+  margin-top: var(--hr-space-2);
+  min-height: var(--hr-touch-min);
+}
+
+/*
+ * The button that replaces the morning conversation.
+ *
+ * Quiet: it sits under the card balances and is only wanted on the days it
+ * is wanted. A full-weight button there would compete with Update balance
+ * and One-off, which are what the screen is usually opened for.
+ */
+.ledger__posture-set {
+  display: block;
+  width: 100%;
+  min-height: var(--hr-touch-min);
+  margin-top: var(--hr-space-2);
+  padding: var(--hr-space-2) var(--hr-space-3);
+  border: 1px dashed var(--hr-row-divider);
+  border-radius: var(--hr-radius-card);
+  background: transparent;
+  font: inherit;
+  font-size: 0.875rem;
+  color: var(--hr-text-secondary);
+  cursor: pointer;
+}
+
+.ledger__posture-set:hover:not(:disabled) {
+  border-style: solid;
+  color: var(--hr-ink);
+}
+
+.ledger__posture-set:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+[data-density="compact"] .ledger__posture {
+  margin-top: var(--hr-space-2);
+  padding: var(--hr-space-2) var(--hr-space-3);
+}
+
 .ledger__cards-label {
   color: var(--hr-text-secondary);
   font-size: 0.875rem;

@@ -47,6 +47,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Preferences stored against the person | done | | 2026-11-21, asked for from use: a browser that gets cleared daily took the theme, the text size and the density with it. On the server now and loaded at sign-in; the device keeps a copy for the pre-paint script. The one route in this app with no If-Match and no idempotency key, reasoned beside it |
 | The top of the compact ledger | done | | 2026-11-21, reported after a day of the compact rows. The hero was about 425px and a third of it was whitespace around three 44px info targets. The targets survive as hit areas rather than as layout; the strip under it now lists savings as well as the cards |
 | A tab shows something the moment it is pressed | done | | 2026-11-21, reported from use. The query cache was emptied five minutes after a screen was left, nothing warmed the tabs, and five screens waited against an empty div. In memory only - no figure is written to a phone |
+| Where purchases come from, for now | done | | 2026-11-22, asked for from use. Replaces a morning conversation: when chequing runs low, purchases go on the Visa until payday. Not a banner - it is the default source account on a new one-off, which is where the manual version failed. The server sets the end date to the next payday and records who said so; whether it still applies is derived, so it lapses by itself at midnight |
 | The background worker lagged behind | done | | 2026-11-22, reported from use and long-standing. `update()` resolves before an install finishes, so the promotion found no waiting worker, timed out in 3s and unregistered - and an unregister with live clients is deferred while the reload is not, leaving a new page beside the old worker. Now waits on the lifecycle; and a page with no controller can ask to be claimed, guarded on the build matching |
 | A pay period says one thing about itself | done | | 2026-11-22, reasoned through with the owner. The summary now answers the one question nothing else on the screen answers - does this period work, and where is it tightest - in a sentence built in the engine from the household's own cushion. "On cards" dropped rather than renamed; room-to-save kept only on the period that starts today, because it gets quietly more optimistic the further right you scroll |
 | A pay period's summary, in plain words | **reverted** | | 2026-11-22. Built and pushed, then reverted at the owner's request before the issue had been restated. The implementation is in `20baaad` if any of it is wanted back; the second attempt is the row above |
@@ -122,6 +123,144 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## Where purchases come from, for now (2026-11-22, asked for from use)
+
+The first of the three ideas raised on 2026-11-22. It replaces a conversation the household was
+already having by hand: when chequing runs low, one of them tells the other in the morning that
+necessary purchases go on the Visa until payday.
+
+### The message was never the part that failed
+
+What failed was somebody forgetting and recording a purchase against chequing anyway. Every
+figure on the ledger is then wrong in the direction that matters - chequing looks emptier than it
+is, and the card looks healthier than it is - and nothing on screen says so.
+
+So this is **not a banner with a note in it**. It is the **default source account on a new
+one-off**, and the banner is a consequence of the setting rather than the point of it. The
+feature's load-bearing line is one expression in `OneOffForm`: `spendFromAccountId ?? CHEQUING`.
+A build that kept the banner and lost that default would look completely correct and would have
+given up the whole thing, so there is a test whose only job is to hold it.
+
+It stays a visible, changeable choice: it moves what is *selected*, not what is *possible*. A
+purchase that genuinely did come out of chequing is one tap away, and nothing is recorded
+differently from what the form shows.
+
+### Five columns, four of them the server's
+
+On `household` rather than in a table of its own: there is exactly one in force at a time, and
+putting it there means it inherits the versioning, idempotency and activity machinery every
+household fact already goes through.
+
+The client sends an account and maybe a note. The server settles the rest:
+
+- **When it ends** is the next payday, which the server already knows. A posture nobody turns
+  off becomes permanently on and stops being read - so the end is not optional, it is just not a
+  decision anybody has to make. Anchored on whichever schedule pays soonest, because "until
+  payday" means the next money arriving, whoever earns it. No pay schedules at all falls back to
+  a fortnight: an end that is approximate beats one that never comes.
+- **Who said so, and when**, from the session. A field for it would let one of them put the
+  other's name on it, and the other person seeing who it was without having to ask is most of
+  what this is for. Held by a test that sends `spendFromSetById` and expects a 400.
+
+### Derived, not stored
+
+There is no "active" column. Whether the posture applies is computed from the end date and today
+every time it is asked, by `spendFromIsActive` in `packages/core/src/spendFrom.ts` - so it lapses
+by itself at midnight with nothing having to run, and a screen never has to know the rule.
+
+Two deliberate strictnesses in that function:
+
+- **Inclusive of the end date.** A posture set "until Friday" is in force on Friday, because that
+  is how somebody says it. Dropping it the morning of the day they named is an off-by-one that
+  would only ever be noticed as money recorded against the wrong account.
+- **An account with no end date is *not* in force.** The route always sets both, so one without
+  the other is damage rather than a choice, and the safe reading of damage is the ordinary state.
+  Open-ended would put the household on card spending for ever because of a half-written row.
+
+The one rule is in the engine because it would otherwise be written twice - the API needs it to
+decide what to send and the screen needs it to decide what to show, and a disagreement would
+mean a banner telling the household to use a card the one-off form had already stopped
+defaulting to.
+
+### The notification needed no new plumbing
+
+There is no "send a notification" call anywhere in this work. `pushNotifier` watches the change
+stream, reads the activity row the same transaction wrote, and words it with `activitySentence` -
+so "the other person gets told" and "the log says what happened" are the same mechanism and
+cannot drift. Three small additions were enough:
+
+- `worthTelling` returns true for `household` + `spendFromAccountId`, and **only** that field.
+  The cushion, the horizon and the name are settings; a notification that one of them moved would
+  be noise, and that list is deliberately a list of what is in.
+- `describeActivity` words it: "said to put purchases on Visa for now", or "said purchases come
+  out of chequing again". No amount, like everything else there - it reaches a lock screen.
+- The route passes the account's **name** as the activity row's label, because the row holds only
+  an id and "a card" is worse than naming it.
+
+### Decided without asking
+
+- **Every new one-off defaults to the card, with no amount threshold.** Recommended and then
+  taken as agreed when the owner said to continue. "Necessary purchases" was their own phrasing,
+  and a threshold is another number nobody set.
+- **Chequing is refused as a value.** It is the ordinary state and `null` already says it; two
+  spellings of one thing would mean a banner announcing business as usual.
+- **Savings is accepted.** Some households spend out of savings for the same reason, and the
+  model has no opinion about which kind of account money leaves.
+- **Lifting it takes no confirmation sheet.** One decision, one outcome, reversible in a tap.
+- **The banner is not warning-coloured.** Nothing is wrong: the household decided something and
+  is telling each other. A red banner for a deliberate decision teaches people to ignore banners.
+- **The button lives under the card balances**, not beside Update balance and One-off, which are
+  already a pair and would become a crowd - and not in Settings, because "things are tight, use
+  the card" is said in the moment and a setting three taps away is one nobody reaches.
+
+### Found while writing the tests
+
+**The integrity headers were being checked after the posture validation**, which did three
+database reads. So a request with no `If-Match` was answered by whichever validation happened to
+fail first - the client was told its account was wrong when the real problem was a missing header
+- and a request destined for rejection did the lookups anyway. The guards moved above the work,
+with a test that sends an invalid account *and* no version and expects the 428.
+
+### Held by tests
+
+- `packages/core/test/spendFrom.test.ts`: in force before the end, on the last day itself, lapsed
+  the day after, across a month and a year boundary, and the three shapes of the ordinary state.
+- `packages/core/test/activity.test.ts`: the account named, the lifting worded the other way
+  round, a missing label still reading, and every other household change left alone.
+- `apps/api/test/spendFrom.test.ts` (18, against real Postgres): stored and served, the setter
+  taken from the session and refused from the body, the end date defaulted and overridable,
+  chequing refused, another household's account refused, a half-written posture refused, lifting
+  clearing all five columns, a lapsed row reading as the ordinary state, 428/400 on the missing
+  headers, the headers checked before the lookups, 409 on the same field, auto-merge on a
+  different one, an idempotent replay not bumping the version twice, and the activity row
+  carrying the name and the null.
+- `apps/api/test/push.test.ts`: told about the posture, quiet about the household's other
+  settings.
+- `apps/web/test/spend-from.test.ts` (18): the default source, the ledger handing it over, the
+  choice still changeable, the form never evaluating the expiry rule itself, what the banner says,
+  the banner not dressed as a warning and sitting above the account strip, the button only offered
+  when there is somewhere else to spend from, the version sent, a change refused when it cannot be
+  versioned, and the two things the form deliberately does not ask.
+
+467 engine, 763 web, 625 API green. Lint, typecheck, `pnpm build` and `pnpm check:figures` clean.
+
+### Still to do from that conversation
+
+Ideas 1 and 3 from the same discussion, **neither agreed nor started**:
+
+1. **Suggest the move.** Turn a "short" verdict into a specific, timeline-verified suggestion -
+   "move Hydro to Dec 9 and it clears". Blocked on a model question first: a flexible item has no
+   real due date (its date is "the day you plan to pay it"), so nothing stops a suggestion
+   deferring a bill past when it is actually due. That probably wants an optional "not after" date
+   on flexible items before any suggestion is safe to offer. Suggestions should fire only on
+   **short**, never on tight, and only when the move fully clears it - a suggestion that appears
+   constantly gets ignored, and then the real one does too.
+2. **Savings intent.** What can safely leave is arithmetic; where it should go is policy. Keep
+   `roomToSaveFrom` as the constraint and add an allocation layer above it that reports it against
+   the household's goals, with the remainder named honestly as unallocated. **The horizon flaw
+   found on 2026-11-22 has to be fixed first**, or the allocations inherit its optimism in exactly
+   the future periods a vacation would be planned in.
 
 ## The background worker lagged several builds behind (2026-11-22, reported from use)
 
