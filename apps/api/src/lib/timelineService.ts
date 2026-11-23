@@ -14,9 +14,11 @@ import {
   computeTimeline,
   effectiveBalance,
   spendFromIsActive,
+  suggestMoves,
   type AccountMove,
   type PayPeriod,
   type PaySchedule,
+  type MoveSuggestion,
   type PlainDate,
   type TimelineInput,
   type TimelineResult,
@@ -194,6 +196,16 @@ export interface TimelineContext {
    * settings screen's payload to assemble a versioned PATCH.
    */
   readonly householdVersion: number;
+  /**
+   * Moves that would clear the first uncovered withdrawal, verified.
+   *
+   * Empty whenever nothing is short, which is almost always - the first
+   * timeline run answers that, so this costs nothing on an ordinary load.
+   * Each one has been applied to the events and the whole timeline run again,
+   * so it clears the shortfall AND breaks nothing later; neither is a
+   * question anybody can answer by looking.
+   */
+  readonly suggestedMoves: readonly MoveSuggestion[];
   /**
    * Where purchases come from, for now, or null for the ordinary state.
    *
@@ -687,6 +699,19 @@ export async function loadTimelineContext(
     today,
     householdVersion: household.version,
     spendFrom,
+    /*
+     * Asked for on 2026-11-22, from what the household already does by hand:
+     * pushing a variable bill into a later pay period when chequing is low.
+     * The arithmetic is the part a person cannot do in their head, because
+     * moving a bill lowers every balance after it and the window it lands in
+     * has its own withdrawals to cover.
+     */
+    suggestedMoves: suggestMoves({
+      events,
+      startBalanceCents: effectiveCents,
+      cushionCents: household.cushionCents,
+      accountId: chequingAccountId,
+    }),
     horizonEnd,
     cushionCents: household.cushionCents,
     timeline,

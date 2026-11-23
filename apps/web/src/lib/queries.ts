@@ -76,6 +76,18 @@ interface DashboardWire {
   readonly horizonEnd: string;
   readonly cushionCents: string;
   readonly householdVersion?: number | undefined;
+  readonly suggestedMoves?:
+    | readonly {
+        readonly eventId: string;
+        readonly name: string;
+        readonly toDate: string;
+        readonly toAnchorId: string;
+        readonly clearsEventId: string;
+        readonly clearsName: string;
+        readonly cents: string;
+        readonly lowestAfterCents: string;
+      }[]
+    | undefined;
   /** Optional on the wire: an installed app can outrun its server. */
   readonly spendFrom?: SpendFromWire | null | undefined;
   readonly balance: {
@@ -221,6 +233,20 @@ export interface SpendFrom {
   readonly setAt: Date | null;
 }
 
+export interface SuggestedMove {
+  readonly eventId: string;
+  readonly name: string;
+  /** Where it would end up. */
+  readonly toDate: string;
+  /** The paycheque to hang it off, which is the edit to make. */
+  readonly toAnchorId: string;
+  readonly clearsEventId: string;
+  readonly clearsName: string;
+  readonly cents: Cents;
+  /** The lowest the account would reach afterwards, to the horizon. */
+  readonly lowestAfterCents: Cents;
+}
+
 export interface Dashboard {
   readonly today: string;
   readonly horizonEnd: string;
@@ -232,6 +258,15 @@ export interface Dashboard {
    */
   readonly householdVersion: number;
   readonly spendFrom: SpendFrom | null;
+  /**
+   * Moves that would clear the first uncovered withdrawal, already verified
+   * by the engine against the whole timeline.
+   *
+   * Empty unless something is short. These are statements of what would
+   * happen, not instructions: a flexible item has no real due date in this
+   * model, so only the household knows whether a bill can actually wait.
+   */
+  readonly suggestedMoves: readonly SuggestedMove[];
   readonly balance: {
     readonly cents: Cents;
     readonly snapshotCents: Cents;
@@ -485,6 +520,11 @@ export function useDashboard() {
         ...wire,
         cushionCents: toCents(wire.cushionCents),
         householdVersion: wire.householdVersion ?? 0,
+        suggestedMoves: (wire.suggestedMoves ?? []).map((move) => ({
+          ...move,
+          cents: toCents(move.cents),
+          lowestAfterCents: toCents(move.lowestAfterCents),
+        })),
         spendFrom: wire.spendFrom
           ? {
               ...wire.spendFrom,

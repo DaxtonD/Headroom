@@ -47,6 +47,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | Preferences stored against the person | done | | 2026-11-21, asked for from use: a browser that gets cleared daily took the theme, the text size and the density with it. On the server now and loaded at sign-in; the device keeps a copy for the pre-paint script. The one route in this app with no If-Match and no idempotency key, reasoned beside it |
 | The top of the compact ledger | done | | 2026-11-21, reported after a day of the compact rows. The hero was about 425px and a third of it was whitespace around three 44px info targets. The targets survive as hit areas rather than as layout; the strip under it now lists savings as well as the cards |
 | A tab shows something the moment it is pressed | done | | 2026-11-21, reported from use. The query cache was emptied five minutes after a screen was left, nothing warmed the tabs, and five screens waited against an empty div. In memory only - no figure is written to a phone |
+| Which bill to move, and to when | done | | 2026-11-22, asked for from use. The shortfall warning now names which flexible bill to move and to which payday, each one applied and the whole timeline re-run before being offered. Worded as an offer and tapping it opens the row - the app has no due dates, so whether a bill can wait stays the household's call. Removed the need for the "not after" date that was thought to block it |
 | Where purchases come from, for now | done | | 2026-11-22, asked for from use. Replaces a morning conversation: when chequing runs low, purchases go on the Visa until payday. Not a banner - it is the default source account on a new one-off, which is where the manual version failed. The server sets the end date to the next payday and records who said so; whether it still applies is derived, so it lapses by itself at midnight |
 | The background worker lagged behind | done | | 2026-11-22, reported from use and long-standing. `update()` resolves before an install finishes, so the promotion found no waiting worker, timed out in 3s and unregistered - and an unregister with live clients is deferred while the reload is not, leaving a new page beside the old worker. Now waits on the lifecycle; and a page with no controller can ask to be claimed, guarded on the build matching |
 | A pay period says one thing about itself | done | | 2026-11-22, reasoned through with the owner. The summary now answers the one question nothing else on the screen answers - does this period work, and where is it tightest - in a sentence built in the engine from the household's own cushion. "On cards" dropped rather than renamed; room-to-save kept only on the period that starts today, because it gets quietly more optimistic the further right you scroll |
@@ -123,6 +124,103 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## Which bill to move, and to when (2026-11-22, asked for from use)
+
+The second of the three ideas raised on 2026-11-22, and the other half of what the household does
+by hand: when chequing runs low, one of them pushes a variable bill into a later pay period.
+
+The shortfall warning used to say "Push a flexible bill later — tap one of the rows below". It now
+says which bill, to which payday, and what the account does afterwards.
+
+### What the app contributes, and what it refuses to
+
+It contributes the **arithmetic**, which is the part nobody can do in their head: moving a bill
+lowers every balance after it, and the fortnight it lands in has its own withdrawals to cover.
+
+It does **not** decide whether the bill can wait. A flexible item has no real due date in this
+model - its date is "the day you plan to pay it", not a day anybody is owed - so nothing in the
+app knows the hydro is due on the 18th. The household does. So every suggestion is phrased as
+what *would* happen, the heading is "Any one of these would clear it", and tapping one **opens the
+row** rather than making the move. A test asserts the handler calls no mutation, because a build
+that made the move directly would be one line shorter and would have taken a payment decision away
+from the household.
+
+### A correction to the plan
+
+This was recorded on the same day as needing an optional **"not after" date** on flexible items
+first, so a suggestion could not defer a bill past its real due date. That was wrong, and the
+reason is worth keeping: the only thing such a date would buy is the app refusing a suggestion the
+household would have refused anyway, and the cost was a schema change and another field on a form.
+Framing the feature as an offer rather than an instruction removes the need for it entirely.
+
+### Every suggestion is verified, not estimated
+
+`suggestMoves` in `packages/core/src/suggestMoves.ts` applies each candidate move to the events
+and **runs the whole timeline again**. One check decides it: coverage passes everywhere or the
+suggestion is dropped. That is simultaneously "it clears the one that was short" and "it breaks
+nothing later", because coverage already looks at every automatic withdrawal to the horizon.
+
+There is a test for exactly the move a person would make in their head - pushing the bill onto the
+next cheque, where the fortnight after cannot then cover its own insurance - and the suggestion is
+correctly withheld.
+
+Candidates are flexible, unsettled, actually draining the projected account (so a charge on a card
+is left alone however flexible it is), and falling at or before the shortfall. Targets are the
+dated paycheques the timeline actually holds, so every suggestion is inside the horizon and
+therefore verifiable. The earliest payday that works wins, then the smallest amount - both halves
+being "least disruption" - with the id as a tiebreak so the list never reshuffles between renders.
+
+### The move it simulates is the move that gets made
+
+The first version of this got the move semantics wrong in an interesting way. A flexible row with
+a date of its own is ordered **by that date**, so it looked as though such a row had to be moved by
+changing the date rather than by re-anchoring it. Reading what the API actually does settled it:
+`toPrismaData` on the `anchorOccurrenceId` branch **drops the date**, because the engine refuses a
+row holding both. So there is one kind of move, and the simulation does both halves of it.
+
+Not a cosmetic distinction. A simulation that kept the date would have produced a row the engine
+throws on - taking the ledger down rather than giving a quietly wrong answer - and one that
+changed only the date would have left the row where it already was. Both are held by tests,
+including one that asserts the engine really does throw.
+
+### Held by tests
+
+- `packages/core/test/suggestMoves.test.ts` (19): the suggestion named and applied and re-verified
+  from scratch, a move that breaks a later period withheld, the four kinds of row it will not
+  touch, choosing the nearest payday and then the smallest bill, a stable order, the limit, and
+  the cushion being cleared rather than merely zero.
+- `apps/api/test/suggestedMoves.test.ts` (6, against real Postgres): what the API *feeds* the
+  engine, which no core test can reach - the real occurrences, the **effective** balance rather
+  than the stale snapshot, and chequing rather than a card. Its strongest test applies the
+  suggestion through the real PATCH route and asserts the warning clears and the list empties.
+- `apps/web/test/suggested-moves.test.ts` (12): where it appears, what it says, that it is worded
+  as an offer, that tapping opens the row and makes no mutation, that the row can be found, and
+  that a server too old to send suggestions leaves the old warning rather than a broken screen.
+
+486 engine, 775 web, 631 API green. Lint, typecheck, `pnpm build` and `pnpm check:figures` clean.
+
+### Two things found in the testing, both mine
+
+- **Four fixtures had no shortfall in them.** They left the balance at exactly zero, which with no
+  cushion is *covered*, so four tests asserted "no suggestion" against a timeline that had nothing
+  to suggest anything for and would have passed whatever the code did. Every fixture now states
+  the running balance it produces, in the file.
+- **A flake that looked like a calendar bug.** One test set a balance snapshot's `asOf` and a
+  deposit's `clearedAt` both to `new Date()`, and the effective balance only counts money settled
+  *after* the snapshot - so it passed or failed on a race of milliseconds. It failed once in a run
+  pinned to a later date, which looked exactly like the date-dependence `PIN_DATE` exists to find
+  and was not. The snapshot is now explicitly an hour earlier. Worth remembering: `PIN_DATE` does
+  not fake the database clock, so a test that needs two instants ordered has to order them itself.
+
+### Still to do from that conversation
+
+Idea 3, **not agreed or started**: savings intent. What can safely leave is arithmetic; where it
+should go is policy. Keep `roomToSaveFrom` as the constraint and add an allocation layer above it
+reporting it against the household's goals, with the remainder named honestly as unallocated. **The
+room-to-save horizon flaw has to be fixed first** - `roomToSaveFrom` scans only as far as the
+timeline reaches, so it grows more optimistic the further right you scroll, and an allocation built
+on it would inherit that in exactly the future periods a vacation gets planned in.
 
 ## Where purchases come from, for now (2026-11-22, asked for from use)
 

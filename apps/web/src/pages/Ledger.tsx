@@ -644,6 +644,61 @@ export function Ledger({
             later — tap one of the rows below to change the day you pay it, or to hang it off a
             later cheque.
           </p>
+
+          {/*
+            ---- Which bill, and to when ----
+
+            Asked for on 2026-11-22, from what the household already does by
+            hand: pushing a variable bill into a later pay period when
+            chequing is low.
+
+            What the app contributes is the arithmetic, which is the part
+            nobody can do in their head: moving a bill lowers every balance
+            after it, and the fortnight it lands in has its own withdrawals
+            to cover. Every one of these has been applied to the events and
+            the whole timeline run again, so it clears this shortfall AND
+            breaks nothing later.
+
+            What it does NOT contribute is whether the bill can wait. A
+            flexible item has no real due date in this model - its date is
+            "the day you plan to pay it", not a day anybody is owed - so the
+            app cannot know that the hydro is due on the 18th. The household
+            does. Hence "would clear it", never "do this", and the button
+            opens the row rather than making the move.
+          */}
+          {data.suggestedMoves.length > 0 ? (
+            <div className="ledger__fixes">
+              <p className="ledger__fixes-label">
+                {data.suggestedMoves.length === 1
+                  ? "This would clear it:"
+                  : "Any one of these would clear it:"}
+              </p>
+              <ul className="ledger__fixes-list">
+                {data.suggestedMoves.map((move) => (
+                  <li key={move.eventId}>
+                    <button
+                      className="ledger__fix"
+                      type="button"
+                      onClick={() => {
+                        setExpandedId(move.eventId);
+                        document
+                          .getElementById(`row-${move.eventId}`)
+                          ?.scrollIntoView({ block: "center" });
+                      }}
+                    >
+                      <span className="ledger__fix-what">
+                        Move <strong>{move.name}</strong> to {formatDateShort(move.toDate)}
+                      </span>
+                      <span className="ledger__fix-effect">
+                        {formatCents(move.cents)} · lowest becomes{" "}
+                        {formatCents(move.lowestAfterCents)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
         </section>
       ) : (
         <div className="ledger__covered">

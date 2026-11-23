@@ -336,6 +336,74 @@
   line-height: 1.45;
 }
 
+/* ---- Which bill, and to when -------------------------------------------
+ *
+ * Inside the shortfall warning, because it is the answer to it. The warning
+ * says how much is missing; these say what would fix it, each one verified
+ * against the whole timeline rather than sized up.
+ *
+ * `currentcolor` throughout: the warning sets a foreground of its own and
+ * these have to sit inside it rather than reintroducing the page's ink.
+ */
+.ledger__fixes {
+  margin-top: var(--hr-space-2);
+  padding-top: var(--hr-space-2);
+  border-top: 1px solid currentcolor;
+}
+
+.ledger__fixes-label {
+  margin: 0 0 var(--hr-space-1);
+  font-size: 0.8125rem;
+  font-weight: 700;
+}
+
+.ledger__fixes-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: var(--hr-space-1);
+}
+
+/*
+ * A real button, because it does something: it opens the row so the move can
+ * be made. It deliberately does NOT make the move - the app cannot know
+ * whether a bill can wait, so the last step is always a person's.
+ */
+.ledger__fix {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  width: 100%;
+  min-height: var(--hr-touch-min);
+  padding: var(--hr-space-2) var(--hr-space-3);
+  border: 1px solid currentcolor;
+  border-radius: var(--hr-radius-card);
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ledger__fix:hover {
+  background: color-mix(in srgb, currentcolor 8%, transparent);
+}
+
+.ledger__fix-what {
+  font-size: 0.875rem;
+  line-height: 1.3;
+}
+
+/* The figures, so the offer can be judged rather than taken on trust. */
+.ledger__fix-effect {
+  font-size: 0.75rem;
+  line-height: 1.3;
+  opacity: 0.85;
+  font-variant-numeric: tabular-nums;
+}
+
 .ledger__covered {
   display: flex;
   align-items: center;

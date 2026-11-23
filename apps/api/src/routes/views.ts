@@ -164,6 +164,18 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
       householdVersion: context.householdVersion,
 
       /*
+       * Moves that would clear the first uncovered withdrawal.
+       *
+       * Empty unless something is short. Each one was applied to the events
+       * and the whole timeline run again before being offered, so it clears
+       * the shortfall and breaks nothing later - and the screen states them
+       * as what WOULD happen rather than as instructions, because a flexible
+       * item has no real due date in this model and only the household knows
+       * whether a bill can wait.
+       */
+      suggestedMoves: context.suggestedMoves,
+
+      /*
        * Where purchases come from, for now. Null is the ordinary state.
        *
        * Derived in `loadTimelineContext` so the banner and the one-off form's

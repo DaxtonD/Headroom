@@ -212,6 +212,12 @@ export function OccurrenceRow({
 
   return (
     <li
+      /*
+       * Addressable, so something above the scroll can bring this row into
+       * view. Added 2026-11-22 for the shortfall suggestions, which name a
+       * specific row and are useless if tapping one leaves you to find it.
+       */
+      id={`row-${row.id}`}
       className={`row ${isPaycheque ? "row--payday" : ""} ${expanded ? "row--expanded" : ""} ${
         row.settled ? "row--paid" : ""
       }`}
