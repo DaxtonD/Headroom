@@ -77,11 +77,9 @@ function serialiseTimelineRow(row: TimelineRow, decoration: OccurrenceDecoration
     /** Set when this row is a payment toward another account. */
     transferToAccountId: decoration?.transferToAccountId ?? null,
     /**
-     * The picture, taken from the bill this row came from.
-     *
-     * So changing a bill's picture changes every row of it, which is the only
-     * behaviour "change the image" could reasonably mean. A one-off has no
-     * template and so no picture: there is nothing recurring to recognise.
+     * The picture: the bill's own, else the picture of whichever account the
+     * row is about. `loadOccurrenceDecorations` holds the order and the
+     * reasoning; nothing here may add a second rule for it.
      */
     imageId: decoration?.imageId ?? null,
     version: decoration?.version ?? 1,
@@ -144,7 +142,11 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
     });
     const mortgageId = mortgage?.id ?? null;
 
-    const decorations = await loadOccurrenceDecorations(app.db.prisma, nextAutoIds);
+    const decorations = await loadOccurrenceDecorations(
+      app.db.prisma,
+      nextAutoIds,
+      context.chequingImageId,
+    );
 
     return reply.send({
       today: context.today,
@@ -295,6 +297,7 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
     const decorations = await loadOccurrenceDecorations(
       app.db.prisma,
       rows.map((row) => row.event.id),
+      context.chequingImageId,
     );
 
     return reply.send({
@@ -329,6 +332,7 @@ export async function registerViewRoutes(app: FastifyInstance): Promise<void> {
     const decorations = await loadOccurrenceDecorations(
       app.db.prisma,
       context.timeline.rows.map((row) => row.event.id),
+      context.chequingImageId,
     );
 
     // Names and amounts for the cheques a window counts but that are not on

@@ -10,11 +10,16 @@
  * one-off has no template. So the row fell through to the fallback with
  * nothing to say it was about an account that has a picture of its own.
  *
- * A row now takes the picture of the account the money LANDS IN when it has
- * no template of its own. Deliberately not the account it comes FROM: a
- * charge paid from a card is a purchase rather than the card, it already
- * names the card in a chip, and wearing the card's logo would say the row is
- * the card itself.
+ * A row now takes the picture of whichever account it is about, in order of
+ * how specific that is: the bill's own picture, then the account the money
+ * landed in, then the account it came out of - chequing included, which is
+ * the account a row with no source names.
+ *
+ * That order arrived in three goes, because the first two left a row with no
+ * picture at all in a case the household then met: a charge paid FROM a card
+ * (2026-11-20) and an ordinary bill paid from chequing (2026-11-25, "all
+ * accounts should show their photo"). Both reversals went the same way, so
+ * the tests below assert the opposite of what two of them once did.
  *
  * Every amount is invented.
  */
@@ -32,6 +37,7 @@ import { distinctWebp } from "./helpers/webp.js";
 
 let harness: Harness;
 let cookie: string;
+let seeded: Awaited<ReturnType<typeof seedHousehold>>;
 
 beforeAll(async () => {
   migrateTestDatabase();
@@ -44,7 +50,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await harness.reset();
-  const seeded = await seedHousehold(harness);
+  seeded = await seedHousehold(harness);
   cookie = await signIn(harness, "alex@example.test", seeded.password);
 });
 
@@ -76,6 +82,30 @@ async function addAccount(name: string, kind: string, imageId?: string) {
   });
   expect(response.statusCode, response.body).toBe(201);
   return response.json().account.id as string;
+}
+
+/**
+ * Give the household's chequing account a picture, and return it.
+ *
+ * The seeded account rather than a new one, and that distinction cost three
+ * red tests: "the chequing account" is the FIRST account of that kind, by
+ * creation order, because that is the account every chequing figure is about.
+ * Adding a second chequing account and decorating that one left the picture
+ * on an account no row resolves to - which is also a real limitation worth
+ * knowing: a household's second chequing account cannot be a row's source
+ * (`routing.ts` keeps every chequing-kind account out of the source picker)
+ * and so can never put its picture on a row.
+ */
+async function givePictureToChequing(seed: number): Promise<string> {
+  const picture = await uploadPicture(seed);
+  const response = await harness.app.inject({
+    method: "PATCH",
+    url: `/api/accounts/${seeded.account.id}`,
+    headers: { cookie, "idempotency-key": randomUUID(), "if-match": '"1"' },
+    payload: { imageId: picture },
+  });
+  expect(response.statusCode, response.body).toBe(200);
+  return picture;
 }
 
 /** The row on the ledger with this name, whatever window it landed in. */
@@ -119,7 +149,10 @@ describe("a one-off that pays an account", () => {
     expect((await rowNamed("Into savings"))?.imageId).toBe(picture);
   });
 
-  it("has no picture when the account it pays has none", async () => {
+  it("has no picture when nothing it names has one", async () => {
+    // The seeded chequing account has no picture either, so there is nothing
+    // anywhere in the chain to find - which is what makes the square below a
+    // real answer rather than this test passing by luck.
     const visaId = await addAccount("Visa", "credit_card");
 
     const created = await post("/api/occurrences", {
@@ -165,15 +198,22 @@ describe("a one-off that pays an account", () => {
   });
 
   /**
-   * The case the old reasoning was really protecting, and the one that keeps
-   * the ledger readable: chequing is stored as a NULL source, so an ordinary
-   * bill paid from it is not given the chequing account's picture. Without
-   * that, every row on the screen would wear the same logo and the picture
-   * would stop telling anybody anything.
+   * A row with no source is a chequing row, so it wears chequing's picture.
+   *
+   * This asserted the opposite until 2026-11-25, on the argument that every
+   * row would then wear the same logo and the picture would stop telling
+   * anybody anything. The household used it and disagreed: "the picture for
+   * the chequing account doesn't appear... all accounts should show their
+   * photo."
+   *
+   * Chequing being the exception was never a decision anyway - it is the
+   * fallback chain reading a foreign key that chequing does not have, since a
+   * null source is how chequing is stored. The repetition the old argument
+   * feared is the household's to settle: clearing the picture on the chequing
+   * account brings every lettered square back.
    */
-  it("does not give an ordinary chequing bill the chequing picture", async () => {
-    const picture = await uploadPicture(6);
-    await addAccount("Everyday chequing", "chequing", picture);
+  it("gives a chequing bill the chequing picture", async () => {
+    const picture = await givePictureToChequing(6);
 
     const created = await post("/api/occurrences", {
       name: "Dentist",
@@ -183,7 +223,71 @@ describe("a one-off that pays an account", () => {
     });
     expect(created.statusCode, created.body).toBe(201);
 
-    expect((await rowNamed("Dentist"))?.imageId).toBeNull();
+    expect((await rowNamed("Dentist"))?.imageId).toBe(picture);
+  });
+
+  /**
+   * The reported case, which is the same rule reached by the other door: a
+   * one-off has no template, so before this it had nothing at all to fall
+   * back to when the money came out of chequing.
+   */
+  it("gives a one-off paid from chequing the chequing picture", async () => {
+    const picture = await givePictureToChequing(9);
+
+    const created = await post("/api/occurrences", {
+      name: "Oil change",
+      kind: "bill",
+      cents: "9500",
+      date: inDays(2),
+    });
+    expect(created.statusCode, created.body).toBe(201);
+
+    expect((await rowNamed("Oil change"))?.imageId).toBe(picture);
+  });
+
+  /**
+   * The guard that keeps the chequing fallback honest.
+   *
+   * A charge on a card with no picture must keep its lettered square. Falling
+   * through to chequing would put the chequing logo on money that never
+   * touched chequing - a wrong statement rather than a missing one, which is
+   * worse than the lettered square the last two reversals were fixing.
+   */
+  it("does not give a card charge the chequing picture", async () => {
+    await givePictureToChequing(10);
+    const visaId = await addAccount("Visa", "credit_card");
+
+    const created = await post("/api/occurrences", {
+      name: "Hardware store",
+      kind: "bill",
+      cents: "4300",
+      date: inDays(1),
+      paidFromAccountId: visaId,
+    });
+    expect(created.statusCode, created.body).toBe(201);
+
+    expect((await rowNamed("Hardware store"))?.imageId).toBeNull();
+  });
+
+  /**
+   * And a payment INTO an account that has no picture, made from chequing,
+   * falls back to chequing rather than to nothing. The chain is ordered, not
+   * exclusive: a destination with no picture does not end the search.
+   */
+  it("falls back past a destination that has no picture", async () => {
+    const picture = await givePictureToChequing(11);
+    const savingsId = await addAccount("Savings", "savings");
+
+    const created = await post("/api/occurrences", {
+      name: "Into savings",
+      kind: "transfer",
+      cents: "15000",
+      date: inDays(1),
+      transferToAccountId: savingsId,
+    });
+    expect(created.statusCode, created.body).toBe(201);
+
+    expect((await rowNamed("Into savings"))?.imageId).toBe(picture);
   });
 
   /**

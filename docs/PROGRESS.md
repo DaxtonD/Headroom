@@ -54,6 +54,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | A pay period says one thing about itself | done | | 2026-11-22, reasoned through with the owner. The summary now answers the one question nothing else on the screen answers - does this period work, and where is it tightest - in a sentence built in the engine from the household's own cushion. "On cards" dropped rather than renamed; room-to-save kept only on the period that starts today, because it gets quietly more optimistic the further right you scroll |
 | A pay period's summary, in plain words | **reverted** | | 2026-11-22. Built and pushed, then reverted at the owner's request before the issue had been restated. The implementation is in `20baaad` if any of it is wanted back; the second attempt is the row above |
 | A device the server had forgotten | done | | 2026-11-22, reported from use. The screen read "On for this device" from the browser alone and never asked whether the server still had the row, so a subscription dropped at send time was invisible forever. The page hands its subscription back on every load, the worker hands over a rotated one, and a refusal no longer reports itself as an expiry |
+| Every account shows its photo | done | | 2026-11-25, reported from use: "the picture for the chequing account doesn't appear... all accounts should show their photo." Chequing was never excluded on purpose - a null source is how chequing is stored, so the fallback chain was reading a foreign key that chequing does not have. Third reversal of the same decision, all three the same way |
 
 ## Last session
 
@@ -125,6 +126,102 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## Every account shows its photo (2026-11-25, reported from use)
+
+> "When making a one-off payment from the visa account, the picture assigned to the visa shows up
+> on the ledger. However, the picture for the chequing account doesn't appear. I haven't checked
+> the savings or TD account, but all accounts should show their photo."
+
+### It was not a decision, although a comment claimed it was
+
+A ledger row's picture is resolved in one place, `loadOccurrenceDecorations` in
+`apps/api/src/lib/timelineService.ts`, as an ordered chain: the bill's own picture, then the
+account the money landed in, then the account it came out of. The last two links read the row's
+foreign keys - `transferToAccountId` and `paidFromAccountId`.
+
+**Chequing has no foreign key.** A null source means chequing, by the rule the whole app is built
+on, so a chequing row's chain ran out and the row got a lettered square. Nothing about chequing
+was ever considered; the chain simply could not see it.
+
+What makes this worth writing down is that the code **claimed otherwise**. The comment beside it
+argued that leaving chequing out kept the ledger readable - "every row on the screen would wear
+the same logo and the picture would stop telling anybody anything" - and a test asserted it by
+name. That argument was invented after the fact to explain behaviour that came from a missing
+key, and it was persuasive enough to be committed twice.
+
+The honest version: `fromAccountId: row.paidFromAccountId ?? chequingAccountId`, thirty lines
+above in the same file, resolves exactly this null for the engine, with the comment "a null source
+has always meant chequing". The picture now resolves it the same way, from a `chequingImageId`
+carried on the timeline context so the one function that decides which account is chequing still
+decides it.
+
+### The repetition risk is real, and the household holds the lever
+
+The old comment's fear is not baseless: most bills come out of chequing, so a ledger of rows with
+no pictures of their own now wears one repeated logo. The answer is that this is switchable from
+the app and in the right direction - **clearing the picture on the chequing account brings every
+lettered square back.** A rule the household can switch off beats one they cannot switch on,
+which is what the previous arrangement was.
+
+### The guard that keeps it honest
+
+Only a row with **no** source falls through to chequing:
+
+```ts
+row.template?.imageId ??
+row.transferToAccount?.imageId ??
+row.paidFromAccount?.imageId ??
+(row.paidFromAccountId === null ? chequingImageId : null)
+```
+
+Without that condition, a card charge on a card with no picture would wear the chequing logo,
+because `paidFromAccount?.imageId` is null in that case and `??` keeps going. That would be a
+wrong statement rather than a missing one - the chequing logo on money that never touched
+chequing - and worse than the lettered square the last two reversals were fixing. Held by its own
+test.
+
+### Three reversals, all the same way
+
+This decision has now been reversed three times, and every time by use rather than by argument:
+
+| When | What had no picture | What the reasoning had been |
+|---|---|---|
+| 2026-11-19 | a one-off paying the Visa | a picture belongs to a recurring bill |
+| 2026-11-20 | a purchase charged to the Visa | a charge is a purchase, not the card |
+| 2026-11-25 | an ordinary bill paid from chequing | one logo repeated tells nobody anything |
+
+Each argument was defensible on its own and each lost to the same observation: a row about an
+account beats a row about nothing. Worth remembering the next time a case for withholding
+a picture seems sound.
+
+### A limitation found by three red tests
+
+The first version of the new tests created a **second** chequing account and put the picture on
+it, and all three failed. "The chequing account" is the first account of that kind by creation
+order, because that is the account every chequing figure is about.
+
+That is also a real limitation the report may be pointing at. `sourceOptions` in
+`apps/web/src/lib/routing.ts` filters out **every** chequing-kind account, not just the primary
+one, so a household's second chequing account can never be a row's source - and therefore can
+never put its picture on a row. If the "TD account" in the report is a second chequing account
+rather than a card or savings, this change does not reach it, and making it reach would mean
+deciding what a second chequing account means to safe-to-spend. **Open question for the
+household** - see below.
+
+### Held by tests
+
+`apps/api/test/rowPicture.test.ts`, 10 tests against a real Postgres, 7 of them pre-existing:
+
+- a chequing bill wears the chequing picture, and so does a one-off paid from chequing;
+- a card charge on a picture-less card does **not** - the guard above;
+- a destination with no picture does not end the chain: it falls through to chequing;
+- the destination still beats the source, and the bill's own picture still beats both;
+- with nothing in the chain holding a picture, the lettered square is still the answer, and the
+  test says why rather than passing by luck.
+
+Green under `PIN_DATE` at 2026-11-25, 2026-11-30, 2026-12-31 and 2027-02-28, and the full suite
+is green: 498 engine, 788 web, 641 API.
 
 ## What the room to save is for (2026-11-22, asked for from use)
 
@@ -5814,6 +5911,20 @@ somebody has lived with it.
     is interactive, so the worst case is a tap just under the mark opening the explanation -
     which is what a tap on the mark does anyway. Worth a mention only because it would be felt
     before it was understood.
+38. **Is the "TD account" a card, savings, or a second chequing account?** Asked because of the
+    report on 2026-11-25, which listed it alongside savings. If it is a card or savings its
+    picture already reaches the ledger, as a source or a destination. If it is a second
+    **chequing** account, its picture can never reach a row - `sourceOptions` keeps every
+    chequing-kind account out of the source picker, so nothing can be paid from it - and fixing
+    that would mean deciding what a second chequing account means to safe-to-spend, which is a
+    real design question rather than a bug. *Not investigated by reading the live database: it
+    is on the owner's server and holds their real figures.*
+39. **Does the ledger now wear too much of the same logo?** *Built:* every row with no picture
+    of its own takes the picture of the account it is about, chequing included, so a screen of
+    chequing bills repeats one logo. The lever is in the app and points the right way - clearing
+    the picture on the chequing account restores the lettered squares. Worth a look after a day
+    of use; if it reads as noise, the narrower rule is to fall back to chequing only for
+    one-offs, which have no bill of their own to carry a picture.
 
 
 ## Blocked / needs the owner
@@ -5830,9 +5941,11 @@ the opposite of what it is for, so what is actually outstanding:
   origin` shows `m0` through `m5` all on the remote, `m5` at 4f007a7. The same stale claim was
   in `CLAUDE.md` and was read there as meaning the M5 *work* had never been pushed, which
   caused real confusion. Check the remote before believing a line like this one.
-- **The twelve questions below are still unanswered.** Each has a defensible default built and
-  editable in the app, so none of them blocks anything - but any one of them could be quietly
-  wrong in the budget actually in use, which is a different kind of risk from a broken build.
+- **The open questions are still unanswered** - in "Questions for the household", which is
+  *above* this section and no longer twelve items long, as this line said until 2026-11-25.
+  Each has a defensible default built and editable in the app, so none of them blocks anything -
+  but any one of them could be quietly wrong in the budget actually in use, which is a different
+  kind of risk from a broken build.
 - **Two things have never been exercised at runtime by this build:** the Content-Security-Policy
   and the four ways out of a sheet (Cancel, Escape, Android Back, a tap outside). Both are
   covered by static tests, because there is no browser and no DOM test environment in this

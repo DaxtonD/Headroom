@@ -252,6 +252,15 @@ export interface TimelineContext {
     readonly effectiveCents: bigint;
   };
   readonly accountId: string | null;
+  /**
+   * The chequing account's picture, for rows that name no source.
+   *
+   * Carried here because a null source means chequing and only this function
+   * knows which row that is - the same reason `fromAccountId` resolves it
+   * before the engine ever sees it. Null when chequing has no picture, or
+   * when there is no chequing account at all.
+   */
+  readonly chequingImageId: string | null;
   /** Every account the household has, chequing included, in creation order. */
   readonly accounts: readonly AccountOutlook[];
   /**
@@ -773,6 +782,7 @@ export async function loadTimelineContext(
     payPeriods,
     paySchedules,
     accountId: chequingAccountId,
+    chequingImageId: account?.imageId ?? null,
     accounts,
     projections,
     balance: {
@@ -805,13 +815,15 @@ export interface OccurrenceDecoration {
    */
   readonly orphaned: boolean;
   /**
-   * The picture beside the name, taken from the bill this row came from.
+   * The picture beside the name, in order of how specific it is: the bill's
+   * own, then the account the money landed in, then the account it came out
+   * of - chequing included, which is the account a row with no source names.
    *
-   * On the template rather than the row: a picture belongs to the thing, not
-   * to one month of it, so changing it once changes every row - which is the
-   * only behaviour anybody would expect from "change the image". A one-off has
-   * no template and so has no picture, which is correct: there is nothing
-   * recurring to recognise.
+   * A bill's own picture lives on the template rather than the row, because a
+   * picture belongs to the thing and not to one month of it: changing it once
+   * changes every row, which is the only behaviour anybody would expect from
+   * "change the image". A one-off has no template, so it wears the picture of
+   * whichever account it is about.
    */
   readonly imageId: string | null;
   /** Null means chequing, which is what the UI shows when nothing is set. */
@@ -833,6 +845,7 @@ export interface OccurrenceDecoration {
 export async function loadOccurrenceDecorations(
   prisma: PrismaClient,
   ids: readonly string[],
+  chequingImageId: string | null,
 ): Promise<Map<string, OccurrenceDecoration>> {
   if (ids.length === 0) return new Map();
 
@@ -891,17 +904,37 @@ export async function loadOccurrenceDecorations(
          * plain "Visa" one, so the two are told apart by words rather than by
          * the absence of a picture.
          *
-         * This can only ever fire for a card or a savings account. Chequing
-         * is stored as a NULL source - `routing.ts` keeps it out of every
-         * source picker for that reason - so an ordinary chequing bill with
-         * no picture of its own still gets a lettered square, and the ledger
-         * does not turn into a column of the same chequing logo.
+         * ## And the fourth reverses the rest of what it used to say
+         *
+         * It went on: "This can only ever fire for a card or a savings
+         * account. Chequing is stored as a NULL source, so an ordinary
+         * chequing bill with no picture of its own still gets a lettered
+         * square, and the ledger does not turn into a column of the same
+         * chequing logo."
+         *
+         * Reported from use, 2026-11-25: "the picture for the chequing
+         * account doesn't appear... all accounts should show their photo."
+         * Chequing being left out was never a decision - it is this chain
+         * reading a foreign key that chequing does not have. A null source
+         * has always meant chequing, which is why `fromAccountId` resolves it
+         * that way thirty lines up, and the picture now resolves the same.
+         *
+         * The column of identical logos is a real risk and the household
+         * holds the lever for it: clearing the picture on the chequing
+         * account brings every lettered square back. A rule they can switch
+         * off beats one they cannot switch on.
+         *
+         * The guard is load-bearing. Only a row with NO source falls through
+         * to chequing; a card with no picture of its own must keep its
+         * lettered square, because wearing the chequing logo would say the
+         * money came out of chequing, which is the one thing a card charge
+         * did not do.
          */
         imageId:
           row.template?.imageId ??
           row.transferToAccount?.imageId ??
           row.paidFromAccount?.imageId ??
-          null,
+          (row.paidFromAccountId === null ? chequingImageId : null),
         paidFromAccountId: row.paidFromAccountId,
         transferToAccountId: row.transferToAccountId,
         owner: row.owner,
