@@ -143,8 +143,19 @@ describe("offering a refresh", () => {
     const wait = source.indexOf("await takeover");
     expect(post).toBeGreaterThan(-1);
     expect(wait).toBeGreaterThan(post);
-    // And when nobody takes over, the registration goes.
-    expect(source).toMatch(/if \(!tookOver\)/);
+    /*
+     * And when a worker that EXISTS and is newer will not take over, that
+     * registration goes.
+     *
+     * This asserted `if (!tookOver)`, which was the bug reported on
+     * 2026-11-25: "no promotion" is also the answer when there was nothing
+     * newer to promote, so the healthy case was answered by unregistering -
+     * which takes the device's push subscription with it. The outcome is a
+     * tri-state now and only the provable one is destructive.
+     */
+    expect(source).toContain('"nothing-to-promote"');
+    expect(source).toMatch(/entry\.outcome === "stuck"/u);
+    expect(source).not.toMatch(/if \(!tookOver\)/);
   });
 });
 
@@ -219,10 +230,25 @@ describe("promoting a worker that is still installing", () => {
      * a lifecycle that truly will not move needs it - but it is now the last
      * resort it was written as rather than the common path.
      */
-    expect(source).toContain("registrations.map(promote)");
-    const promote = source.indexOf("registrations.map(promote)");
-    const unregister = source.indexOf("registration.unregister()");
+    expect(source).toContain("await promote(registration, serverBuild)");
+    const promote = source.indexOf("await promote(registration, serverBuild)");
+    const unregister = source.indexOf(".unregister()");
+    expect(promote).toBeGreaterThan(-1);
     expect(promote).toBeLessThan(unregister);
+  });
+
+  it("needs the server's build before it will destroy anything", () => {
+    /*
+     * The proof that a registration is stuck rather than merely current.
+     * Without it the two are indistinguishable, which is how the common case
+     * came to be answered with the destructive one. Where it cannot tell -
+     * the worker did not answer, or nothing is known about the server - it
+     * leaves the registration alone.
+     */
+    const promote = source.slice(source.indexOf("async function promote"));
+    const body = promote.slice(0, promote.indexOf("\n}"));
+    expect(body).toMatch(/serverBuild === null\) return "nothing-to-promote"/u);
+    expect(body).toMatch(/build === serverBuild \? "nothing-to-promote" : "stuck"/u);
   });
 });
 
@@ -254,7 +280,28 @@ describe("adopting an uncontrolled page", () => {
     const claim = source.slice(source.indexOf("export async function claimIfUncontrolled"));
     const body = claim.slice(0, claim.indexOf("\n}"));
     expect(body).toMatch(/askBuild\(active/u);
-    expect(body).toContain("build !== BUILD_ID) return");
+    expect(body).toMatch(/build !== BUILD_ID\)/u);
+    // The claim itself is reached only after that guard.
+    const guard = body.indexOf("build !== BUILD_ID)");
+    const asks = body.indexOf('postMessage({ type: "CLAIM" })');
+    expect(guard).toBeGreaterThan(-1);
+    expect(asks).toBeGreaterThan(guard);
+  });
+
+  it("asks for the right worker instead of only declining the wrong one", () => {
+    /*
+     * The mismatch branch used to return and do nothing else, so a device
+     * sat uncontrolled behind an old worker until the browser's own update
+     * check came round - "it seems like it resolves itself after a day or
+     * two", 2026-11-25. Once per page, because an update is a half-megabyte
+     * fetch and this is called repeatedly.
+     */
+    const claim = source.slice(source.indexOf("export async function claimIfUncontrolled"));
+    expect(claim.slice(0, claim.indexOf("\n}"))).toContain("askForNewWorker(registration)");
+    const asker = source.slice(source.indexOf("async function askForNewWorker"));
+    const body = asker.slice(0, asker.indexOf("\n}"));
+    expect(body).toContain("if (updateRequested) return;");
+    expect(body).toContain("registration.update()");
   });
 
   it("keeps asking while the worker is still installing", () => {

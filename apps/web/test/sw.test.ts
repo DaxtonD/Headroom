@@ -162,8 +162,12 @@ describe("it still refuses to take over on its own", () => {
      * would 404 - worse than the problem being fixed.
      */
     expect(serverBuild).toContain("navigator.serviceWorker.controller !== null) return");
-    expect(serverBuild).toContain("build !== BUILD_ID) return");
+    expect(serverBuild).toMatch(/build !== BUILD_ID\)/u);
     expect(serverBuild).toContain('active.postMessage({ type: "CLAIM" })');
+    // And the claim comes after that guard rather than beside it.
+    expect(serverBuild.indexOf("build !== BUILD_ID)")).toBeLessThan(
+      serverBuild.indexOf('active.postMessage({ type: "CLAIM" })'),
+    );
   });
 
   it("still answers SKIP_WAITING now that it answers other messages too", () => {
@@ -237,8 +241,39 @@ describe("saying which worker is actually running", () => {
     // A worker has a lifecycle, so asking once reports timing, not state.
     expect(build).toContain("getRegistration()");
     expect(build, "a one-shot check is what reported a fresh worker as missing").toContain(
-      "attempts >= 8",
+      "attempts >= cap",
     );
+  });
+
+  it("does not call an old active worker settled while a new one installs", () => {
+    /*
+     * The second half of the same mistake, reported 2026-11-25: "the
+     * background worker never matches the app or server version after an
+     * update." `workerStatus` checks `active` first and is right to - the
+     * active worker is the one that receives a push - but the old worker
+     * stays active throughout the new one's install, so the first question
+     * after an update got the old answer and `useWorkerStatus` stopped
+     * asking, because an active worker that answered looked like an end
+     * state. It could then show a build from two releases ago for ever.
+     */
+    const build = read("src/lib/serverBuild.ts");
+    const hook = build.slice(build.indexOf("export function useWorkerStatus"));
+    expect(hook).toContain("!next.updating");
+    // Longer while something really is installing: half a megabyte of
+    // precache does not fit in the twelve seconds this used to allow.
+    expect(hook).toMatch(/next\.updating \|\| next\.state === "installing" \? 30 : 8/u);
+
+    const status = build.slice(
+      build.indexOf("export async function workerStatus"),
+      build.indexOf("export async function activeWorkerBuild"),
+    );
+    expect(status).toContain(
+      "registration.waiting !== null || registration.installing !== null",
+    );
+
+    // And the screen says so rather than leaving two lines contradicting.
+    const settings = read("src/pages/Settings.tsx");
+    expect(settings).toContain("with a newer one installing");
   });
 });
 

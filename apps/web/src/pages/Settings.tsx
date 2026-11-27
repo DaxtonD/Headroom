@@ -59,6 +59,18 @@ function describeWorker(worker: WorkerStatus): string {
       const build = isStamped(worker.buildId) ? shortBuild(worker.buildId) : "not a released build";
 
       /*
+       * A replacement on the way is the answer, not a footnote to it.
+       *
+       * This line reported an old build as a settled fact all the way through
+       * the new worker's install, because `active` is checked first and the
+       * old worker stays active until the new one takes over. Reported
+       * 2026-11-25: "the background worker never matches the app or server
+       * version after an update." Saying so turns a contradiction into a
+       * sentence that explains itself.
+       */
+      if (worker.updating) return `${build}, with a newer one installing`;
+
+      /*
        * Whether it is SERVING this page, not just whether it exists.
        *
        * `controlled` was computed and then thrown away, which made two quite
@@ -345,7 +357,11 @@ export function Settings({ onSignOut }: { onSignOut: () => void }): React.JSX.El
             Check again
           </button>
           {stale ? (
-            <button className="hr-button" type="button" onClick={() => void loadServerBuild()}>
+            <button
+              className="hr-button"
+              type="button"
+              onClick={() => void loadServerBuild(serverBuild)}
+            >
               Reload
             </button>
           ) : null}

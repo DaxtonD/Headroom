@@ -181,12 +181,32 @@ async function waitForTakeover(worker: ServiceWorker, timeoutMs: number): Promis
 }
 
 /**
+ * What happened when we tried to get a registration's newest worker in charge.
+ *
+ * Three outcomes rather than a boolean, and the distinction is the whole
+ * point: only one of them justifies unregistering, and the boolean version
+ * could not tell it from the commonest case of all.
+ */
+type Promotion =
+  /** A newer worker took over. */
+  | "promoted"
+  /** There was nothing newer to promote, and nothing is wrong. */
+  | "nothing-to-promote"
+  /** There is somewhere newer to be and this registration will not go. */
+  | "stuck";
+
+/**
  * Get one registration's newest worker into charge, politely.
  *
- * Returns false only when the lifecycle genuinely will not cooperate, which
- * is the single case the caller is entitled to unregister over.
+ * Returns `"stuck"` only when the lifecycle genuinely will not cooperate,
+ * which is the single case the caller is entitled to unregister over - and
+ * unregistering costs this device its push subscription, so that case has to
+ * be narrow and provable rather than "anything that was not a promotion".
  */
-async function promote(registration: ServiceWorkerRegistration): Promise<boolean> {
+async function promote(
+  registration: ServiceWorkerRegistration,
+  serverBuild: string | null,
+): Promise<Promotion> {
   /*
    * `installing` as well as `waiting`, which is the bug this had.
    * Immediately after `update()` a brand-new worker is almost always still
@@ -194,7 +214,30 @@ async function promote(registration: ServiceWorkerRegistration): Promise<boolean
    * there was something to find.
    */
   const candidate = registration.waiting ?? registration.installing;
-  if (!candidate) return false;
+
+  /*
+   * Nothing newer exists. That used to be judged a failure and answered with
+   * an unregister, and it is the ordinary state in two quite different
+   * situations:
+   *
+   *  - the worker already updated itself on its own schedule, so the active
+   *    one IS the new build and a reload is all that is left to do;
+   *  - `update()` could not reach the server, so there is nowhere newer to
+   *    go from here however hard anybody presses.
+   *
+   * Neither is worth a push subscription. So it asks the active worker which
+   * build it is and only calls the registration stuck when that build is one
+   * the server has demonstrably moved past. Where it cannot tell - no answer,
+   * or no idea what the server is serving - it does not destroy anything.
+   */
+  if (!candidate) {
+    const active = registration.active;
+    if (!active) return "stuck";
+
+    const build = await askBuild(active, 3000);
+    if (build === null || serverBuild === null) return "nothing-to-promote";
+    return build === serverBuild ? "nothing-to-promote" : "stuck";
+  }
 
   if (candidate.state === "installing") {
     const installed = await waitForState(
@@ -202,16 +245,16 @@ async function promote(registration: ServiceWorkerRegistration): Promise<boolean
       ["installed", "activating", "activated"],
       INSTALL_CAP_MS,
     );
-    if (!installed) return false;
+    if (!installed) return "stuck";
   }
 
   // It got all the way there on its own while we waited.
-  if (candidate.state === "activated") return true;
+  if (candidate.state === "activated") return "promoted";
 
   // Listen before posting: activation can be quicker than this stack.
   const takeover = waitForTakeover(candidate, TAKEOVER_CAP_MS);
   candidate.postMessage({ type: "SKIP_WAITING" });
-  return await takeover;
+  return (await takeover) ? "promoted" : "stuck";
 }
 
 /**
@@ -251,11 +294,41 @@ export async function claimIfUncontrolled(): Promise<void> {
     if (!active) return;
 
     const build = await askBuild(active, 3000);
-    if (build === null || build !== BUILD_ID) return;
+    if (build === null || build !== BUILD_ID) {
+      /*
+       * The active worker is not this page's build, so claiming it would
+       * answer this page's hashed chunk requests out of the wrong precache.
+       * That part has always been right. What was missing is that it also
+       * did nothing else - it returned, and nothing on this path ever asked
+       * for the right worker, so the device sat uncontrolled behind an old
+       * worker until the browser's own update check came round.
+       *
+       * "It seems like it resolves itself after a day or two", reported
+       * 2026-11-25, is that check. Asking outright turns a day into the few
+       * seconds an install takes. Once per page, because this is called
+       * repeatedly until something is serving the page and an update is a
+       * network fetch of half a megabyte.
+       */
+      await askForNewWorker(registration);
+      return;
+    }
 
     active.postMessage({ type: "CLAIM" });
   } catch {
     // No worker, no permission, or it went away. The next load tries again.
+  }
+}
+
+/** Whether this page has already asked for the newer worker to be fetched. */
+let updateRequested = false;
+
+async function askForNewWorker(registration: ServiceWorkerRegistration): Promise<void> {
+  if (updateRequested) return;
+  updateRequested = true;
+  try {
+    await registration.update();
+  } catch {
+    // Offline, or the server is down. The next load asks again.
   }
 }
 
@@ -324,6 +397,17 @@ export interface WorkerStatus {
   readonly buildId: string | null;
   /** Is this page itself being served by a worker? */
   readonly controlled: boolean;
+  /**
+   * A newer worker is installing or waiting behind the active one.
+   *
+   * `state` describes the worker in charge, because that is the one that
+   * receives a push - but an active worker with a replacement on the way is
+   * not the same situation as one with none, and reporting only the first
+   * made a transition look like a resting state. See {@link useWorkerStatus},
+   * which stopped looking the moment it got an answer and so could show an
+   * old build for ever.
+   */
+  readonly updating: boolean;
 }
 
 /**
@@ -358,7 +442,7 @@ async function askBuild(worker: ServiceWorker, timeoutMs: number): Promise<strin
 
 export async function workerStatus(): Promise<WorkerStatus> {
   if (!("serviceWorker" in navigator)) {
-    return { state: "unsupported", buildId: null, controlled: false };
+    return { state: "unsupported", buildId: null, controlled: false, updating: false };
   }
 
   const controlled = navigator.serviceWorker.controller !== null;
@@ -373,18 +457,31 @@ export async function workerStatus(): Promise<WorkerStatus> {
   try {
     registration = await navigator.serviceWorker.getRegistration();
   } catch {
-    return { state: "none", buildId: null, controlled };
+    return { state: "none", buildId: null, controlled, updating: false };
   }
 
-  if (!registration) return { state: "none", buildId: null, controlled };
+  if (!registration) return { state: "none", buildId: null, controlled, updating: false };
+
+  /*
+   * Read before the active worker is asked anything, because asking takes up
+   * to three seconds and the answer is about the moment of the question.
+   */
+  const updating = registration.waiting !== null || registration.installing !== null;
 
   if (registration.active) {
-    return { state: "active", buildId: await askBuild(registration.active, 3000), controlled };
+    return {
+      state: "active",
+      buildId: await askBuild(registration.active, 3000),
+      controlled,
+      updating,
+    };
   }
-  if (registration.waiting) return { state: "waiting", buildId: null, controlled };
-  if (registration.installing) return { state: "installing", buildId: null, controlled };
+  if (registration.waiting) return { state: "waiting", buildId: null, controlled, updating };
+  if (registration.installing) {
+    return { state: "installing", buildId: null, controlled, updating };
+  }
 
-  return { state: "none", buildId: null, controlled };
+  return { state: "none", buildId: null, controlled, updating: false };
 }
 
 /** Kept for the notification test, which only cares about the build. */
@@ -405,6 +502,7 @@ export function useWorkerStatus(): WorkerStatus {
     state: "installing",
     buildId: null,
     controlled: false,
+    updating: false,
   });
 
   useEffect(() => {
@@ -416,8 +514,27 @@ export function useWorkerStatus(): WorkerStatus {
         if (cancelled) return;
         setStatus(next);
         attempts += 1;
-        const settled = next.state === "active" && next.buildId !== null;
-        const giveUp = next.state === "unsupported" || attempts >= 8;
+        /*
+         * An active worker that answered is NOT the end of the story while a
+         * newer one is installing behind it, and treating it as one is how
+         * Settings came to report a build from two releases ago as a settled
+         * fact. Reported 2026-11-25, with the three lines disagreeing exactly
+         * as they were built to: "the background worker never matches the app
+         * or server version after an update."
+         *
+         * `workerStatus` checks `active` first and is right to - the active
+         * worker is the one that receives a push - but the old worker stays
+         * active throughout the new one's install, so the first question
+         * asked after an update gets the old answer and nothing asked again.
+         */
+        const settled = next.state === "active" && next.buildId !== null && !next.updating;
+        /*
+         * Longer while something is actually installing. An install precaches
+         * most of a megabyte and the twelve seconds this used to allow is
+         * under half of what the update path itself waits for.
+         */
+        const cap = next.updating || next.state === "installing" ? 30 : 8;
+        const giveUp = next.state === "unsupported" || attempts >= cap;
         if (!settled && !giveUp) setTimeout(look, 1500);
       });
     };
@@ -440,17 +557,38 @@ export function useWorkerStatus(): WorkerStatus {
  * which serves the old bundle again, so the tap appears to do nothing and the
  * bar comes straight back.
  *
- * If no worker takes control in time, the lifecycle is not cooperating and
- * the registration is removed outright, so the next load has to come from the
- * network. That also covers the case where there was no waiting worker to
- * talk to in the first place. The precache rebuilds immediately afterwards,
- * so the cost is one online load - and spending that on a worker that was
- * merely slow is a far better trade than leaving someone stuck.
+ * If a worker that exists and is newer will not take control in time, the
+ * lifecycle is not cooperating and that registration is removed outright, so
+ * the next load has to come from the network. The precache rebuilds
+ * immediately afterwards, so the cost is one online load.
+ *
+ * ## The unregister is not free, and it used to fire far too readily
+ *
+ * **A push subscription belongs to the service worker registration.**
+ * Unregistering destroys it, the browser is left with nothing to hand over,
+ * and the notifications card has no honest answer but "off" - so the person
+ * has to turn them on again. Reported from use on 2026-11-25: "after the app
+ * detects a new version and offers the restart, the new version requires me
+ * to re-enable notifications."
+ *
+ * This used to unregister **every** registration whenever **no** registration
+ * reported a promotion, and "no promotion" is the normal answer when there was
+ * nothing newer to promote - a worker that had already updated itself, or an
+ * `update()` that could not reach the server. So the commonest healthy state
+ * was being answered with the most destructive move available.
+ *
+ * Now only a registration that `promote` can prove is stuck is removed, and
+ * the proof needs the server's build to compare against - which is why that
+ * is now a parameter rather than something this function guesses at.
+ *
+ * The subscription is also rebuilt afterwards, by `resyncSubscription` on the
+ * next load, for the case where the unregister was right. Both halves matter:
+ * one stops it happening, the other stops it mattering when it does.
  *
  * Always ends in a reload, including when none of it worked, because a reload
  * is what the person asked for.
  */
-export async function loadServerBuild(): Promise<void> {
+export async function loadServerBuild(serverBuild: string | null): Promise<void> {
   try {
     if ("serviceWorker" in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations();
@@ -470,20 +608,24 @@ export async function loadServerBuild(): Promise<void> {
        * A worker mid-install is the usual state right after `update()`, and
        * `promote` is what waits for it instead of writing it off.
        */
-      const promoted = await Promise.all(registrations.map(promote));
-      const tookOver = promoted.some(Boolean);
+      const outcomes = await Promise.all(
+        registrations.map(async (registration) => ({
+          registration,
+          outcome: await promote(registration, serverBuild),
+        })),
+      );
 
-      if (!tookOver) {
-        await Promise.all(
-          registrations.map(async (registration) => {
+      await Promise.all(
+        outcomes
+          .filter((entry) => entry.outcome === "stuck")
+          .map(async (entry) => {
             try {
-              await registration.unregister();
+              await entry.registration.unregister();
             } catch {
               // Then the reload below is the only move left.
             }
           }),
-        );
-      }
+      );
     }
   } finally {
     window.location.reload();

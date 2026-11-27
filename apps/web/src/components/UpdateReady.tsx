@@ -90,7 +90,7 @@ export function UpdateReady(): React.JSX.Element | null {
           this one. Reloading takes a second and loses nothing you have saved.
         </p>
         <div className="update-ready__actions">
-          <button className="hr-button" type="button" onClick={() => void loadServerBuild()}>
+          <button className="hr-button" type="button" onClick={() => void loadServerBuild(serverBuild)}>
             Reload
           </button>
         </div>
@@ -117,11 +117,15 @@ export function UpdateReady(): React.JSX.Element | null {
         {/*
           The same reload the stale bar uses, rather than the one the service
           worker offers. Both ask a waiting worker to take over, but this one
-          waits to see whether it did and removes the registration when it did
-          not - so one tap gets there even when the lifecycle is the thing
-          that is broken.
+          waits to see whether it did - so one tap gets there even when the
+          lifecycle is the thing that is broken.
+
+          It is handed the server's build because that is the only way to tell
+          a registration that is stuck from one that simply had nothing newer
+          to promote, and the two used to be answered identically: by
+          unregistering, which takes this device's notifications with it.
         */}
-        <button className="hr-button" type="button" onClick={() => void loadServerBuild()}>
+        <button className="hr-button" type="button" onClick={() => void loadServerBuild(serverBuild)}>
           Reload
         </button>
       </div>

@@ -55,6 +55,7 @@ Claude Code updates this file at the end of every milestone and every work sessi
 | A pay period's summary, in plain words | **reverted** | | 2026-11-22. Built and pushed, then reverted at the owner's request before the issue had been restated. The implementation is in `20baaad` if any of it is wanted back; the second attempt is the row above |
 | A device the server had forgotten | done | | 2026-11-22, reported from use. The screen read "On for this device" from the browser alone and never asked whether the server still had the row, so a subscription dropped at send time was invisible forever. The page hands its subscription back on every load, the worker hands over a rotated one, and a refusal no longer reports itself as an expiry |
 | Every account shows its photo | done | | 2026-11-25, reported from use: "the picture for the chequing account doesn't appear... all accounts should show their photo." Chequing was never excluded on purpose - a null source is how chequing is stored, so the fallback chain was reading a foreign key that chequing does not have. Third reversal of the same decision, all three the same way |
+| An update stopped costing the notifications | done | | 2026-11-25, reported from use: every new version meant re-enabling notifications. A push subscription belongs to the service worker REGISTRATION, and the reload button unregistered it whenever no worker reported a promotion - which is also the answer when there was nothing newer to promote. Narrowed to a provably stuck registration, and the subscription is rebuilt on the next load. Two more faults in the same report: the card read "off" because it waited for a worker to activate, and the Version panel called an old active worker settled while its replacement was still installing |
 
 ## Last session
 
@@ -126,6 +127,174 @@ producing bills.
 
 The PWA needs a secure context, so it can only be tested over the HTTPS domain through Nginx
 Proxy Manager, never over a LAN IP.
+
+## An update stopped costing the notifications (2026-11-25, reported from use)
+
+> "After the app detects a new version and offers the restart, the new version requires me to
+> re-enable notifications... furthermore, this is the info reported: This app `7c67654` / The
+> server `7c67654` / Background worker `d2f44f7`, not serving this page yet."
+
+Three separate faults, in three different files, all visible in those six lines. The three build
+lines existed to make exactly this legible, and they did their job.
+
+### 1. The reload button was destroying the push subscription
+
+**A push subscription belongs to the service worker registration.** `registration.unregister()`
+takes it with it: the browser is left holding nothing, `getSubscription()` returns null, and the
+notifications card has no honest answer but "off". Turning them on again is then the only thing
+that works, which is exactly what was being reported.
+
+`loadServerBuild` - what both update bars call - ended with this:
+
+```ts
+const promoted = await Promise.all(registrations.map(promote));
+if (!promoted.some(Boolean)) { /* unregister every registration */ }
+```
+
+`promote` returned a boolean, and **false meant two completely different things**: "there is a
+newer worker and it will not take over", and "there was nothing newer to promote". The second is
+the ordinary, healthy case - a worker that already updated itself on its own schedule, or an
+`update()` that could not reach the server. So the commonest state was being answered with the
+most destructive move available, every time.
+
+It is a tri-state now - `"promoted"`, `"nothing-to-promote"`, `"stuck"` - and only `"stuck"` is
+unregistered. Telling the last two apart needs something to compare the active worker against, so
+`loadServerBuild` takes the server's build as a parameter rather than guessing:
+
+```ts
+const build = await askBuild(active, 3000);
+if (build === null || serverBuild === null) return "nothing-to-promote";
+return build === serverBuild ? "nothing-to-promote" : "stuck";
+```
+
+**Where it cannot tell, it destroys nothing.** A worker that did not answer and a server that
+could not be reached are both ignorance, not evidence, and the penalty for being wrong is one
+device's notifications.
+
+### 2. The repair now rebuilds a subscription, not just the server's row
+
+The 2026-11-22 repair handed the browser's subscription back to the server on every load. It had
+one line that is exactly right for what it was built for and exactly wrong here:
+
+```ts
+if (!existing) return;
+```
+
+The comment said why - "creating one unasked would be a permission prompt nobody pressed for" -
+and that reasoning is sound. What it did not anticipate is a subscription destroyed **without
+anybody choosing it**, which is what the unregister above was doing. Then there is nothing to
+hand over and the repair has nothing to do.
+
+`subscriptionForRepair` may now create one, behind three gates, and no prompt is possible:
+
+- a subscription already exists - then nothing is created and this is the plain re-post it was;
+- **this device said it wants them** - so the app never overrules somebody who switched them off;
+- **permission is already granted** - so `requestPermission` is never called here at all.
+
+The intent is a `localStorage` flag, per device, because a push subscription is per device - the
+phone and the laptop answer differently and neither should speak for the other. Written only
+after a successful "turn on"; cleared *before* a "turn off" is attempted. The orders are opposite
+on purpose: a half-finished turn-on must not ask to be re-subscribed to something that never
+worked, and a half-finished turn-off must not have the repair put it back, which would read as
+the app switching notifications on by itself.
+
+### 3. "Off" was also being reported for subscriptions that were perfectly fine
+
+The subtlest of the three, and probably what was seen most often. `currentPushState` asked for the
+registration like this:
+
+```ts
+Promise.race([navigator.serviceWorker.ready, timeout(5000)])
+```
+
+`ready` waits for an **active** worker. Right after an update there is not one until the new
+worker finishes precaching - and `INSTALL_CAP_MS` in the same repository is twenty seconds,
+written down because three was not enough. So the race resolved null, null was read as "no
+subscription", and that reports as **off**. The one moment the app was most likely to be asked
+was the one moment it answered wrongly.
+
+The fix is not a longer timeout. **A `pushManager` belongs to the registration, not to the worker
+in charge of it**, so the question can be answered truthfully while a worker is still installing,
+as long as nothing waits for one first. Reading now uses `getRegistration()`, which settles at
+once; `ready` is kept for subscribing, where waiting is correct.
+
+This is the same mistake `useWorkerStatus` already had a comment about - "a one-shot question
+about something with a lifecycle gives an answer about timing, not about state" - in a second
+place that nobody thought to look at.
+
+### 4. And the Version panel was reporting a transition as a resting state
+
+`workerStatus` checks `registration.active` first and is right to: the active worker is the one
+that receives a push. But the **old** worker stays active for the whole of the new one's install,
+so the first question asked after an update gets the old build - and `useWorkerStatus` treated
+"an active worker answered" as settled and stopped asking:
+
+```ts
+const settled = next.state === "active" && next.buildId !== null;
+```
+
+So Settings could show a build from two releases back as a fact, indefinitely. That is precisely
+"the background worker never matches the app or server version after an update", and it was the
+*display* lying rather than the worker lagging.
+
+`WorkerStatus` now carries `updating` - a newer worker is installing or waiting behind the active
+one - the hook keeps looking while that is true, and the panel says `d2f44f7, with a newer one
+installing` instead of leaving two lines contradicting each other with no explanation.
+
+### 5. Nothing was asking for the new worker at all
+
+`claimIfUncontrolled` declines to claim a worker that is not this page's build, for a good reason
+(a newer precache would answer this page's hashed chunk requests and the first unopened screen
+would 404). But it only *declined* - it returned, and nothing on that path ever asked for the
+right worker. The device sat uncontrolled behind an old worker until the browser's own periodic
+update check came round, which is the "it seems like it resolves itself after a day or two" in
+the report from 2026-11-22.
+
+It now calls `registration.update()` on a mismatch, once per page. A day becomes the few seconds
+an install takes.
+
+### Decided without asking
+
+- **The wanted-notifications flag lives in `localStorage`, not on the server**, although
+  preferences moved to the server on 2026-11-21. A subscription is per device, so the intent is
+  too; a server-side flag would mean a laptop's "no" silencing a phone. Clearing site data clears
+  it, which is correct - that clears the subscription as well.
+- **`loadServerBuild` takes the server's build rather than fetching it.** All three call sites
+  already have it from `useServerBuild`, and a function whose job is to get off a stale build
+  should not depend on a request that may be the thing failing.
+
+### Held by tests
+
+Source-level, in `apps/web/test/` - there is no DOM and no service worker in this suite, so these
+read the source. Six existing tests asserted the behaviour being changed and were rewritten with
+the reasoning, which is the record of what was decided and why it changed:
+
+- the unregister fires on `"stuck"` only, never on "no promotion", and `promote` will not call a
+  registration stuck without the server's build to compare against;
+- the repair rebuilds a lost subscription, behind all three gates, and never calls
+  `requestPermission`;
+- the on/off buttons record the intent in opposite orders;
+- reading the subscription does not go through `await registration()`;
+- the card repairs before it reports;
+- the mismatch branch asks for the new worker, once;
+- `useWorkerStatus` does not settle while `updating`, and Settings has the sentence for it.
+
+Web suite 796 tests (was 788) and engine 498, both green. Lint, typecheck and `pnpm build` clean.
+
+**The API suite was not re-run for this change**, and should be read as unverified here rather
+than as green. Nothing outside `apps/web` moved - no route, no engine file, no migration - and it
+was green at 641 earlier the same day on identical API code. The reason it was not re-run is that
+Docker stopped responding on this machine afterwards (`docker info` times out, so
+`scripts/testdb.mjs` has nothing to start), and the API tests need a real Postgres by design. CI
+runs them against its own, so the push is where that claim gets settled.
+
+### What is still not proven here
+
+None of this can be exercised without a browser: no DOM, no service worker, no push service. The
+faults were all found by reading, and the fixes are checked the same way. **The one that will
+show in use is the first one** - the next update should leave notifications on. If it does not,
+the next thing to look at is whether `promote` is returning `"stuck"` on a healthy registration,
+which would mean the active worker is not answering `WHICH_BUILD` within three seconds.
 
 ## Every account shows its photo (2026-11-25, reported from use)
 

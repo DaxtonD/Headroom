@@ -90,6 +90,74 @@ async function registration(): Promise<ServiceWorkerRegistration | null> {
 }
 
 /**
+ * The registration as it stands, without waiting for a worker to activate.
+ *
+ * ## Why reading must not go through `ready`
+ *
+ * `ready` waits for an **active** worker, and right after an update there is
+ * not one for as long as the new worker takes to precache - routinely longer
+ * than the five seconds above. The race then resolves null, and the reader
+ * below used to treat that as "no subscription", which it reports as `off`.
+ *
+ * So the one moment the app is most likely to be asked - just after the
+ * update bar was tapped - was the one moment it would answer "off" for a
+ * device whose subscription was never touched. That is the same mistake
+ * `useWorkerStatus` documents: a one-shot question about something with a
+ * lifecycle gives an answer about timing rather than about state.
+ *
+ * The cure is not a longer timeout. A `pushManager` belongs to the
+ * **registration**, not to the worker in charge of it, so the question can be
+ * answered truthfully while a worker is still installing - as long as nothing
+ * waits for one first. Null here means there is genuinely no registration,
+ * and a browser with no registration cannot be holding a subscription.
+ */
+async function registrationNow(): Promise<ServiceWorkerRegistration | null> {
+  try {
+    return (await navigator.serviceWorker.getRegistration()) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether this device has been told to want notifications.
+ *
+ * ## Why this is remembered at all, and why on the device
+ *
+ * A subscription can be destroyed without anybody choosing it: unregistering
+ * the service worker takes it with it, and the update path does that when a
+ * worker will not hand over. Rebuilding one needs no prompt - the permission
+ * is still granted - but it does need to know whether this device wanted them
+ * in the first place, because re-subscribing a device whose owner switched
+ * them off would be the app overruling them.
+ *
+ * `localStorage`, deliberately, although preferences now live on the server:
+ * a push subscription is per device, so "does this device want them" is too.
+ * The phone and the laptop answer differently and neither should speak for
+ * the other. Clearing site data clears this with it, which is right - it also
+ * clears the subscription.
+ */
+const WANTED_KEY = "headroom.push.wanted";
+
+function wantsNotifications(): boolean {
+  try {
+    return localStorage.getItem(WANTED_KEY) === "1";
+  } catch {
+    // Private mode, or storage refused. Then this device has said nothing.
+    return false;
+  }
+}
+
+function rememberWanted(wanted: boolean): void {
+  try {
+    if (wanted) localStorage.setItem(WANTED_KEY, "1");
+    else localStorage.removeItem(WANTED_KEY);
+  } catch {
+    // The repair below is a convenience; losing it is not worth an error.
+  }
+}
+
+/**
  * Where this browser stands, asked rather than remembered.
  *
  * Returns a state and changes nothing. Three systems have to agree before
@@ -114,7 +182,9 @@ async function currentPushState(): Promise<PushState> {
   if (!key.configured) return "unconfigured";
   if (Notification.permission === "denied") return "blocked";
 
-  const worker = await registration();
+  // `registrationNow`, not `registration`: see the note on it. Waiting for a
+  // worker to activate is how this came to report "off" after every update.
+  const worker = await registrationNow();
   const existing = await worker?.pushManager.getSubscription();
   return existing ? "on" : "off";
 }
@@ -148,8 +218,7 @@ async function currentPushState(): Promise<PushState> {
  */
 export async function resyncSubscription(): Promise<void> {
   try {
-    const worker = await registration();
-    const existing = await worker?.pushManager.getSubscription();
+    const existing = await subscriptionForRepair();
     if (!existing) return;
     await api.post("/api/push/subscriptions", existing.toJSON());
   } catch {
@@ -160,6 +229,60 @@ export async function resyncSubscription(): Promise<void> {
      * nobody asked to look at.
      */
   }
+}
+
+/**
+ * The subscription to hand to the server, rebuilding it if it has been lost.
+ *
+ * ## Why this is allowed to create one
+ *
+ * It was not, and the comment said why: "creating one unasked would be a
+ * permission prompt nobody pressed for." That reasoning is sound and this
+ * does not break it - `requestPermission` is never called here, and the only
+ * path that reaches `subscribe` is one where the permission has **already**
+ * been granted and this device has **already** said it wants notifications.
+ * Neither can be true unless somebody pressed the button at some point.
+ *
+ * What changed is that a subscription can now be known to have been destroyed
+ * without anyone choosing it. Reported from use on 2026-11-25: every new
+ * version meant re-enabling notifications. `loadServerBuild` unregisters a
+ * service worker that will not hand over, a push subscription belongs to the
+ * registration, and so the update took the subscription with it. That path is
+ * now much narrower, but it still exists - and when it fires, this is what
+ * makes it cost nothing.
+ *
+ * ## The three gates, each load-bearing
+ *
+ *  - **a subscription already exists** - then nothing is created and this is
+ *    the plain re-post it always was;
+ *  - **this device said it wants them** - so the app never overrules somebody
+ *    who switched them off;
+ *  - **permission is granted** - so no prompt can appear, and a device that
+ *    has been blocked since is left alone.
+ */
+async function subscriptionForRepair(): Promise<PushSubscription | null> {
+  const current = await registrationNow();
+  const existing = await current?.pushManager.getSubscription();
+  if (existing) return existing;
+
+  if (!wantsNotifications()) return null;
+  if (Notification.permission !== "granted") return null;
+
+  const key = await api.get<KeyResponse>("/api/push/key");
+  if (!key.configured || key.publicKey === null) return null;
+
+  /*
+   * `registration`, which waits, rather than `registrationNow`. Subscribing
+   * is not reading: the registration this is about has just been rebuilt from
+   * nothing, and a worker that is still installing may refuse one.
+   */
+  const worker = await registration();
+  if (!worker) return null;
+
+  return await worker.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: keyBytes(key.publicKey),
+  });
 }
 
 /**
@@ -249,9 +372,19 @@ export function usePushNotifications(): PushControls {
    */
   useEffect(() => {
     let cancelled = false;
-    void currentPushState().then((next) => {
-      if (!cancelled) setState(next);
-    });
+    /*
+     * Repair first, then report. The card has to answer a question about a
+     * subscription that may have been destroyed moments ago by an update, and
+     * reporting before repairing is what showed "off" to somebody who had
+     * changed nothing. `resyncSubscription` never rejects and is a no-op when
+     * there is nothing to mend, so the cost is two requests on a screen
+     * somebody opened on purpose.
+     */
+    void resyncSubscription()
+      .then(() => currentPushState())
+      .then((next) => {
+        if (!cancelled) setState(next);
+      });
     return () => {
       cancelled = true;
     };
@@ -293,6 +426,12 @@ export function usePushNotifications(): PushControls {
         });
 
         await api.post("/api/push/subscriptions", subscription.toJSON());
+        /*
+         * Written only once the whole thing worked, so a half-finished
+         * attempt never leaves this device asking to be re-subscribed to
+         * something it never managed to subscribe to.
+         */
+        rememberWanted(true);
         setState("on");
       } catch {
         setError("Could not turn notifications on. Try again in a moment.");
@@ -305,6 +444,14 @@ export function usePushNotifications(): PushControls {
   const turnOff = useCallback((): void => {
     setBusy(true);
     setError(null);
+
+    /*
+     * Recorded before anything is attempted, unlike turning them on. The
+     * intent is what the repair consults, and a press that fails halfway
+     * must not leave this device asking to be signed up again on next load -
+     * that would read as the app turning them back on by itself.
+     */
+    rememberWanted(false);
 
     void (async () => {
       try {

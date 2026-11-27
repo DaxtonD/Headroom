@@ -38,19 +38,108 @@ const worker = read("src/sw.ts");
 /** Just the resync function, so `turnOn` below it cannot answer for it. */
 const resync = pushLib.slice(
   pushLib.indexOf("export async function resyncSubscription"),
+  pushLib.indexOf("async function subscriptionForRepair"),
+);
+
+/**
+ * The part that decides what to hand over, and whether to rebuild it.
+ *
+ * Sliced separately from `resync` for the same reason `resync` is sliced from
+ * the file: a test that reads the whole module proves only that some line
+ * somewhere says the right thing.
+ */
+const repair = pushLib.slice(
+  pushLib.indexOf("async function subscriptionForRepair"),
   pushLib.indexOf("export function usePushResync"),
 );
 
 describe("handing the subscription back", () => {
   it("re-posts what the browser has to the subscribe route", () => {
-    expect(resync).toContain("pushManager.getSubscription()");
+    // The reading moved into `subscriptionForRepair`, which is the slice
+    // below; what this function still does is hand the result over.
+    expect(repair).toContain("pushManager.getSubscription()");
     expect(resync).toContain('api.post("/api/push/subscriptions"');
   });
 
-  it("does nothing when this browser has no subscription to hand over", () => {
-    // Creating one unasked would be a permission prompt nobody pressed for.
-    expect(resync).toMatch(/if \(!existing\) return;/);
-    expect(resync).not.toContain("pushManager.subscribe");
+  /**
+   * Rebuilding a subscription that was destroyed for the person.
+   *
+   * This test asserted the opposite - no `subscribe` on this path at all, on
+   * the grounds that "creating one unasked would be a permission prompt
+   * nobody pressed for". That reasoning still holds and is still enforced;
+   * what changed is that a subscription can be destroyed without anybody
+   * choosing it.
+   *
+   * Reported 2026-11-25: every new version meant turning notifications on
+   * again. `loadServerBuild` unregisters a worker that will not hand over, a
+   * push subscription belongs to the registration, and so the update took it
+   * with it. No prompt is involved in putting it back: the permission is
+   * already granted, and this device has already said it wants them.
+   */
+  it("rebuilds a subscription this device asked for and lost", () => {
+    expect(repair).toContain("pushManager.subscribe");
+    // Nothing is created while the browser still has one.
+    expect(repair).toMatch(/if \(existing\) return existing;/);
+  });
+
+  it("never prompts, and never overrules somebody who switched them off", () => {
+    /*
+     * The three gates. Each one alone is enough to stop a subscription being
+     * created, and together they mean the only reachable path is "this was
+     * on, and something took it away".
+     */
+    expect(repair).toContain("if (!wantsNotifications()) return null;");
+    expect(repair).toContain('if (Notification.permission !== "granted") return null;');
+    expect(repair).not.toContain("requestPermission");
+  });
+
+  it("records wanting them only once it worked, and not wanting them at once", () => {
+    /*
+     * Opposite order on purpose. A half-finished "turn on" must not leave the
+     * device asking to be re-subscribed to something it never subscribed to;
+     * a half-finished "turn off" must not leave the repair putting it back,
+     * which would read as the app turning notifications on by itself.
+     */
+    const on = pushLib.slice(pushLib.indexOf("const turnOn"), pushLib.indexOf("const turnOff"));
+    const posted = on.indexOf('api.post("/api/push/subscriptions"');
+    const remembered = on.indexOf("rememberWanted(true)");
+    expect(posted).toBeGreaterThan(-1);
+    expect(remembered).toBeGreaterThan(posted);
+
+    const off = pushLib.slice(pushLib.indexOf("const turnOff"), pushLib.indexOf("const sendTest"));
+    expect(off.indexOf("rememberWanted(false)")).toBeLessThan(off.indexOf("try {"));
+  });
+
+  it("reads the subscription without waiting for a worker to activate", () => {
+    /*
+     * The other half of the same report, and the subtler one. `ready` waits
+     * for an ACTIVE worker, which right after an update means waiting out the
+     * new one's precache - longer than the five-second race it was given. The
+     * null that came back was read as "no subscription", which reports as
+     * "off"; so the one moment the app was most likely to be asked was the
+     * one moment it answered wrongly.
+     *
+     * A `pushManager` belongs to the registration, not to the worker in
+     * charge of it, so nothing needs to be waited for.
+     */
+    const state = pushLib.slice(
+      pushLib.indexOf("async function currentPushState"),
+      pushLib.indexOf("export async function resyncSubscription"),
+    );
+    expect(state).toContain("registrationNow()");
+    expect(state).not.toMatch(/await registration\(\)/u);
+
+    const now = pushLib.slice(pushLib.indexOf("async function registrationNow"));
+    expect(now.slice(0, now.indexOf("\n}"))).toContain("getRegistration()");
+  });
+
+  it("repairs before it reports, so the card cannot answer for a lost one", () => {
+    const hook = pushLib.slice(pushLib.indexOf("export function usePushNotifications"));
+    const effect = hook.slice(hook.indexOf("useEffect"), hook.indexOf("const turnOn"));
+    const repaired = effect.indexOf("resyncSubscription()");
+    const reported = effect.indexOf("currentPushState()");
+    expect(repaired).toBeGreaterThan(-1);
+    expect(reported).toBeGreaterThan(repaired);
   });
 
   it("stays silent when it cannot reach the server", () => {
